@@ -1,159 +1,88 @@
-# Turborepo starter
+# RetroMobi
 
-This Turborepo starter is maintained by the Turborepo core team.
+Scooter rental marketplace for India. Customers rent a specific scooter from a licensed merchant for a time window.
 
-## Using this example
+**Status:** planning. No code yet. Read this, then the doc that matches your job.
 
-Run the following command:
+---
 
-```sh
-npx create-turbo@latest
+## Read this if you read nothing else
+
+Six rules. Everything in `docs/` exists to serve them.
+
+| # | Rule | Why |
+|---|------|-----|
+| 1 | A vehicle is bookable only if it's **named on the merchant's transport licence** | The licence (Form 2) lists registration numbers. Not on it = renting it is unlicensed. |
+| 2 | A merchant needs **5+ compliant motorcycles** to be approved | Para 5(v) of the scheme. Not a guideline — a licensing precondition. |
+| 3 | The **rental register is immutable and written at pickup** | It's a statutory record. It must survive the rider editing their profile or deleting their account. |
+| 4 | **Never** hold customer money ourselves | RBI's 2025 PA Directions. A regulated payment aggregator holds it. We are a marketplace; a PA can't be one. |
+| 5 | **Money is a ledger**, not a column | You will be asked to explain a ₹5,000 deposit that became a ₹3,200 refund. Rows, not mutations. |
+| 6 | **No dark patterns** in the booking funnel | CCPA guidelines 2023 + June 2025 self-audit advisory. No "2 left!", no pre-ticked insurance, no drip pricing. |
+
+**The test for "are we done":** reconstruct a finished booking end-to-end from the database alone. No screenshots, no frontend state, no one's memory.
+
+---
+
+## Which doc do I need
+
+| I am… | Read |
+|-------|------|
+| building the backend | [`docs/03-architecture.md`](docs/03-architecture.md) — schema, routes, constraints |
+| building the customer or merchant UI | [`docs/01-product.md`](docs/01-product.md) — flows, screens, states |
+| worried about legality | [`docs/02-legal.md`](docs/02-legal.md) — verified sources, what's settled, what isn't |
+| deciding what to build first | [`docs/04-build-plan.md`](docs/04-build-plan.md) — phases + acceptance tests |
+| a founder / PM | this page, then [`docs/02-legal.md`](docs/02-legal.md) §Open questions |
+
+---
+
+## What it is, in one diagram
+
+```
+Customer  ──browse──▶  Vehicle (approved, on-licence, compliant)
+   │
+   ├─ hold (15 min, DB-enforced, no double booking)
+   ├─ verify rider  ──▶ identity provider (store the result, not the document)
+   ├─ pay           ──▶ payment aggregator (they hold the money, we hold references)
+   │
+   ▼
+CONFIRMED ─▶ pickup inspection ─▶ ACTIVE ─▶ return inspection ─▶ settle deposit ─▶ COMPLETED
+                    │                                  │
+                    └── evidence ──────────────────────┴── damage claim ─▶ dispute ─▶ resolution
 ```
 
-## What's inside?
+Every arrow writes an immutable event. Every rupee writes a ledger entry.
 
-This Turborepo includes the following packages/apps:
+---
 
-### Apps and Packages
+## Stack
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+Decided, per the spec:
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+- **API** — Fastify / Node 24, modular monolith (not microservices)
+- **DB** — PostgreSQL + PostGIS
+- **Cache/locks** — Redis (never the source of truth for a booking or a rupee)
+- **Storage** — private object storage, signed URLs
+- **Monorepo** — Turborepo + bun
 
-### Utilities
+Not decided: payment aggregator, KYC provider, tracker vendor, frontend framework. See [`docs/04-build-plan.md`](docs/04-build-plan.md) §Blocked on.
 
-This Turborepo has some additional tools already setup for you:
+---
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+## Repo layout
 
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```
+apps/Backend     Fastify API            (empty — phase 1)
+apps/Frontend    deliberately empty     (three surfaces, decide later)
+packages/        shared types, config   (empty)
+docs/            this plan
 ```
 
-Without global `turbo`, use your package manager:
+`apps/Frontend` stays empty on purpose. The product needs three surfaces — customer mobile, merchant web, admin web — and that's not one app. Decide when there's an API to call.
 
-```sh
-cd my-turborepo
-npx turbo build
-bun exec turbo build
-bun exec turbo build
-```
+---
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## Before you write code
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+Eleven things need a human answer, six of them from a lawyer or a CA. They're listed in [`docs/02-legal.md`](docs/02-legal.md) §Open questions and [`docs/04-build-plan.md`](docs/04-build-plan.md) §Blocked on.
 
-```sh
-turbo build --filter=docs
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo build --filter=docs
-bun exec turbo build --filter=docs
-bun exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-bun exec turbo dev
-bun exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-bun exec turbo dev --filter=web
-bun exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-bun exec turbo login
-bun exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-bun exec turbo link
-bun exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+Three of them change the schema. Don't skip that list.

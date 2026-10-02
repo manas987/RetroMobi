@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: retromobi
+      POSTGRES_PASSWORD: retromobi
+      POSTGRES_DB: retromobi
+    ports:
+      - "5433:5432"
+    volumes:
+      - retromobi_pgdata:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retromobi"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  retromobi_pgdata:
