@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
 import {
@@ -26,9 +26,22 @@ const pool = new Pool({
     "postgres://retromobi:retromobi@localhost:5433/retromobi_test",
 });
 
-const PHONE = "+919999999999";
 const DEVICE = "test-device";
-const EMAIL = "rider@example.com";
+
+// No truncate-between-tests: every test generates its own unique phone/email
+// instead, so tests don't need to be isolated by wiping shared state — and
+// re-running `bun test` repeatedly against the same (non-ephemeral) Postgres
+// never collides with leftover rows from a previous run either.
+let seq = 0;
+function uniquePhone(): string {
+  seq += 1;
+  const suffix = (Date.now() + seq) % 1_000_000_000;
+  return `+917${suffix.toString().padStart(9, "0")}`;
+}
+function uniqueEmail(): string {
+  seq += 1;
+  return `rider${Date.now()}${seq}@example.com`;
+}
 
 // Real sendOtpSms/sendOtpEmail hit Twilio and need live credentials;
 // authService takes the delivery function as a parameter precisely so tests
@@ -37,113 +50,122 @@ const noopDeliver = async () => {};
 
 async function fakeVerifyGoogle(idToken: string) {
   if (idToken !== "valid-google-token") return null;
-  return { email: "googleuser@example.com", name: "Google User", googleSub: "google-sub-1" };
+  // A fresh identity per call (not a fixed fixture email) so repeated test
+  // runs against the same persistent Postgres never collide on uniqueness.
+  return { email: uniqueEmail(), name: "Google User", googleSub: `google-sub-${seq}` };
 }
 
 beforeAll(async () => {
   await applyMigrations(pool);
 });
 
-beforeEach(async () => {
-  await pool.query("truncate users, sessions, otp_challenges cascade");
-});
-
 afterAll(async () => {
   await pool.end();
 });
 
-async function verifyPhoneForSignup(phone = PHONE) {
+async function verifyPhoneForSignup(phone: string) {
   const { code } = await requestOtp(pool, phone, noopDeliver);
   const result = await verifyOtp(pool, { phone, code, deviceId: DEVICE });
   if (result.status !== "SIGNUP_REQUIRED") throw new Error("expected SIGNUP_REQUIRED");
   return result.signupTicket;
 }
 
-async function verifyEmailForSignup(signupTicket: string, email = EMAIL) {
+async function verifyEmailForSignup(signupTicket: string, email: string) {
   const { code } = await requestEmailOtp(pool, { signupTicket, email }, noopDeliver);
   return verifyEmailOtp(pool, { signupTicket, email, code });
 }
 
 describe("phone otp -> login/signup branch", () => {
   test("new phone returns SIGNUP_REQUIRED and creates nothing yet", async () => {
-    const { code } = await requestOtp(pool, PHONE, noopDeliver);
-    const result = await verifyOtp(pool, { phone: PHONE, code, deviceId: DEVICE });
+    const phone = uniquePhone();
+    const { code } = await requestOtp(pool, phone, noopDeliver);
+    const result = await verifyOtp(pool, { phone, code, deviceId: DEVICE });
 
     expect(result.status).toBe("SIGNUP_REQUIRED");
-    const { rows } = await pool.query("select * from users where phone = $1", [PHONE]);
+    const { rows } = await pool.query("select * from users where phone = $1", [phone]);
     expect(rows).toHaveLength(0);
   });
 
   test("existing phone logs in directly", async () => {
-    const signupTicket = await verifyPhoneForSignup();
-    const emailTicket = await verifyEmailForSignup(signupTicket);
+    const phone = uniquePhone();
+    const email = uniqueEmail();
+    const signupTicket = await verifyPhoneForSignup(phone);
+    const emailTicket = await verifyEmailForSignup(signupTicket, email);
     await completeSignup(pool, {
       signupTicket,
       deviceId: DEVICE,
       name: "Rider One",
-      email: EMAIL,
+      email,
       emailVerificationTicket: emailTicket.emailVerificationTicket,
     });
 
-    const { code } = await requestOtp(pool, PHONE, noopDeliver);
-    const result = await verifyOtp(pool, { phone: PHONE, code, deviceId: "other-device" });
+    const { code } = await requestOtp(pool, phone, noopDeliver);
+    const result = await verifyOtp(pool, { phone, code, deviceId: "other-device" });
 
     expect(result.status).toBe("LOGIN");
     if (result.status === "LOGIN") {
-      expect(result.user.email).toBe(EMAIL);
+      expect(result.user.email).toBe(email);
     }
   });
 
   test("wrong code is rejected and increments attempt_count", async () => {
-    await requestOtp(pool, PHONE, noopDeliver);
+    const phone = uniquePhone();
+    await requestOtp(pool, phone, noopDeliver);
 
     await expect(
-      verifyOtp(pool, { phone: PHONE, code: "000000", deviceId: DEVICE }),
+      verifyOtp(pool, { phone, code: "000000", deviceId: DEVICE }),
     ).rejects.toBeInstanceOf(InvalidOtpError);
 
     const { rows } = await pool.query(
       "select attempt_count from otp_challenges where target = $1",
-      [PHONE],
+      [phone],
     );
     expect(rows[0].attempt_count).toBe(1);
   });
 
   test("4th OTP send within the window is rate limited", async () => {
-    await requestOtp(pool, PHONE, noopDeliver);
-    await requestOtp(pool, PHONE, noopDeliver);
-    await requestOtp(pool, PHONE, noopDeliver);
+    const phone = uniquePhone();
+    await requestOtp(pool, phone, noopDeliver);
+    await requestOtp(pool, phone, noopDeliver);
+    await requestOtp(pool, phone, noopDeliver);
 
-    await expect(requestOtp(pool, PHONE, noopDeliver)).rejects.toBeInstanceOf(RateLimitedError);
+    await expect(requestOtp(pool, phone, noopDeliver)).rejects.toBeInstanceOf(RateLimitedError);
   });
 });
 
 describe("signup completion", () => {
   test("email OTP path creates the user and logs in", async () => {
-    const signupTicket = await verifyPhoneForSignup();
-    const { emailVerificationTicket } = await verifyEmailForSignup(signupTicket);
+    const phone = uniquePhone();
+    const email = uniqueEmail();
+    const signupTicket = await verifyPhoneForSignup(phone);
+    const { emailVerificationTicket } = await verifyEmailForSignup(signupTicket, email);
 
     const result = await completeSignup(pool, {
       signupTicket,
       deviceId: DEVICE,
       name: "Rider One",
-      email: EMAIL,
+      email,
       emailVerificationTicket,
     });
 
     expect(result.status).toBe("LOGIN");
-    expect(result.user.email).toBe(EMAIL);
+    expect(result.user.email).toBe(email);
     expect(result.user.name).toBe("Rider One");
 
     const { rows } = await pool.query(
       "select email_verified_at from users where phone = $1",
-      [PHONE],
+      [phone],
     );
     expect(rows[0].email_verified_at).not.toBeNull();
   });
 
   test("google prefill path creates the user with a verified email, no form-entered email trusted", async () => {
-    const signupTicket = await verifyPhoneForSignup();
-    const { googlePrefillTicket } = await googlePrefill("valid-google-token", fakeVerifyGoogle);
+    const phone = uniquePhone();
+    const signupTicket = await verifyPhoneForSignup(phone);
+    const { googlePrefillTicket, email } = await googlePrefill(
+      "valid-google-token",
+      fakeVerifyGoogle,
+    );
 
     const result = await completeSignup(pool, {
       signupTicket,
@@ -151,7 +173,7 @@ describe("signup completion", () => {
       googlePrefillTicket,
     });
 
-    expect(result.user.email).toBe("googleuser@example.com");
+    expect(result.user.email).toBe(email);
     expect(result.user.name).toBe("Google User");
   });
 
@@ -164,31 +186,34 @@ describe("signup completion", () => {
   test("completing signup without any verification ticket fails validation upstream of the service", async () => {
     // schema.ts's refine() is what actually blocks this at the HTTP boundary;
     // the service itself still defends in depth.
-    const signupTicket = await verifyPhoneForSignup();
+    const phone = uniquePhone();
+    const signupTicket = await verifyPhoneForSignup(phone);
     await expect(
       completeSignup(pool, { signupTicket, deviceId: DEVICE, name: "No Email Proof" }),
     ).rejects.toThrow();
   });
 
   test("duplicate email on signup is rejected", async () => {
-    const ticketA = await verifyPhoneForSignup("+919888800001");
-    const emailA = await verifyEmailForSignup(ticketA, EMAIL);
+    const sharedEmail = uniqueEmail();
+
+    const ticketA = await verifyPhoneForSignup(uniquePhone());
+    const emailA = await verifyEmailForSignup(ticketA, sharedEmail);
     await completeSignup(pool, {
       signupTicket: ticketA,
       deviceId: DEVICE,
       name: "First",
-      email: EMAIL,
+      email: sharedEmail,
       emailVerificationTicket: emailA.emailVerificationTicket,
     });
 
-    const ticketB = await verifyPhoneForSignup("+919888800002");
-    const emailB = await verifyEmailForSignup(ticketB, EMAIL);
+    const ticketB = await verifyPhoneForSignup(uniquePhone());
+    const emailB = await verifyEmailForSignup(ticketB, sharedEmail);
     await expect(
       completeSignup(pool, {
         signupTicket: ticketB,
         deviceId: DEVICE,
         name: "Second",
-        email: EMAIL,
+        email: sharedEmail,
         emailVerificationTicket: emailB.emailVerificationTicket,
       }),
     ).rejects.toBeInstanceOf(EmailTakenError);
@@ -200,7 +225,7 @@ describe("signup completion", () => {
         signupTicket: "not-a-real-ticket",
         deviceId: DEVICE,
         name: "Nobody",
-        email: EMAIL,
+        email: uniqueEmail(),
         emailVerificationTicket: "also-fake",
       }),
     ).rejects.toBeInstanceOf(InvalidTicketError);
@@ -209,13 +234,14 @@ describe("signup completion", () => {
 
 describe("sessions", () => {
   async function signUpAndLogin() {
-    const signupTicket = await verifyPhoneForSignup();
-    const { emailVerificationTicket } = await verifyEmailForSignup(signupTicket);
+    const email = uniqueEmail();
+    const signupTicket = await verifyPhoneForSignup(uniquePhone());
+    const { emailVerificationTicket } = await verifyEmailForSignup(signupTicket, email);
     return completeSignup(pool, {
       signupTicket,
       deviceId: DEVICE,
       name: "Rider One",
-      email: EMAIL,
+      email,
       emailVerificationTicket,
     });
   }

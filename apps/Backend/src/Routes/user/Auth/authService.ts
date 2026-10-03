@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { Pool } from "pg";
-import type { GoogleIdentity } from "./google.ts";
+import type { GoogleIdentity } from "../../../providers/google.ts";
 import {
   ACCESS_TOKEN_EXPIRES_IN,
   generateRefreshToken,
@@ -354,6 +354,11 @@ export async function completeSignup(pool: Pool, input: CompleteSignupInput): Pr
     }
     throw err;
   }
+
+  // Rider #1 -- every account needs a rider to book, and asking for the same
+  // name twice (once for the account, once for "who's riding") is friction
+  // signup already collected the answer to.
+  await pool.query(`insert into riders (user_id, name) values ($1, $2)`, [userId, name]);
 
   const tokens = await createSession(pool, userId, input.deviceId);
   return { status: "LOGIN", ...tokens, user: { id: userId, phone, name, email } };

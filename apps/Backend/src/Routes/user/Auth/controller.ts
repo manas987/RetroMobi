@@ -1,9 +1,10 @@
 import type { Request, Response } from "express";
+import { pathParam } from "../../../lib/pathParam.ts";
 import { pool } from "../../../DB/client.ts";
 import * as authService from "./authService.ts";
-import { sendOtpEmail } from "./emailSender.ts";
-import { verifyGoogleIdToken } from "./google.ts";
-import { sendOtpSms } from "./smsSender.ts";
+import { sendOtpEmail } from "../../../providers/emailSender.ts";
+import { verifyGoogleIdToken } from "../../../providers/google.ts";
+import { sendOtpSms } from "../../../providers/smsSender.ts";
 
 export async function sendOtp(req: Request, res: Response) {
   const { phone } = req.body as { phone: string };
@@ -88,7 +89,7 @@ export async function logout(req: Request, res: Response) {
 export async function revokeSession(req: Request, res: Response) {
   const found = await authService.revokeSession(pool, {
     userId: req.userId!,
-    sessionId: req.params.id as string,
+    sessionId: pathParam(req, "id"),
   });
   if (!found) {
     res.status(404).json({ error: "not_found" });

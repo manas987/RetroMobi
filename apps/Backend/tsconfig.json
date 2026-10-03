@@ -3,6 +3,9 @@
     // Environment setup & latest features
     "lib": ["ESNext"],
     "target": "ESNext",
+    // Without this, `import ... from "bun:test"` fails to resolve and every test
+    // file is effectively excluded from typechecking.
+    "types": ["bun"],
     "module": "Preserve",
     "moduleDetection": "force",
     "jsx": "react-jsx",
