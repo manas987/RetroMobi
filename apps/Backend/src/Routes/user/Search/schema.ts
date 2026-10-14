@@ -11,7 +11,16 @@ export const SearchQuerySchema = z.object({
   modelId: z.string().uuid().optional(),
   minRating: z.coerce.number().optional(),
   maxDistanceKm: z.coerce.number().optional(),
+  fuelType: z.enum(["PETROL", "ELECTRIC"]).optional(),
+  minEngineCc: z.coerce.number().optional(),
+  maxEngineCc: z.coerce.number().optional(),
+  seatingCapacity: z.coerce.number().int().optional(),
+  fullyVerified: z.coerce.boolean().optional(),
   sort: z.enum(["price", "rating", "distance"]).optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export const VehicleDetailParamsSchema = z.object({
+  vehicleId: z.string().uuid(),
 });

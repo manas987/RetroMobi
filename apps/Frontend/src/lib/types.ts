@@ -1,9 +1,8 @@
-/** Mirrors the backend's SearchOffer, including the fields A1 adds. */
+/** Mirrors apps/Backend/src/Routes/user/Search/searchService.ts exactly. */
 export interface Licence {
   licenceNumber: string;
   issuingAuthority: string | null;
   validUntil: string | null;
-  documentsVerifiedAt: string | null;
 }
 
 export interface SearchOffer {
@@ -11,12 +10,13 @@ export interface SearchOffer {
   shopId: string;
   shopName: string;
   shopPhone: string | null;
+  shopAddress: string;
   shopLatitude: number | null;
   shopLongitude: number | null;
-  /** paise — the rental subtotal for the window, excluding fee and deposit */
-  rentalTotal: number;
-  /** paise — lowest single-day rate inside the window */
-  minDayRate: number;
+  /** paise — per-day rate for the first day of the window */
+  pricePerDay: number;
+  /** paise — the rental subtotal for the whole window */
+  totalAmount: number;
   /** paise — refundable, held by the shop */
   securityDeposit: number;
   rating: number | null;
@@ -29,11 +29,11 @@ export interface SearchModel {
   id: string;
   make: string;
   model: string;
+  imageKey: string | null;
   fuelType: "PETROL" | "ELECTRIC" | null;
   engineCc: number | null;
   bodyType: string | null;
   seatingCapacity: number | null;
-  imageUrl: string | null;
 }
 
 export interface SearchResult {
@@ -41,6 +41,34 @@ export interface SearchResult {
   primaryOffer: SearchOffer;
   /** number of offers that matched the active filters */
   offerCount: number;
+}
+
+export interface VehicleDetail {
+  vehicleId: string;
+  make: string;
+  model: string;
+  imageKey: string | null;
+  fuelType: "PETROL" | "ELECTRIC" | null;
+  engineCc: number | null;
+  bodyType: string | null;
+  seatingCapacity: number | null;
+  shopId: string;
+  shopName: string;
+  shopPhone: string | null;
+  shopAddress: string;
+  shopLatitude: number | null;
+  shopLongitude: number | null;
+  rating: number | null;
+  reviewCount: number;
+  /** paise */
+  amount: number;
+  /** paise */
+  weekendAmount: number;
+  /** paise */
+  securityDeposit: number;
+  /** paise */
+  lateFeeAmount: number;
+  licence: Licence | null;
 }
 
 export type SortKey = "price" | "distance" | "rating";

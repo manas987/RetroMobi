@@ -7,5 +7,6 @@ import { SearchQuerySchema } from "./schema.ts";
 const router = Router();
 
 router.get("/", rateLimit, validate(SearchQuerySchema, "query"), controller.search);
+router.get("/vehicle/:vehicleId", rateLimit, controller.detail);
 
 export default router;

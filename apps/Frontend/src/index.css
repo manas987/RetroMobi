@@ -105,6 +105,61 @@
       0 12px 32px rgba(18, 22, 26, 0.1);
   }
 
+  /* Dual-handle price slider: two overlapping range inputs, track hidden so only
+     the thumbs are interactive — the visible track is the sibling div in JSX. */
+  .price-range-thumb {
+    height: 20px;
+  }
+  .price-range-thumb::-webkit-slider-runnable-track {
+    background: transparent;
+  }
+  .price-range-thumb::-moz-range-track {
+    background: transparent;
+  }
+  .price-range-thumb::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    pointer-events: auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-amber);
+    border: 2px solid var(--color-surface);
+    box-shadow: 0 1px 3px rgba(18, 22, 26, 0.3);
+    cursor: pointer;
+    margin-top: -1px;
+  }
+  .price-range-thumb::-moz-range-thumb {
+    pointer-events: auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-amber);
+    border: 2px solid var(--color-surface);
+    box-shadow: 0 1px 3px rgba(18, 22, 26, 0.3);
+    cursor: pointer;
+  }
+
+  /* Small dark teardrop, amber core, white stroke — separates by luminance, not hue,
+     so it survives both snow and forest in the satellite/outdoors map styles. */
+  .map-pin {
+    width: 22px;
+    height: 22px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    background: var(--color-ink);
+    border: 2px solid var(--color-surface);
+    box-shadow: 0 1px 4px rgba(18, 22, 26, 0.35);
+    position: relative;
+  }
+  .map-pin::after {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    border-radius: 50%;
+    background: var(--color-amber);
+    transform: rotate(45deg);
+  }
+
   /* Blur is expensive over a repainting WebGL canvas. The map adds this class
      while it moves, so panning stays smooth. */
   .map-moving .glass-panel {

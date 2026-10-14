@@ -10,7 +10,12 @@ import {
   insertBooking,
 } from "../../../test/fixtures.ts";
 import { sweepExpiredHolds } from "../../../lib/holds.ts";
-import { DistanceSortUnavailableError, searchVehicles } from "./searchService.ts";
+import {
+  DistanceSortUnavailableError,
+  getVehicleDetail,
+  searchVehicles,
+  VehicleNotFoundError,
+} from "./searchService.ts";
 
 const { Pool } = pg;
 
@@ -276,6 +281,88 @@ describe("pricing in results", () => {
 
     expect(offer.pricePerDay).toBeGreaterThan(0);
     expect(offer.totalAmount).toBeGreaterThanOrEqual(offer.pricePerDay);
+  });
+});
+
+describe("licence", () => {
+  test("a vehicle with no licence link reports licence: null", async () => {
+    const { shopId, city } = await isolatedCity();
+    await createBookableVehicle(pool, { shopId });
+    const { pickupAt, returnAt } = futureWindow(1100);
+
+    const { results } = await searchVehicles(pool, { city, pickupAt, returnAt });
+    expect(results[0]!.primaryOffer.licence).toBeNull();
+  });
+
+  test("a vehicle named on an ACTIVE shop licence reports it", async () => {
+    const merchant = await createMerchant(pool);
+    const shop = await createShop(pool, merchant.id);
+    const v = await createBookableVehicle(pool, { shopId: shop.id });
+    const { pickupAt, returnAt } = futureWindow(1110);
+
+    const license = await pool.query(
+      `insert into shop_licenses (merchant_user_id, licence_number, issuing_authority, expires_at, status)
+       values ($1, 'UK14/RAM/2024/0001', 'ARTO Dehradun', '2030-01-01', 'ACTIVE') returning id`,
+      [merchant.id],
+    );
+    await pool.query(
+      `insert into license_vehicles (license_id, vehicle_id, registration_number) values ($1, $2, 'TEST-REG')`,
+      [license.rows[0].id, v.id],
+    );
+
+    const { results } = await searchVehicles(pool, { city: shop.city, pickupAt, returnAt });
+    expect(results[0]!.primaryOffer.licence).toEqual({
+      licenceNumber: "UK14/RAM/2024/0001",
+      issuingAuthority: "ARTO Dehradun",
+      validUntil: "2030-01-01",
+    });
+  });
+
+  test("fullyVerified excludes vehicles without an active licence", async () => {
+    const { shopId, city } = await isolatedCity();
+    await createBookableVehicle(pool, { shopId });
+    const { pickupAt, returnAt } = futureWindow(1120);
+
+    const { results } = await searchVehicles(pool, {
+      city,
+      pickupAt,
+      returnAt,
+      fullyVerified: true,
+    });
+    expect(results).toHaveLength(0);
+  });
+});
+
+describe("fuelType filter", () => {
+  test("excludes a model of the other fuel type", async () => {
+    const { shopId, city } = await isolatedCity();
+    const { rows } = await pool.query(
+      `insert into vehicle_models (make, model, fuel_type) values ('Ather', $1, 'ELECTRIC') returning id`,
+      [`450X${Date.now()}`],
+    );
+    await createBookableVehicle(pool, { shopId, modelId: rows[0].id });
+    const { pickupAt, returnAt } = futureWindow(1130);
+
+    const { results } = await searchVehicles(pool, { city, pickupAt, returnAt, fuelType: "PETROL" });
+    expect(results).toHaveLength(0);
+  });
+});
+
+describe("getVehicleDetail", () => {
+  test("returns pricing and shop identity for a real vehicle", async () => {
+    const { shopId } = await isolatedCity();
+    const v = await createBookableVehicle(pool, { shopId, amount: 55_000 });
+
+    const detail = await getVehicleDetail(pool, v.id);
+    expect(detail.vehicleId).toBe(v.id);
+    expect(detail.amount).toBe(55_000);
+    expect(detail.shopId).toBe(shopId);
+  });
+
+  test("throws for an unknown vehicle id", async () => {
+    await expect(
+      getVehicleDetail(pool, "00000000-0000-0000-0000-000000000000"),
+    ).rejects.toBeInstanceOf(VehicleNotFoundError);
   });
 });
 
