@@ -33,12 +33,18 @@ async function makeAdmin(role: "SUPER_ADMIN" | "ADMIN" | "SUPPORT") {
 
 describe("openTicket assignment", () => {
   test("prefers an ACTIVE SUPPORT admin over ADMIN/SUPER_ADMIN", async () => {
-    const support = await makeAdmin("SUPPORT");
+    // admins is a global table with no tenant boundary, so other test files
+    // (admin auth, Phase 12) also create ACTIVE SUPPORT rows -- this only
+    // asserts the role tier picked, never a specific admin id, since ties on
+    // "fewest open tickets" across files are expected and not a bug.
+    await makeAdmin("SUPPORT");
     await makeAdmin("ADMIN");
     const user = await createUser(pool);
 
     const ticket = await openTicket(pool, { openedByType: "CUSTOMER", openedById: user.id });
-    expect(ticket.assignedTo).toBe(support);
+    expect(ticket.assignedTo).not.toBeNull();
+    const { rows } = await pool.query(`select role from admins where id = $1`, [ticket.assignedTo]);
+    expect(rows[0].role).toBe("SUPPORT");
   });
 });
 

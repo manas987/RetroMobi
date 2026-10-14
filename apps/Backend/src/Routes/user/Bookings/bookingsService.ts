@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { composeTotal, countRentalDays, priceRental, refundForCancellation } from "../../../lib/pricing.ts";
 import { writeAudit } from "../../../lib/audit.ts";
+import { notify } from "../../../lib/notify.ts";
 import type { CashfreeClient } from "../../../providers/cashfree.ts";
 
 export class VehicleUnavailableError extends Error {}
@@ -9,8 +10,10 @@ export class InvalidDurationError extends Error {}
 export class LicenceInvalidError extends Error {}
 export class CouponInvalidError extends Error {}
 export class BookingNotCancellableError extends Error {}
+export class ExtensionPendingError extends Error {}
 
 const EXCLUSION_VIOLATION = "23P01";
+const UNIQUE_VIOLATION = "23505";
 
 function getMoneyConfig() {
   return {
@@ -321,6 +324,21 @@ export async function cancelBooking(
         [paymentId, input.bookingId, refundAmount, refund.refundId],
       );
       refundId = refundRows[0].id;
+
+      await notify(client, {
+        recipientType: "CUSTOMER",
+        recipientId: input.userId,
+        channel: "SMS",
+        template: "refund_processed",
+        payload: { bookingId: input.bookingId, refundAmount },
+      });
+      await notify(client, {
+        recipientType: "CUSTOMER",
+        recipientId: input.userId,
+        channel: "EMAIL",
+        template: "refund_processed",
+        payload: { bookingId: input.bookingId, refundAmount },
+      });
     }
 
     await client.query(
@@ -381,10 +399,15 @@ export async function cancelBooking(
   }
 }
 
-export async function extendBooking(
+// Pay-first: the booking's scheduled_return_at is NOT touched here. It only
+// moves once handlePaymentWebhook sees PAYMENT_SUCCESS for this extension's
+// payment (Phase 15 / paymentsService.ts). Decided 2026-10-03 -- the old
+// behaviour (extend immediately, charge nothing) is gone.
+export async function requestExtension(
   pool: Pool,
   input: { userId: string; bookingId: string; newReturnAt: Date },
-): Promise<{ additionalAmount: number }> {
+  cashfree: CashfreeClient,
+): Promise<{ extensionId: string; orderId: string; paymentSessionId: string; additionalAmount: number }> {
   const { platformFeePct, gstRate } = getMoneyConfig();
 
   const client = await pool.connect();
@@ -392,11 +415,11 @@ export async function extendBooking(
     await client.query("BEGIN");
 
     const { rows } = await client.query(
-      `select b.id, b.vehicle_id, b.scheduled_pickup_at, b.scheduled_return_at,
-              b.rental_amount, b.platform_fee, b.tax_amount, b.total_amount
+      `select b.id, b.vehicle_id, b.group_id, b.scheduled_pickup_at, b.scheduled_return_at, u.phone
          from bookings b
          join booking_groups g on g.id = b.group_id
-        where b.id = $1 and g.user_id = $2 and b.deleted_at is null`,
+         join users u on u.id = g.user_id
+        where b.id = $1 and g.user_id = $2 and b.status = 'CONFIRMED' and b.deleted_at is null`,
       [input.bookingId, input.userId],
     );
     if (rows.length === 0) throw new Error("booking not found");
@@ -412,6 +435,8 @@ export async function extendBooking(
       throw new InvalidDurationError("rental cannot exceed 10 days");
     }
 
+    // Price only the extra days, at current rates. Zero deposit -- the
+    // existing deposit already covers the whole rental.
     const { pricing, specials } = await loadPricingAndSpecials(client, booking.vehicle_id);
     const { rentalAmount: extraRental } = priceRental({
       pickupAt: oldReturnAt,
@@ -419,57 +444,79 @@ export async function extendBooking(
       pricing,
       specialPricings: specials,
     });
+    const extraTotals = composeTotal({
+      rentalAmount: extraRental,
+      securityDepositAmount: 0,
+      platformFeePct,
+      gstRate,
+      discountAmount: 0,
+    });
 
-    const extraFee = Math.round((extraRental * platformFeePct) / 100);
-    const extraTax = Math.round(((extraRental + extraFee) * gstRate) / 100);
-    const extraTotal = extraRental + extraFee + extraTax;
-
+    let extensionId: string;
     try {
-      await client.query(
-        `update bookings
-            set scheduled_return_at = $1,
-                rental_amount = rental_amount + $2,
-                platform_fee = platform_fee + $3,
-                tax_amount = tax_amount + $4,
-                total_amount = total_amount + $5,
-                updated_at = now()
-          where id = $6`,
-        [input.newReturnAt, extraRental, extraFee, extraTax, extraTotal, input.bookingId],
+      const { rows: extRows } = await client.query(
+        `insert into booking_extensions (booking_id, old_return_at, new_return_at, additional_amount, status)
+         values ($1, $2, $3, $4, 'PENDING') returning id`,
+        [input.bookingId, oldReturnAt, input.newReturnAt, extraRental],
       );
+      extensionId = extRows[0].id;
     } catch (err: any) {
-      if (err.code === EXCLUSION_VIOLATION) {
-        throw new VehicleUnavailableError(`vehicle ${booking.vehicle_id} is already booked past this return time`);
+      if (err.code === UNIQUE_VIOLATION) {
+        throw new ExtensionPendingError(`booking ${input.bookingId} already has a pending extension`);
       }
       throw err;
     }
 
-    // Explicitly APPROVED, because 0013 changed the column default to PENDING ahead
-    // of the pay-first rebuild (implementation.md Phase 15). Until that phase lands,
-    // this path still extends the booking WITHOUT taking payment -- the additional
-    // amount is owed and never charged. Do not call this a finished feature.
-    await client.query(
-      `insert into booking_extensions
-         (booking_id, old_return_at, new_return_at, additional_amount, status, approved_at)
-       values ($1, $2, $3, $4, 'APPROVED', now())`,
-      [input.bookingId, oldReturnAt, input.newReturnAt, extraRental],
+    const orderId = `ext_${extensionId}`;
+    const order = await cashfree.createOrder({
+      orderId,
+      amount: extraTotals.totalAmount,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      customerPhone: booking.phone,
+    });
+
+    const { rows: paymentRows } = await client.query(
+      `insert into payments (booking_group_id, provider_order_id, type, amount, status)
+       values ($1, $2, 'EXTENSION', $3, 'PENDING') returning id`,
+      [booking.group_id, order.orderId, extraTotals.totalAmount],
     );
+    await client.query(`update booking_extensions set payment_id = $1 where id = $2`, [
+      paymentRows[0].id,
+      extensionId,
+    ]);
 
     await writeAudit(client, {
       actorType: "CUSTOMER",
       actorId: input.userId,
-      action: "booking.extended",
+      action: "booking.extension_requested",
       entityType: "booking",
       entityId: input.bookingId,
-      before: { scheduledReturnAt: oldReturnAt },
-      after: { scheduledReturnAt: input.newReturnAt, additionalAmount: extraRental },
+      after: { newReturnAt: input.newReturnAt, additionalAmount: extraTotals.totalAmount },
     });
 
     await client.query("COMMIT");
-    return { additionalAmount: extraRental };
+    return {
+      extensionId,
+      orderId: order.orderId,
+      paymentSessionId: order.paymentSessionId,
+      additionalAmount: extraTotals.totalAmount,
+    };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
   }
+}
+
+export async function getExtension(pool: Pool, userId: string, bookingId: string) {
+  const { rows } = await pool.query(
+    `select e.* from booking_extensions e
+       join bookings b on b.id = e.booking_id
+       join booking_groups g on g.id = b.group_id
+      where e.booking_id = $1 and g.user_id = $2
+      order by e.requested_at desc limit 1`,
+    [bookingId, userId],
+  );
+  return rows[0] ?? null;
 }

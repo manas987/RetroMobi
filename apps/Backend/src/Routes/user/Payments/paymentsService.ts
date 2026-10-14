@@ -1,7 +1,8 @@
 import type { Pool, PoolClient } from "pg";
 import type { CashfreeClient } from "../../../providers/cashfree.ts";
 import { writeAudit } from "../../../lib/audit.ts";
-import { extractTax } from "../../../lib/pricing.ts";
+import { notify } from "../../../lib/notify.ts";
+import { composeTotal, extractTax } from "../../../lib/pricing.ts";
 
 function getPayoutUpfrontPct(): number {
   return Number(process.env.PAYOUT_UPFRONT_PCT ?? 10);
@@ -99,6 +100,8 @@ async function allocateInvoice(
       args.inclusiveAmount,
     ],
   );
+
+  return { invoiceNumber };
 }
 
 export async function createPaymentIntent(
@@ -140,6 +143,126 @@ export async function createPaymentIntent(
   );
 
   return order;
+}
+
+const EXCLUSION_VIOLATION = "23P01";
+
+// The exclusion constraint is the only thing that can arbitrate a window
+// someone else took while the customer was paying -- and it can only arbitrate
+// at the moment of the write, which is now AFTER the money has moved. Losing
+// that race means a refund, not a failed request.
+async function handleExtensionPaymentSuccess(
+  pool: Pool,
+  payment: { id: string; booking_group_id: string; amount: number },
+  webhookEventId: string,
+  cashfree: CashfreeClient,
+): Promise<void> {
+  const { rows: extRows } = await pool.query(
+    `select e.id, e.booking_id, e.old_return_at, e.new_return_at, e.additional_amount, b.vehicle_id
+       from booking_extensions e
+       join bookings b on b.id = e.booking_id
+      where e.payment_id = $1 and e.status = 'PENDING'`,
+    [payment.id],
+  );
+  if (extRows.length === 0) throw new Error(`no pending extension found for payment ${payment.id}`);
+  const ext = extRows[0];
+
+  const { platformFeePct, gstRate } = getMoneyConfigForExtension();
+  const totals = composeTotal({
+    rentalAmount: Number(ext.additional_amount),
+    securityDepositAmount: 0,
+    platformFeePct,
+    gstRate,
+    discountAmount: 0,
+  });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`update payments set status = 'SUCCEEDED', updated_at = now() where id = $1`, [payment.id]);
+
+    // A SAVEPOINT, not a bare try/catch: Postgres aborts the whole transaction
+    // on the first error inside it, so recovering into the refund path below
+    // (still inside the same outer transaction) needs an explicit rollback
+    // point rather than just catching the exception in JS.
+    await client.query("SAVEPOINT extend_attempt");
+    try {
+      const { rowCount } = await client.query(
+        `update bookings
+            set scheduled_return_at = $1,
+                rental_amount = rental_amount + $2,
+                platform_fee = platform_fee + $3,
+                tax_amount = tax_amount + $4,
+                total_amount = total_amount + $5,
+                updated_at = now()
+          where id = $6`,
+        [ext.new_return_at, totals.rentalAmount, totals.platformFee, totals.taxAmount, totals.totalAmount, ext.booking_id],
+      );
+      if (rowCount === 0) throw new Error(`booking ${ext.booking_id} not found`);
+
+      await client.query(
+        `update booking_extensions set status = 'APPROVED', approved_at = now() where id = $1`,
+        [ext.id],
+      );
+
+      await writeAudit(client, {
+        actorType: "SYSTEM",
+        actorId: null,
+        action: "booking.extended",
+        entityType: "booking",
+        entityId: ext.booking_id,
+        before: { scheduledReturnAt: ext.old_return_at },
+        after: { scheduledReturnAt: ext.new_return_at, additionalAmount: totals.totalAmount },
+      });
+    } catch (err: any) {
+      if (err.code !== EXCLUSION_VIOLATION) throw err;
+      await client.query("ROLLBACK TO SAVEPOINT extend_attempt");
+
+      // Someone else took the window while the customer was paying. The booking
+      // is left exactly as it was; the money already moved, so it comes back.
+      const refund = await cashfree.refund({
+        orderId: `ext_${ext.id}`,
+        refundId: `extrefund_${ext.id}`,
+        amount: Number(payment.amount),
+      });
+      await client.query(
+        `insert into refunds (payment_id, booking_id, amount, reason, provider_ref, status)
+         values ($1, $2, $3, 'EXTENSION_UNAVAILABLE', $4, 'PENDING')`,
+        [payment.id, ext.booking_id, payment.amount, refund.refundId],
+      );
+      await client.query(
+        `update booking_extensions set status = 'REJECTED' where id = $1`,
+        [ext.id],
+      );
+
+      const { rows: userRows } = await client.query(
+        `select g.user_id from bookings b join booking_groups g on g.id = b.group_id where b.id = $1`,
+        [ext.booking_id],
+      );
+      await notify(client, {
+        recipientType: "CUSTOMER",
+        recipientId: userRows[0].user_id,
+        channel: "SMS",
+        template: "refund_processed",
+        payload: { bookingId: ext.booking_id, refundAmount: Number(payment.amount) },
+      });
+    }
+
+    await client.query(`update webhook_events set processed_at = now() where id = $1`, [webhookEventId]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+function getMoneyConfigForExtension() {
+  return {
+    platformFeePct: Number(process.env.PLATFORM_FEE_PCT ?? 10),
+    gstRate: Number(process.env.GST_RATE ?? 18),
+  };
 }
 
 export async function handlePaymentWebhook(
@@ -191,7 +314,7 @@ export async function handlePaymentWebhook(
 
   // PAYMENT_SUCCESS
   const { rows: paymentRows } = await pool.query(
-    `select p.id, p.booking_group_id, p.amount, g.hold_expires_at
+    `select p.id, p.booking_group_id, p.amount, p.type, g.hold_expires_at, g.user_id
        from payments p
        join booking_groups g on g.id = p.booking_group_id
       where p.provider_order_id = $1`,
@@ -199,6 +322,11 @@ export async function handlePaymentWebhook(
   );
   if (paymentRows.length === 0) throw new Error(`no payment found for order ${event.orderId}`);
   const payment = paymentRows[0];
+
+  if (payment.type === "EXTENSION") {
+    await handleExtensionPaymentSuccess(pool, payment, webhookEventId, cashfree);
+    return { processed: true };
+  }
 
   if (new Date(payment.hold_expires_at).getTime() < Date.now()) {
     // The hold died before payment landed. Refund in full, confirm nothing.
@@ -271,27 +399,54 @@ export async function handlePaymentWebhook(
       discountTotal += Number(booking.discount_amount);
     }
 
+    let merchantInvoiceNumber: string | null = null;
     for (const [shopId, entry] of byShop) {
       // A shop under the GST registration threshold has no GSTIN and cannot legally
       // issue a tax invoice, so it gets none -- its listed price is simply its price.
       // Only RetroMobi's platform-fee invoice is raised for that booking.
       if (!entry.gstin) continue;
 
-      await allocateInvoice(client, {
+      const { invoiceNumber } = await allocateInvoice(client, {
         groupId: payment.booking_group_id,
         shopId,
         issuerType: "MERCHANT",
         issuerGstin: entry.gstin,
         inclusiveAmount: entry.rentalAmount,
       });
+      merchantInvoiceNumber = invoiceNumber;
     }
 
-    await allocateInvoice(client, {
-      groupId: payment.booking_group_id,
-      shopId: null,
-      issuerType: "PLATFORM",
-      issuerGstin: process.env.PLATFORM_GSTIN ?? null,
-      inclusiveAmount: Math.max(0, platformFeeTotal - discountTotal),
+    // Same rule as an unregistered shop, applied to ourselves: no GSTIN, no tax
+    // invoice. RetroMobi is just another supplier here, and until it is registered
+    // it cannot legally issue one. Payments, payouts, deposits and confirmation are
+    // all unaffected -- only the tax document is withheld, which beats both issuing
+    // one with a blank GSTIN and throwing inside the money transaction.
+    const platformGstin = process.env.PLATFORM_GSTIN?.trim();
+    let platformInvoiceNumber: string | null = null;
+    if (platformGstin) {
+      const { invoiceNumber } = await allocateInvoice(client, {
+        groupId: payment.booking_group_id,
+        shopId: null,
+        issuerType: "PLATFORM",
+        issuerGstin: platformGstin,
+        inclusiveAmount: Math.max(0, platformFeeTotal - discountTotal),
+      });
+      platformInvoiceNumber = invoiceNumber;
+    }
+
+    await notify(client, {
+      recipientType: "CUSTOMER",
+      recipientId: payment.user_id,
+      channel: "SMS",
+      template: "booking_confirmed",
+      payload: { bookingGroupId: payment.booking_group_id, merchantInvoiceNumber, platformInvoiceNumber },
+    });
+    await notify(client, {
+      recipientType: "CUSTOMER",
+      recipientId: payment.user_id,
+      channel: "EMAIL",
+      template: "booking_confirmed",
+      payload: { bookingGroupId: payment.booking_group_id, merchantInvoiceNumber, platformInvoiceNumber },
     });
 
     const { rows: groupRows } = await client.query(

@@ -1,14 +1,13 @@
-import crypto from "node:crypto";
 import type { Pool } from "pg";
 import type { GoogleIdentity } from "../../../providers/google.ts";
+import { generateOtpCode, hashOtp, verifyOtpHash } from "../../../lib/authCrypto.ts";
+import { writeAudit } from "../../../lib/audit.ts";
 import {
   ACCESS_TOKEN_EXPIRES_IN,
   generateRefreshToken,
-  hashOtp,
   hashRefreshToken,
   signAccessToken,
   signTicket,
-  verifyOtpHash,
   verifyTicket,
 } from "./token.ts";
 
@@ -32,10 +31,6 @@ const EMAIL_VERIFIED_TICKET_TTL_SECONDS = 10 * 60;
 const SEND_LIMIT_SHORT = { count: 3, windowMinutes: 10 };
 const SEND_LIMIT_LONG = { count: 10, windowMinutes: 24 * 60 };
 const VERIFY_BACKSTOP = { count: 10, windowMinutes: 10 };
-
-function generateOtpCode(): string {
-  return crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
-}
 
 export interface OtpChallengeResult {
   expiresInSeconds: number;
@@ -178,6 +173,13 @@ export async function verifyOtp(pool: Pool, input: VerifyOtpInput): Promise<Veri
 
   if (existing) {
     const tokens = await createSession(pool, existing.id, deviceId);
+    await writeAudit(pool, {
+      actorType: "CUSTOMER",
+      actorId: existing.id,
+      action: "user.logged_in",
+      entityType: "user",
+      entityId: existing.id,
+    });
     return {
       status: "LOGIN",
       ...tokens,
@@ -361,6 +363,14 @@ export async function completeSignup(pool: Pool, input: CompleteSignupInput): Pr
   await pool.query(`insert into riders (user_id, name) values ($1, $2)`, [userId, name]);
 
   const tokens = await createSession(pool, userId, input.deviceId);
+  await writeAudit(pool, {
+    actorType: "CUSTOMER",
+    actorId: userId,
+    action: "user.signed_up",
+    entityType: "user",
+    entityId: userId,
+    after: { phone },
+  });
   return { status: "LOGIN", ...tokens, user: { id: userId, phone, name, email } };
 }
 
@@ -432,6 +442,13 @@ export async function logout(pool: Pool, input: LogoutInput): Promise<void> {
      where token_hash = $1 and user_id = $2 and revoked_at is null`,
     [tokenHash, input.userId],
   );
+  await writeAudit(pool, {
+    actorType: "CUSTOMER",
+    actorId: input.userId,
+    action: "user.logged_out",
+    entityType: "session",
+    entityId: null,
+  });
 }
 
 export interface RevokeSessionInput {

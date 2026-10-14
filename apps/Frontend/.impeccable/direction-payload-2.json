@@ -1,0 +1,49 @@
+{
+  "title": "Liquid Glass — your synthesis",
+  "question": "Your steer, built. One world across the three surfaces you specified: canon arrangement as the default, the Register discipline as map mode, the fold sequence on vehicle detail with real photography. The buff/paper palette is gone — this is bright, modern liquid glass. All three cards lock the same world; they exist so you can see every surface. Re-roll if it still is not right.",
+  "options": [
+    {
+      "id": "glass-default",
+      "label": "Default mode",
+      "kicker": "YOUR DIRECTION",
+      "lineage": "Apple Liquid Glass, canon marketplace arrangement",
+      "thesis": "The familiar three-column arrangement, executed in glass at a craft level the category does not reach.",
+      "palette": ["#F5F6F8", "#0E1216", "#F0A500", "#3E7D52", "#FFFFFF"],
+      "materials": ["translucent glass with specular edge", "squircle corners", "depth from blur not shadow"],
+      "viewport": "Glass nav bar full width with the search capsule inside it. Filter rail left, result rows centre with real scooter photography and ₹ totals, live terrain map right. One row selected in amber.",
+      "risk": "The familiar arrangement only earns its keep if the glass and type are genuinely better than the category's — at anything less it just looks like everyone else.",
+      "raised": [
+        { "from": "your steer", "raise": "Canon arrangement becomes the default mode rather than an alternative world." },
+        { "from": "challenger-screenprint", "raise": "Every stacked offer is enumerated with its own values — depth never implies a count." },
+        { "from": "challenger-understory", "raise": "Selection and focus carried by luminance, not hue — what lets an amber pin survive green terrain." },
+        { "from": "challenger-algorave", "raise": "A date or filter change shows its consequence before it commits." }
+      ],
+      "comp": ".impeccable/mocks/decision/glass-default.webp"
+    },
+    {
+      "id": "glass-map",
+      "label": "Map mode",
+      "lineage": "Apple Liquid Glass over live terrain; the Register's stamped-record discipline",
+      "thesis": "When you want every shop at once, the terrain becomes the whole page and the glass floats on it.",
+      "palette": ["#2F5D3F", "#0E1216", "#F0A500", "#FFFFFF", "#D8DEE4"],
+      "materials": ["full-bleed satellite terrain", "floating glass panel", "haloed pin"],
+      "viewport": "Terrain edge to edge. A glass shop list on the left with distance, rating and ₹ price per row, the selected row lifted in amber. Floating search capsule above.",
+      "risk": "Pins must read against both snow and forest — in the build they get a white halo and a luminance step, not just amber fill.",
+      "comp": ".impeccable/mocks/decision/glass-map.webp"
+    },
+    {
+      "id": "glass-detail",
+      "label": "Vehicle detail",
+      "lineage": "Apple Liquid Glass; the Fold Sequence's visible-step discipline",
+      "thesis": "Real photography of the actual scooter, and a booking sequence where every completed step stays visible.",
+      "palette": ["#F5F6F8", "#0E1216", "#F0A500", "#FFFFFF", "#8A939B"],
+      "materials": ["real vehicle photography", "stacked glass panels", "numbered step column"],
+      "viewport": "Large scooter photograph with thumbnails left. Glass stack right: total, refundable deposit, cancellation terms, spec strip, amber book action. A slim numbered step column down the right edge, current step marked by one amber dot.",
+      "risk": "The step column turns into a progress bar in costume unless earlier steps stay genuinely readable.",
+      "comp": ".impeccable/mocks/decision/glass-detail.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "comp", "toggle": true },
+  "steer": true
+}

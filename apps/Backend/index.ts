@@ -2,10 +2,15 @@ import { pool } from "./src/DB/client.ts";
 import { app } from "./src/index.ts";
 import { assertConfig } from "./src/lib/config.ts";
 import { sweepExpiredHolds } from "./src/lib/holds.ts";
+import { sendPendingNotifications, sweepBookingReminders } from "./src/lib/notificationSweep.ts";
+import { sendEmail } from "./src/providers/emailSender.ts";
+import { sendSms } from "./src/providers/smsSender.ts";
 
 // Before anything binds a port or touches the DB: a bad money/tax config does not
 // fail, it quietly produces wrong numbers on real invoices.
-assertConfig();
+for (const warning of assertConfig()) {
+  console.warn(`[config] ${warning}`);
+}
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -22,8 +27,10 @@ setInterval(async () => {
   sweeping = true;
   try {
     await sweepExpiredHolds(pool);
+    await sweepBookingReminders(pool);
+    await sendPendingNotifications(pool, { sms: sendSms, email: sendEmail });
   } catch (e) {
-    console.error("hold sweep failed", e);
+    console.error("sweep failed", e);
   } finally {
     sweeping = false;
   }

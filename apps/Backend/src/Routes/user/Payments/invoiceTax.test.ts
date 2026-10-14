@@ -17,6 +17,12 @@ import {
 import { createHold } from "../Bookings/bookingsService.ts";
 import { createPaymentIntent, handlePaymentWebhook } from "./paymentsService.ts";
 
+// A PLATFORM tax invoice is only issued when RetroMobi has a GSTIN, so these tests
+// supply one. Without it the platform invoice is correctly skipped.
+// Truthiness, not ??= : .env ships PLATFORM_GSTIN as an empty string, which is
+// not null, so ??= would leave it empty and the platform invoice would be skipped.
+if (!process.env.PLATFORM_GSTIN) process.env.PLATFORM_GSTIN = "05ABCDE1234F1Z5";
+
 const { Pool } = pg;
 
 const pool = new Pool({
@@ -130,6 +136,42 @@ describe("tax-inclusive invoicing", () => {
       expect(Number(inv.cgst)).toBeGreaterThan(0);
       // SGST carries the odd paise, so the two halves are equal or differ by one.
       expect(Number(inv.sgst) - Number(inv.cgst)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  // RetroMobi is not GST-registered yet. Confirmation must still work end to end:
+  // the booking confirms, the deposit is held, the merchant is paid. Only the
+  // platform's own tax document is withheld, because it cannot legally issue one.
+  test("no platform GSTIN means no platform invoice, and the booking still confirms", async () => {
+    const original = process.env.PLATFORM_GSTIN;
+    process.env.PLATFORM_GSTIN = "";
+    try {
+      const b = await paidBookingAtShop(540);
+
+      const { rows: invoices } = await pool.query(
+        `select issuer_type from invoices where booking_group_id = $1`,
+        [b.groupId],
+      );
+      expect(invoices.map((r) => r.issuer_type)).toEqual(["MERCHANT"]);
+
+      const { rows: booking } = await pool.query(`select status from bookings where id = $1`, [
+        b.bookingId,
+      ]);
+      expect(booking[0].status).toBe("CONFIRMED");
+
+      const { rows: payouts } = await pool.query(
+        `select stage from payouts where booking_id = $1`,
+        [b.bookingId],
+      );
+      expect(payouts.map((r) => r.stage)).toEqual(["UPFRONT"]);
+
+      const { rows: deposits } = await pool.query(
+        `select status from security_deposits where booking_id = $1`,
+        [b.bookingId],
+      );
+      expect(deposits[0].status).toBe("HELD");
+    } finally {
+      process.env.PLATFORM_GSTIN = original;
     }
   });
 

@@ -98,7 +98,7 @@ describe("merchantReturn", () => {
     expect(booking.rows[0].actual_return_at).not.toBeNull();
   });
 
-  test("claim:true opens a ticket and leaves the deposit HELD", async () => {
+  test("claim:true opens a ticket and marks the deposit CLAIMED", async () => {
     const b = await confirmedBookingWithPayment(2020);
     const merchant = await pool.query(`select merchant_user_id from shops where id = $1`, [b.shopId]);
 
@@ -110,9 +110,11 @@ describe("merchantReturn", () => {
     );
 
     expect(result.ticketId).toBe("ticket-1");
+    // CLAIMED, not HELD -- this is what Phase 16's settleDeposit looks for to
+    // distinguish a raised claim from a deposit nobody has touched.
     const deposit = await pool.query(`select status from security_deposits where booking_id = $1`, [
       b.bookingId,
     ]);
-    expect(deposit.rows[0].status).toBe("HELD");
+    expect(deposit.rows[0].status).toBe("CLAIMED");
   });
 });

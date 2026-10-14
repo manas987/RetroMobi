@@ -15,14 +15,20 @@ describe("assertConfig", () => {
     expect(() => assertConfig(valid)).not.toThrow();
   });
 
-  // The bug this exists for: the code read PLATFORM_GSTIN, the key was never in
-  // .env, and every platform invoice was issued with a null GSTIN.
-  test("a missing GSTIN stops the boot", () => {
-    expect(() => assertConfig({ ...valid, PLATFORM_GSTIN: undefined })).toThrow(/PLATFORM_GSTIN/);
+  // RetroMobi may not be GST-registered yet, so a missing GSTIN warns rather than
+  // blocking anyone from running the app. The consequence is that no PLATFORM tax
+  // invoice is issued -- see paymentsService.
+  test("a missing GSTIN warns but does not stop the boot", () => {
+    const warnings = assertConfig({ ...valid, PLATFORM_GSTIN: undefined });
+    expect(warnings.join(" ")).toMatch(/PLATFORM_GSTIN/);
   });
 
   test("an empty or whitespace value counts as missing", () => {
-    expect(() => assertConfig({ ...valid, PLATFORM_GSTIN: "   " })).toThrow(/PLATFORM_GSTIN/);
+    expect(assertConfig({ ...valid, PLATFORM_GSTIN: "   " }).join(" ")).toMatch(/PLATFORM_GSTIN/);
+  });
+
+  test("a complete config produces no warnings", () => {
+    expect(assertConfig(valid)).toEqual([]);
   });
 
   test("a placeholder that is not GSTIN-shaped is rejected", () => {
@@ -39,7 +45,7 @@ describe("assertConfig", () => {
       throw new Error("should have thrown");
     } catch (err) {
       const message = (err as Error).message;
-      for (const key of ["AUTH_ACCESS_TOKEN_SECRET", "GST_RATE", "PLATFORM_FEE_PCT", "PLATFORM_GSTIN"]) {
+      for (const key of ["AUTH_ACCESS_TOKEN_SECRET", "GST_RATE", "PLATFORM_FEE_PCT"]) {
         expect(message).toContain(key);
       }
     }

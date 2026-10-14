@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
+import { notify } from "../../../lib/notify.ts";
 import type { CashfreeClient } from "../../../providers/cashfree.ts";
 
 export class BookingNotFoundError extends Error {}
@@ -103,13 +104,15 @@ export async function merchantReturn(
     counterpartyId?: string;
     subject: string;
     firstMessage?: string;
+    category?: "BOOKING" | "APP_HELP" | "OTHER";
   }) => Promise<{ id: string; assignedTo: string | null }>,
 ) {
   const { rows } = await pool.query(
-    `select b.id, b.group_id
+    `select b.id, b.group_id, g.user_id
        from bookings b
        join vehicles v on v.id = b.vehicle_id
        join shops s on s.id = v.shop_id
+       join booking_groups g on g.id = b.group_id
       where b.id = $1 and s.merchant_user_id = $2 and b.deleted_at is null`,
     [input.bookingId, input.merchantUserId],
   );
@@ -144,6 +147,20 @@ export async function merchantReturn(
            values ($1, $2, $3, 'DEPOSIT_RELEASE', $4, 'PENDING')`,
           [paymentRows[0].id, input.bookingId, deposit.amount, refund.refundId],
         );
+        await notify(pool, {
+          recipientType: "CUSTOMER",
+          recipientId: booking.user_id,
+          channel: "SMS",
+          template: "refund_processed",
+          payload: { bookingId: input.bookingId, refundAmount: Number(deposit.amount) },
+        });
+        await notify(pool, {
+          recipientType: "CUSTOMER",
+          recipientId: booking.user_id,
+          channel: "EMAIL",
+          template: "refund_processed",
+          payload: { bookingId: input.bookingId, refundAmount: Number(deposit.amount) },
+        });
       }
       await pool.query(
         `update security_deposits set status = 'RELEASED', released_at = now(), refund_amount = amount where id = $1`,
@@ -154,13 +171,30 @@ export async function merchantReturn(
   }
 
   if (depositRows.length > 0) {
+    // CLAIMED is what Phase 16's settleDeposit looks for -- without it, a
+    // claimed deposit would be indistinguishable from one nobody has touched.
     await pool.query(
       `update security_deposits
-          set deduction_reason = $1, deducted_amount = coalesce($2, 0)
+          set status = 'CLAIMED', deduction_reason = $1, deducted_amount = coalesce($2, 0)
         where id = $3`,
       [input.reason ?? null, input.amount ?? null, depositRows[0].id],
     );
   }
+
+  await notify(pool, {
+    recipientType: "CUSTOMER",
+    recipientId: booking.user_id,
+    channel: "SMS",
+    template: "deposit_claim_raised",
+    payload: { bookingId: input.bookingId },
+  });
+  await notify(pool, {
+    recipientType: "CUSTOMER",
+    recipientId: booking.user_id,
+    channel: "EMAIL",
+    template: "deposit_claim_raised",
+    payload: { bookingId: input.bookingId },
+  });
 
   const ticket = await openTicket({
     bookingId: input.bookingId,
@@ -168,6 +202,7 @@ export async function merchantReturn(
     openedById: input.merchantUserId,
     subject: "Deposit claim on return",
     firstMessage: input.reason,
+    category: "BOOKING",
   });
 
   return { ticketId: ticket.id };

@@ -1,50 +1,138 @@
 @import "tailwindcss";
 
+@theme {
+  /* Ink — warm-leaning near-black, never cool grey */
+  --color-ink: #12161a;
+  --color-ink-2: #4a5159;
+  --color-ink-3: #7b838b;
+  --color-ink-4: #a8aeb4;
+
+  /* Surfaces — white primary, warm off-white secondary */
+  --color-surface: #ffffff;
+  --color-surface-2: #faf9f7;
+  --color-surface-3: #f3f1ed;
+
+  /* Hairlines, not cards */
+  --color-line: #e6e3de;
+  --color-line-strong: #d3cfc8;
+
+  /* The one accent. Fill only — never text, never a thin stroke. */
+  --color-amber: #f0a500;
+  --color-amber-soft: #fff6e0;
+  --color-amber-edge: #d99400;
+  --color-on-amber: #1a1206;
+
+  /* Licence / verified — its own hue, not the accent */
+  --color-verified: #1f6b43;
+  --color-verified-soft: #eaf4ee;
+
+  /* Semantic — deliberately off amber so accent and warning never collide */
+  --color-danger: #b3261e;
+  --color-danger-soft: #fdecea;
+  --color-warning: #8a5a00;
+  --color-warning-soft: #fdf3e2;
+
+  --font-sans: "Anek Latin", "Anek Devanagari", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-row: 10px;
+  --radius-panel: 14px;
+}
+
 @layer base {
-  :root {
-    @apply text-[rgba(255,255,255,0.87)] bg-[#242424] font-sans;
+  html {
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
-    @apply grid place-items-center min-w-[320px] min-h-screen relative m-0;
+    margin: 0;
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
+
+  /* Browser surfaces belong to the design system too. */
+  ::selection {
+    background: var(--color-amber-soft);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  * {
+    caret-color: var(--color-ink);
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 99px;
+    border: 3px solid var(--color-surface);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-4);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Prices and any aligned digits */
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.05;
-  background: url("./logo.svg");
-  background-size: 256px;
-  transform: rotate(-12deg) scale(1.35);
-  animation: slide 30s linear infinite;
-  pointer-events: none;
-}
+@layer utilities {
+  /* The product's ONE glass surface: the map-mode results panel.
+     Not available as a general-purpose decoration. */
+  .glass-panel {
+    background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+    backdrop-filter: blur(14px) saturate(1.3);
+    -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 1px 2px rgba(18, 22, 26, 0.06),
+      0 12px 32px rgba(18, 22, 26, 0.1);
+  }
 
-@keyframes slide {
-  from {
-    background-position: 0 0;
+  /* Blur is expensive over a repainting WebGL canvas. The map adds this class
+     while it moves, so panning stays smooth. */
+  .map-moving .glass-panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: color-mix(in srgb, var(--color-surface) 96%, transparent);
   }
-  to {
-    background-position: 256px 224px;
-  }
-}
 
-@keyframes spin {
-  from {
-    transform: rotate(0);
-  }
-  to {
-    transform: rotate(360deg);
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass-panel {
+      background: var(--color-surface);
+    }
   }
 }
 
-@media (prefers-reduced-motion) {
+@media (prefers-reduced-transparency: reduce) {
+  .glass-panel {
+    background: var(--color-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
   *,
-  ::before,
-  ::after {
-    animation: none !important;
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
   }
 }

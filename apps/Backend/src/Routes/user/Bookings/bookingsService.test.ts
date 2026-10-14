@@ -11,14 +11,17 @@ import {
 import { sweepExpiredHolds } from "../../../lib/holds.ts";
 import {
   CouponInvalidError,
+  ExtensionPendingError,
   InvalidDurationError,
   LicenceInvalidError,
   TooManyVehiclesError,
   VehicleUnavailableError,
   cancelBooking,
   createHold,
-  extendBooking,
+  getExtension,
+  requestExtension,
 } from "./bookingsService.ts";
+import { handlePaymentWebhook } from "../Payments/paymentsService.ts";
 
 const { Pool } = pg;
 
@@ -518,10 +521,21 @@ describe("coupons", () => {
   });
 });
 
-describe("extendBooking", () => {
+describe("requestExtension (pay-first)", () => {
+  const fakeCashfree = {
+    createOrder: async (args: { orderId: string; amount: number; expiresAt: Date }) => ({
+      orderId: args.orderId,
+      paymentSessionId: `session_${args.orderId}`,
+      expiresAt: args.expiresAt,
+    }),
+    refund: async (args: { refundId: string }) => ({ refundId: args.refundId, status: "PENDING" as const }),
+    transfer: async () => ({ transferId: `tr_${Date.now()}`, status: "PENDING" as const }),
+    verifyWebhookSignature: () => true,
+  };
+
   async function confirmed(dayOffset: number) {
     const { userId, riderId } = await customerWithRider();
-    const v = await createBookableVehicle(pool);
+    const v = await createBookableVehicle(pool, { amount: 50_000, weekendAmount: 50_000 });
     const { pickupAt, returnAt } = futureWindow(dayOffset, 2);
     const held = await createHold(pool, {
       userId,
@@ -533,88 +547,142 @@ describe("extendBooking", () => {
     return { userId, bookingId: held.bookings[0]!.id, vehicleId: v.id, pickupAt, returnAt };
   }
 
-  test("extending into free time moves scheduled_return_at", async () => {
+  test("requesting does not touch scheduled_return_at -- it only moves after the webhook fires", async () => {
     const b = await confirmed(1200);
     const newReturnAt = new Date(b.returnAt.getTime() + 2 * 86_400_000);
 
-    await extendBooking(pool, { userId: b.userId, bookingId: b.bookingId, newReturnAt });
+    const { orderId } = await requestExtension(
+      pool,
+      { userId: b.userId, bookingId: b.bookingId, newReturnAt },
+      fakeCashfree,
+    );
 
-    const { rows } = await pool.query(
+    const { rows: before } = await pool.query(
       `select scheduled_return_at from bookings where id = $1`,
       [b.bookingId],
     );
-    expect(new Date(rows[0].scheduled_return_at).getTime()).toBe(newReturnAt.getTime());
+    expect(new Date(before[0].scheduled_return_at).getTime()).toBe(b.returnAt.getTime());
+
+    const { rows: pending } = await pool.query(
+      `select status from booking_extensions where booking_id = $1`,
+      [b.bookingId],
+    );
+    expect(pending[0].status).toBe("PENDING");
+
+    await handlePaymentWebhook(
+      pool,
+      { providerEventId: `evt_ext_${b.bookingId}`, type: "PAYMENT_SUCCESS", orderId, payload: {} },
+      fakeCashfree,
+    );
+
+    const { rows: after } = await pool.query(
+      `select scheduled_return_at from bookings where id = $1`,
+      [b.bookingId],
+    );
+    expect(new Date(after[0].scheduled_return_at).getTime()).toBe(newReturnAt.getTime());
+
+    const { rows: approved } = await pool.query(
+      `select status from booking_extensions where booking_id = $1`,
+      [b.bookingId],
+    );
+    expect(approved[0].status).toBe("APPROVED");
   });
 
-  // The exclusion constraint must re-check on UPDATE, not just INSERT.
-  test("extending into a window someone else already booked is rejected", async () => {
+  // The exclusion constraint is the only thing that can arbitrate, and it only
+  // gets the chance to at the webhook's UPDATE -- after the money has moved.
+  test("losing the window to another booking during payment refunds in full and leaves the booking untouched", async () => {
     const b = await confirmed(1210);
-    const blockerStart = new Date(b.returnAt.getTime() + 3_600_000);
-    const blockerEnd = new Date(b.returnAt.getTime() + 3 * 86_400_000);
+    const newReturnAt = new Date(b.returnAt.getTime() + 2 * 86_400_000);
 
+    const { orderId } = await requestExtension(
+      pool,
+      { userId: b.userId, bookingId: b.bookingId, newReturnAt },
+      fakeCashfree,
+    );
+
+    // Someone else books the extended window while payment is in flight.
     await insertBooking(pool, {
       vehicleId: b.vehicleId,
-      pickupAt: blockerStart.toISOString(),
-      returnAt: blockerEnd.toISOString(),
+      pickupAt: new Date(b.returnAt.getTime() + 3_600_000).toISOString(),
+      returnAt: new Date(b.returnAt.getTime() + 3 * 86_400_000).toISOString(),
       status: "CONFIRMED",
     });
 
-    await expect(
-      extendBooking(pool, {
-        userId: b.userId,
-        bookingId: b.bookingId,
-        newReturnAt: new Date(b.returnAt.getTime() + 2 * 86_400_000),
-      }),
-    ).rejects.toBeInstanceOf(VehicleUnavailableError);
+    await handlePaymentWebhook(
+      pool,
+      { providerEventId: `evt_ext_${b.bookingId}`, type: "PAYMENT_SUCCESS", orderId, payload: {} },
+      fakeCashfree,
+    );
 
-    // And the original booking is untouched.
-    const { rows } = await pool.query(
+    const { rows: booking } = await pool.query(
       `select scheduled_return_at from bookings where id = $1`,
       [b.bookingId],
     );
-    expect(new Date(rows[0].scheduled_return_at).getTime()).toBe(b.returnAt.getTime());
+    expect(new Date(booking[0].scheduled_return_at).getTime()).toBe(b.returnAt.getTime());
+
+    const { rows: ext } = await pool.query(
+      `select status from booking_extensions where booking_id = $1`,
+      [b.bookingId],
+    );
+    expect(ext[0].status).toBe("REJECTED");
+
+    const { rows: refunds } = await pool.query(
+      `select reason from refunds where booking_id = $1`,
+      [b.bookingId],
+    );
+    expect(refunds.map((r) => r.reason)).toContain("EXTENSION_UNAVAILABLE");
   });
 
-  test("only the EXTRA days are charged", async () => {
+  test("only the extra days are priced into the request", async () => {
     const b = await confirmed(1220);
     const newReturnAt = new Date(b.returnAt.getTime() + 2 * 86_400_000);
 
-    const result = await extendBooking(pool, {
-      userId: b.userId,
-      bookingId: b.bookingId,
-      newReturnAt,
-    });
-
-    const { rows } = await pool.query(
-      `select rental_amount from bookings where id = $1`,
-      [b.bookingId],
+    const result = await requestExtension(
+      pool,
+      { userId: b.userId, bookingId: b.bookingId, newReturnAt },
+      fakeCashfree,
     );
-    // Two extra days on a vehicle priced at most 60000/day.
+
+    // Two extra days on a vehicle priced at 50000/day, plus fee and tax.
     expect(result.additionalAmount).toBeGreaterThan(0);
-    expect(result.additionalAmount).toBeLessThanOrEqual(2 * 60_000);
-    expect(Number(rows[0].rental_amount)).toBeGreaterThan(result.additionalAmount);
+    expect(result.additionalAmount).toBeLessThan(2 * 50_000 * 2);
   });
 
   test("shortening a booking is rejected", async () => {
     const b = await confirmed(1230);
     await expect(
-      extendBooking(pool, {
-        userId: b.userId,
-        bookingId: b.bookingId,
-        newReturnAt: new Date(b.returnAt.getTime() - 86_400_000),
-      }),
+      requestExtension(
+        pool,
+        { userId: b.userId, bookingId: b.bookingId, newReturnAt: new Date(b.returnAt.getTime() - 86_400_000) },
+        fakeCashfree,
+      ),
     ).rejects.toBeInstanceOf(InvalidDurationError);
   });
 
-  test("an extension row is recorded", async () => {
+  test("a second request while one is pending is rejected", async () => {
     const b = await confirmed(1240);
-    const newReturnAt = new Date(b.returnAt.getTime() + 86_400_000);
-    await extendBooking(pool, { userId: b.userId, bookingId: b.bookingId, newReturnAt });
-
-    const { rows } = await pool.query(
-      `select old_return_at, new_return_at from booking_extensions where booking_id = $1`,
-      [b.bookingId],
+    await requestExtension(
+      pool,
+      { userId: b.userId, bookingId: b.bookingId, newReturnAt: new Date(b.returnAt.getTime() + 86_400_000) },
+      fakeCashfree,
     );
-    expect(rows).toHaveLength(1);
+    await expect(
+      requestExtension(
+        pool,
+        { userId: b.userId, bookingId: b.bookingId, newReturnAt: new Date(b.returnAt.getTime() + 2 * 86_400_000) },
+        fakeCashfree,
+      ),
+    ).rejects.toBeInstanceOf(ExtensionPendingError);
+  });
+
+  test("getExtension returns the latest extension for the booking", async () => {
+    const b = await confirmed(1250);
+    await requestExtension(
+      pool,
+      { userId: b.userId, bookingId: b.bookingId, newReturnAt: new Date(b.returnAt.getTime() + 86_400_000) },
+      fakeCashfree,
+    );
+    const extension = await getExtension(pool, b.userId, b.bookingId);
+    expect(extension.status).toBe("PENDING");
   });
 });

@@ -1,12 +1,10 @@
 export class SmsDeliveryError extends Error {}
 
-function getTwilioConfig() {
+function getTwilioConfig(): { accountSid: string; authToken: string; fromNumber: string } | null {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = process.env.TWILIO_FROM_NUMBER;
-  if (!accountSid || !authToken || !fromNumber) {
-    throw new Error("TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER must all be set");
-  }
+  if (!accountSid || !authToken || !fromNumber) return null;
   return { accountSid, authToken, fromNumber };
 }
 
@@ -15,12 +13,21 @@ function getTwilioConfig() {
 // (retries/helpers we don't use yet). Add the SDK if we start needing more
 // than send-a-message (e.g. delivery-status webhooks, number lookup).
 export async function sendOtpSms(phone: string, code: string): Promise<void> {
-  const { accountSid, authToken, fromNumber } = getTwilioConfig();
+  await sendSms(phone, `Your RetroMobi verification code is ${code}. It expires in 5 minutes.`);
+}
 
-  const body = new URLSearchParams({
-    To: phone,
+export async function sendSms(to: string, body: string): Promise<void> {
+  const config = getTwilioConfig();
+  if (!config) {
+    console.log(`[dev-fallback] sendSms not configured — would send to ${to}: ${body}`);
+    return;
+  }
+  const { accountSid, authToken, fromNumber } = config;
+
+  const formBody = new URLSearchParams({
+    To: to,
     From: fromNumber,
-    Body: `Your RetroMobi verification code is ${code}. It expires in 5 minutes.`,
+    Body: body,
   });
 
   const response = await fetch(
@@ -31,7 +38,7 @@ export async function sendOtpSms(phone: string, code: string): Promise<void> {
         Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body,
+      body: formBody,
     },
   );
 

@@ -1,5 +1,7 @@
 import express from "express";
 import { errorHandler } from "./middleware/errorHandler.ts";
+import adminRoutes from "./Routes/admin/index.ts";
+import merchantRoutes from "./Routes/merchant/index.ts";
 import userRoutes from "./Routes/user/index.ts";
 
 // The app only. Listening and the background sweep live in the root `index.ts`,
@@ -13,4 +15,6 @@ export const app = express();
 app.use("/api/user/payments/webhook", express.raw({ type: "*/*" }));
 app.use(express.json());
 app.use("/api/user", userRoutes);
+app.use("/api/merchant", merchantRoutes);
+app.use("/api/admin", adminRoutes);
 app.use(errorHandler);

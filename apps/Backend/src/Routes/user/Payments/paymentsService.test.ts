@@ -10,6 +10,12 @@ import {
 import { createHold } from "../Bookings/bookingsService.ts";
 import { createPaymentIntent, handlePaymentWebhook } from "./paymentsService.ts";
 
+// A PLATFORM tax invoice is only issued when RetroMobi has a GSTIN, so these tests
+// supply one. Without it the platform invoice is correctly skipped.
+// Truthiness, not ??= : .env ships PLATFORM_GSTIN as an empty string, which is
+// not null, so ??= would leave it empty and the platform invoice would be skipped.
+if (!process.env.PLATFORM_GSTIN) process.env.PLATFORM_GSTIN = "05ABCDE1234F1Z5";
+
 const { Pool } = pg;
 
 const pool = new Pool({

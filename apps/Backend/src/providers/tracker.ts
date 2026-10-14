@@ -6,16 +6,22 @@ export interface TrackerClient {
   ): Promise<{ lat: number; lng: number; timestamp: string; battery: number | null } | null>;
 }
 
-function getConfig() {
+function getConfig(): { token: string; baseUrl: string } | null {
   const token = process.env.FLESPI_TOKEN;
   const baseUrl = process.env.FLESPI_BASE_URL ?? "https://flespi.io";
-  if (!token) throw new Error("FLESPI_TOKEN must be set");
+  if (!token) return null;
   return { token, baseUrl };
 }
 
 export const trackerClient: TrackerClient = {
   async getLastPosition(deviceIdentifier) {
-    const { token, baseUrl } = getConfig();
+    const config = getConfig();
+    if (!config) {
+      console.log(`[dev-fallback] flespi.getLastPosition not configured — faking a position for ${deviceIdentifier}`);
+      // Mussoorie -- same coordinates the test fixtures seed shops with.
+      return { lat: 30.3165, lng: 78.0322, timestamp: new Date().toISOString(), battery: 80 };
+    }
+    const { token, baseUrl } = config;
     const response = await fetch(
       `${baseUrl}/gw/devices/${deviceIdentifier}/messages?data=%7B%22count%22%3A1%7D`,
       { headers: { Authorization: `FlespiToken ${token}` } },

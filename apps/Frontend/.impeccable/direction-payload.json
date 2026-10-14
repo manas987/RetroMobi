@@ -1,0 +1,133 @@
+{
+  "title": "Choose the visual world — RetroMobi",
+  "question": "Your brief pins Apple restraint, glass, the green Earth map and amber — those survive in every card. The roll decides what the brief leaves open: topology, controls, state vocabulary and ritual.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "The Rental Register",
+      "kicker": "THE ROLL",
+      "lineage": "RC books, workshop service records, the statutory rental register",
+      "thesis": "Every claim on screen is a stamped entry: which authority licensed it, which number, valid until when.",
+      "palette": ["#E3A43A", "#15191C", "#F3EFE7", "#3F6350", "#8A9499"],
+      "materials": ["stamped record", "ruled ledger column", "glass over terrain"],
+      "viewport": "The town's terrain fills the frame. One glass register panel sits over it, and the first scooter's row is already stamped — licence number, issuing authority, valid-to date — before any price is read.",
+      "risk": "Goes bureaucratic the moment a stamp becomes decoration instead of a real record.",
+      "raised": [
+        { "from": "challenger-screenprint", "raise": "Every stacked offer is enumerated with its own values — depth never implies a count." },
+        { "from": "challenger-fansite", "raise": "The landing page is one committed column in a chosen order, not a grid of equal sections." },
+        { "from": "challenger-understory", "raise": "Selection and focus are carried by luminance, not hue — which is what makes an amber pin survive green-brown terrain." },
+        { "from": "challenger-algorave", "raise": "A date or filter change shows its consequence before it commits." }
+      ],
+      "comp": ".impeccable/mocks/decision/assigned.webp"
+    },
+    {
+      "id": "model-pick",
+      "label": "The Survey Sheet",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "Survey of India topographic sheets",
+      "thesis": "The hills are the interface — contours, spot heights and a grid reference that names every shop.",
+      "palette": ["#E3A43A", "#1B2420", "#EFEAD8", "#4A7359", "#B8562F"],
+      "materials": ["contour hairline", "grid reference", "sheet margin legend"],
+      "viewport": "A single topographic sheet of the town, shops plotted as surveyed points, the date window set in the sheet's margin legend.",
+      "risk": "It is also where most runs land when a brief already pins a map — the familiar answer wearing good drafting.",
+      "comp": ".impeccable/mocks/decision/model-pick.webp"
+    },
+    {
+      "id": "challenger-orizuru",
+      "label": "The Fold Sequence",
+      "verdict": "competitive",
+      "lineage": "orizuru crane folding diagrams",
+      "thesis": "Booking as a numbered sequence of deliberate folds, every earlier crease still visible.",
+      "palette": ["#C8402E", "#F6F1E6", "#15191C", "#C9A227"],
+      "materials": ["crease pattern", "fibrous paper", "margin step column"],
+      "viewport": "A strict margin column of numbered steps beside the live booking, one gold dot marking where you are.",
+      "case": "Fuses strongly on product clarity — the funnel is irreversible steps, and constraint-aware folding maps exactly onto the licence gate. Loses audience identification: a Rishikesh renter does not live in origami.",
+      "risk": "The step column becomes a progress bar wearing a costume if the earlier state is not genuinely still readable.",
+      "comp": ".impeccable/mocks/decision/challenger-orizuru.webp",
+      "hero": "https://impeccable.style/worlds/cards/paper-folds-pleats-deployable-orizuru-crane-sequence-hero.webp"
+    },
+    {
+      "id": "challenger-sixpack",
+      "label": "Night Instrument Panel",
+      "verdict": "competitive",
+      "lineage": "a small aircraft's night instrument six-pack",
+      "thesis": "Six gauges, each owning one truth, cross-checked in a fixed sweep before you commit.",
+      "palette": ["#0E1113", "#D8DEE2", "#7FC98C", "#E3A43A", "#C4463A"],
+      "materials": ["matte panel", "luminous dial face", "damped needle"],
+      "viewport": "Licence, documents, price, distance, rating and availability as six gauges that must agree before the book action lights.",
+      "case": "Fuses strongly on product clarity — each gauge owning one truth is the cross-check a rental actually requires, and trend-before-alarm suits expiring documents. Loses on identification, and its amber is reserved for caution, colliding with your pinned accent.",
+      "risk": "A dial that shows a number a label could have shown is instrument cosplay.",
+      "comp": ".impeccable/mocks/decision/challenger-sixpack.webp",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-night-flight-six-pack-hero.webp"
+    },
+    {
+      "id": "challenger-screenprint",
+      "label": "Registered Colour Passes",
+      "verdict": "declined",
+      "lineage": "screenprinted translucent overlap",
+      "thesis": "Offers as registered spot-colour layers that mix where they overlap.",
+      "palette": ["#2BA8B8", "#E3A43A", "#C8402E", "#F4F0E6"],
+      "materials": ["translucent ink", "registration cross"],
+      "viewport": "Each shop's offer as its own colour pass over one model.",
+      "case": "Fuses poorly: a renter does not identify with printmaking, and overlap obscures the price it should clarify.",
+      "kept": "Every stacked layer is named with its values, never implied by depth.",
+      "risk": "Overlap reads as noise the moment more than three offers stack.",
+      "hero": "https://impeccable.style/worlds/cards/ink-pigment-printmaking-screenprint-transparent-overlap-hero.webp"
+    },
+    {
+      "id": "challenger-fansite",
+      "label": "The Shrine Page",
+      "verdict": "declined",
+      "lineage": "single-subject fan pages",
+      "thesis": "One long devoted column carrying somebody's entire enthusiasm in their chosen order.",
+      "palette": ["#1B1F4B", "#E3A43A", "#F4F0E6", "#C8402E"],
+      "materials": ["seamless tile", "animated divider"],
+      "viewport": "A centred fixed-width column, each section closed by a divider.",
+      "case": "Fuses poorly: a fixed-width table that refuses to adapt is disqualifying for a phone-first product with a legal accessibility duty.",
+      "kept": "One committed column in a chosen order, not a grid of equal sections.",
+      "risk": "Nostalgia with no mechanism underneath it.",
+      "hero": "https://impeccable.style/worlds/cards/digital-design-canon-fansite-shrine-page-hero.webp"
+    },
+    {
+      "id": "challenger-understory",
+      "label": "Luminescent Understory",
+      "verdict": "declined",
+      "lineage": "bioluminescent alien forest floor",
+      "thesis": "Attention itself is the illumination model — what you approach lights up.",
+      "palette": ["#0B0F0C", "#5FD6C4", "#B9A3E8", "#8FD694"],
+      "materials": ["spore glow", "pulsing root vein"],
+      "viewport": "Paths revealing by proximity glow, destinations announcing as distant pulses.",
+      "case": "Fuses poorly: near-black bioluminescence cannot carry a daylight outdoor product with a 7:1 contrast need, and it has no vocabulary for a licence or a price.",
+      "kept": "Focus carried by luminance rather than hue — the fix for an amber pin on green-brown terrain.",
+      "risk": "Beautiful and unreadable in sunlight.",
+      "hero": "https://impeccable.style/worlds/cards/dream-surreal-impossible-worlds-luminescent-alien-understory-hero.webp"
+    },
+    {
+      "id": "challenger-algorave",
+      "label": "The Source Floor",
+      "verdict": "declined",
+      "lineage": "algorave live-coded source projection",
+      "thesis": "The source is the stage; edits apply on the next cycle boundary and are visible before they land.",
+      "palette": ["#0A0A0A", "#4BE07A", "#E34BC1", "#E3A43A"],
+      "materials": ["phosphor syntax", "projector black"],
+      "viewport": "One code buffer whose cursor line is the downbeat.",
+      "case": "Fuses poorly: monospace-as-technical-costume is exactly what a first-time renter in a hill town cannot read.",
+      "kept": "Pending changes are visible before they commit.",
+      "risk": "Signals engineering to an audience that wants a scooter.",
+      "hero": "https://impeccable.style/worlds/cards/medium-native-algorave-source-floor-hero.webp"
+    }
+  ],
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "What Zoomcar, Royal Brothers and Freedo ship, executed impeccably.",
+    "palette": ["#FFFFFF", "#111827", "#2563EB", "#F3F4F6"],
+    "materials": ["clean card grid", "product photography"],
+    "viewport": "Filter rail left, result cards centre, map right — the arrangement a visitor already expects, at full craft.",
+    "risk": "Indistinguishable from the competition by design.",
+    "comp": ".impeccable/mocks/decision/canon.webp"
+  },
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "comp", "toggle": true },
+  "steer": true
+}

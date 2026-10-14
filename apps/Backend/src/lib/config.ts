@@ -35,17 +35,28 @@ const REQUIRED: Requirement[] = [
     why: "a missing percentage silently pays merchants 10% up front",
     validate: (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? null : "must be a number"),
   },
+];
+
+// Not required: RetroMobi may not be GST-registered yet, and a half-configured
+// tax identity must not stop anyone running the app. But if it IS set it has to be
+// real, because the only thing worse than no GSTIN on an invoice is a wrong one --
+// so a placeholder like CHANGEME is rejected rather than quietly printed.
+const OPTIONAL_BUT_VALIDATED: Requirement[] = [
   {
     key: "PLATFORM_GSTIN",
-    why: "every PLATFORM invoice is a GST document and cannot be issued without it",
+    why: "without it no PLATFORM tax invoice is issued at all (payments and payouts are unaffected)",
     validate: (v) =>
       GSTIN_PATTERN.test(v) ? null : "must be a valid 15-character GSTIN, e.g. 05ABCDE1234F1Z5",
   },
 ];
 
-/** Throws with every problem at once, so you fix the .env in one pass, not six. */
-export function assertConfig(env: NodeJS.ProcessEnv = process.env): void {
+/**
+ * Throws with every problem at once, so you fix the .env in one pass, not six.
+ * Returns warnings for config that is legitimately absent but changes behaviour.
+ */
+export function assertConfig(env: NodeJS.ProcessEnv = process.env): string[] {
   const problems: string[] = [];
+  const warnings: string[] = [];
 
   for (const { key, why, validate } of REQUIRED) {
     const value = env[key]?.trim();
@@ -57,9 +68,22 @@ export function assertConfig(env: NodeJS.ProcessEnv = process.env): void {
     if (invalid) problems.push(`  ${key} ${invalid} — ${why}`);
   }
 
+  for (const { key, why, validate } of OPTIONAL_BUT_VALIDATED) {
+    const value = env[key]?.trim();
+    if (!value) {
+      warnings.push(`${key} is not set — ${why}`);
+      continue;
+    }
+    // Set but wrong is a hard failure: it would be printed on a legal document.
+    const invalid = validate?.(value);
+    if (invalid) problems.push(`  ${key} ${invalid} — ${why}`);
+  }
+
   if (problems.length > 0) {
     throw new Error(
       `Refusing to start: ${problems.length} configuration problem(s) in .env\n${problems.join("\n")}\n`,
     );
   }
+
+  return warnings;
 }

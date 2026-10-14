@@ -21,11 +21,16 @@ export async function cancelBooking(req: Request, res: Response) {
   res.status(200).json(result);
 }
 
-export async function extendBooking(req: Request, res: Response) {
-  const result = await bookingsService.extendBooking(pool, {
-    userId: req.userId!,
-    bookingId: pathParam(req, "id"),
-    newReturnAt: req.body.newReturnAt,
-  });
-  res.status(200).json(result);
+export async function requestExtension(req: Request, res: Response) {
+  const result = await bookingsService.requestExtension(
+    pool,
+    { userId: req.userId!, bookingId: pathParam(req, "id"), newReturnAt: req.body.newReturnAt },
+    cashfreeClient,
+  );
+  res.status(201).json(result);
+}
+
+export async function getExtension(req: Request, res: Response) {
+  const extension = await bookingsService.getExtension(pool, req.userId!, pathParam(req, "id"));
+  res.status(200).json(extension);
 }

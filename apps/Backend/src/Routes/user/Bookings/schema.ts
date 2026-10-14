@@ -12,6 +12,6 @@ export const CreateHoldSchema = z.object({
 
 export const CancelBookingSchema = z.object({});
 
-export const ExtendBookingSchema = z.object({
+export const RequestExtensionSchema = z.object({
   newReturnAt: z.coerce.date(),
 });

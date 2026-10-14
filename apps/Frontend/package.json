@@ -9,10 +9,13 @@
     "build": "bun run build.ts"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.104.2",
     "bun-plugin-tailwind": "^0.1.2",
+    "mapbox-gl": "^3.33.0",
     "react": "^19",
     "react-dom": "^19",
-    "tailwindcss": "^4.1.11"
+    "tailwindcss": "^4.1.11",
+    "wouter": "^3.13.0"
   },
   "devDependencies": {
     "@types/react": "^19",

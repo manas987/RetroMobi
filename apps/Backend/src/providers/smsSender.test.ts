@@ -2,12 +2,27 @@ import { describe, expect, mock, test } from "bun:test";
 import { SmsDeliveryError, sendOtpSms } from "./smsSender.ts";
 
 describe("sendOtpSms", () => {
-  test("throws if Twilio config is missing", async () => {
+  // Dev-fallback: no real credentials means log-and-resolve, not throw --
+  // this is what lets the whole app be exercised locally with no vendor access.
+  test("logs and resolves instead of throwing when Twilio config is missing", async () => {
     delete process.env.TWILIO_ACCOUNT_SID;
     delete process.env.TWILIO_AUTH_TOKEN;
     delete process.env.TWILIO_FROM_NUMBER;
 
-    await expect(sendOtpSms("+919999999999", "123456")).rejects.toThrow();
+    const fetchMock = mock(async () => new Response("{}", { status: 201 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const logSpy = mock(() => {});
+    const originalLog = console.log;
+    console.log = logSpy;
+    try {
+      await expect(sendOtpSms("+919999999999", "123456")).resolves.toBeUndefined();
+    } finally {
+      console.log = originalLog;
+    }
+
+    expect(logSpy).toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   test("posts to Twilio's Messages API with basic auth and the code in the body", async () => {

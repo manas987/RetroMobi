@@ -13,7 +13,8 @@ export type Permission =
   | "payouts:write"
   | "members:read"
   | "members:write"
-  | "shop:write";
+  | "shop:write"
+  | "shop:delete";
 
 const MANAGER: readonly Permission[] = [
   "fleet:read",
@@ -49,6 +50,7 @@ const ALL: readonly Permission[] = [
   "members:read",
   "members:write",
   "shop:write",
+  "shop:delete",
 ];
 
 export const SHOP_PERMISSIONS: Record<ShopRole, readonly Permission[]> = {

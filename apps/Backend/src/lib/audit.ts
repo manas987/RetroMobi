@@ -1,9 +1,11 @@
-import type { PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 
-// Takes a PoolClient (not a Pool) so the audit row joins the caller's transaction.
+// Takes a PoolClient so the audit row joins the caller's transaction wherever
+// one is open; a bare Pool is accepted too for call sites with no transaction
+// to join (e.g. session/login bookkeeping, which is a single insert either way).
 // Feeds metrics/analytics, not just compliance -- populate before/after on updates.
 export async function writeAudit(
-  client: PoolClient,
+  client: Pool | PoolClient,
   entry: {
     actorType: "CUSTOMER" | "MERCHANT" | "ADMIN" | "SYSTEM";
     actorId: string | null;
