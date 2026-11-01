@@ -1,11 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { SearchCapsule, type SearchCapsuleValue } from "../components/SearchCapsule";
 import { VehicleCard } from "../components/VehicleCard";
 import { useSearch } from "../lib/api";
-import heroMountains from "../assets/hero-mountains.png";
+import heroHimalaya from "../assets/hero-himalaya.jpg";
 import howSearch from "../assets/how-search.jpg";
 import howCompare from "../assets/how-compare.jpg";
 import howPay from "../assets/how-pay.jpg";
@@ -22,6 +22,22 @@ export function Home() {
     if (window.location.hash === "#how-it-works") {
       document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" });
     }
+  }, []);
+
+  // The header sits transparent on the photo and turns solid once it has
+  // cleared it. Watching a 1px marker at the hero's foot, inset by the header's
+  // own height, means nothing runs per scroll frame.
+  const heroEnd = useRef<HTMLDivElement>(null);
+  const [overHero, setOverHero] = useState(true);
+
+  useEffect(() => {
+    const el = heroEnd.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setOverHero(!!e?.isIntersecting), {
+      rootMargin: "-64px 0px 0px 0px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
   }, []);
 
   function goSearch(v: SearchCapsuleValue) {
@@ -41,37 +57,51 @@ export function Home() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header />
+      <Header overlay={overHero} />
 
-      <section className="max-w-[1400px] w-full mx-auto px-5 pt-6">
-        <div className="relative rounded-panel overflow-hidden bg-ink min-h-[322px] h-[32.2vw] max-h-[434px] flex items-center">
-          <img
-            src={heroMountains}
-            alt=""
-            aria-hidden="true"
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,16,14,0.58)_0%,rgba(18,16,14,0.28)_42%,rgba(18,16,14,0)_70%)]" />
-          <div className="relative z-10 px-6 py-10 sm:px-10 sm:py-14 pb-20 max-w-xl flex flex-col gap-4">
-            <span className="self-start inline-flex items-center gap-2 rounded-full bg-white/18 backdrop-blur-sm text-white text-xs px-3 py-2">
-              <PinIcon /> Uttarakhand, India
-            </span>
-            <h1 className="text-[clamp(1.8rem,3.8vw,3.15rem)] font-bold text-white leading-[1.06] tracking-[-0.035em] text-balance">
-              Ride the road less ordinary.
-            </h1>
-            <p className="text-[clamp(0.95rem,1.1vw,1.05rem)] leading-[1.6] text-[#f1ede7] max-w-[460px] text-pretty">
-              Licensed scooters and motorcycles for Dehradun, Haridwar and Rishikesh. Every scooter is
-              shown with the licence it's rented under.
-            </p>
+      {/* -mt-16 lifts the photo under the sticky 64px header so it reaches the
+          very top of the window; the section's height is unchanged, so what
+          follows rides up with it and the hero occupies exactly 0 → 88svh.
+          pt-16 puts the content back in the middle of the part you can see.
+          svh, not vh, so mobile browser chrome can't crop it, and min-h so a
+          short phone grows the section rather than clipping the stacked bar. */}
+      <section className="relative -mt-16 pt-16 sm:pb-[320px] min-h-[88svh] flex items-center justify-center overflow-hidden bg-ink">
+        <img
+          src={heroHimalaya}
+          alt=""
+          aria-hidden="true"
+          fetchPriority="high"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        {/* Two layers, because the frame isn't evenly lit: the sunrise at the
+            top is its brightest part and is exactly where the header's white
+            text lands, while the forest at the foot is already dark. Lands at
+            ~0.63 behind the header, ~0.39 behind the headline, ~0.59 at the
+            bottom. */}
+        <div className="absolute inset-0 bg-ink/25" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(18,16,14,0.5)_0%,rgba(18,16,14,0.18)_38%,rgba(18,16,14,0.45)_100%)]" />
+
+        <div className="relative z-10 w-full px-5 flex flex-col items-center text-center gap-5">
+          <span className="inline-flex items-center gap-2 rounded-full bg-white/18 backdrop-blur-sm text-white text-xs px-3 py-2">
+            <PinIcon /> Uttarakhand, India
+          </span>
+          <h1 className="text-[clamp(2.1rem,5vw,3.9rem)] font-bold text-white leading-[1.04] tracking-[-0.035em] text-balance max-w-[16ch]">
+            Retro Mobi
+          </h1>
+          <p className="text-[clamp(0.95rem,1.2vw,1.1rem)] leading-[1.6] text-white/85 max-w-[48ch] text-pretty">
+            Compare licensed scooters across Dehradun, Haridwar and Rishikesh. Clear prices and
+            vehicle details before you book.
+          </p>
+
+          <div className="w-full mt-4">
+            <SearchCapsule
+              initial={{ city: DEFAULT_CITY, pickupAt: WINDOW.pickupAt, returnAt: WINDOW.returnAt }}
+              onSearch={goSearch}
+            />
           </div>
         </div>
 
-        <div className="relative -mt-8 px-4 sm:px-8 z-10">
-          <SearchCapsule
-            initial={{ city: DEFAULT_CITY, pickupAt: WINDOW.pickupAt, returnAt: WINDOW.returnAt }}
-            onSearch={goSearch}
-          />
-        </div>
+        <div ref={heroEnd} aria-hidden="true" className="absolute bottom-0 left-0 w-px h-px" />
       </section>
 
       {listings.length > 0 && (
@@ -103,39 +133,29 @@ export function Home() {
         <div className="max-w-[46rem] mx-auto flex flex-col items-center text-center gap-9">
           <SparkIcon />
 
-          <h2 className="text-2xl sm:text-[2.1rem] font-semibold text-ink tracking-tight leading-[1.25] text-balance">
-            Renting a ride should feel like the beginning of your trip—not the first risk you take.
-          </h2>
-
           <p className="text-lg sm:text-xl leading-relaxed text-ink-2 text-pretty">
-            <strong className="font-semibold text-ink">Retromobi was created</strong> because renting a two-wheeler
-            still involves too much guesswork. Prices are difficult to compare, vehicle details are often unclear, and
-            trusting an unfamiliar rental shop can feel like a gamble. We bring verified rental businesses into one
-            marketplace, where you can compare the total price, pickup distance, rental duration, deposit and vehicle
-            details before booking. Every ride begins with a condition video, creating a shared record for a smooth,
-            dispute-free return.
+            <strong className="font-semibold text-ink">We started Retromobi to build the place we wished existed.</strong>{" "}
+            A place where travellers could understand their options without calling shop after shop, and owners could
+            hand over their vehicles without relying on blind trust. Where the price is known, the terms are clear, and
+            every mark is recorded before the journey begins. Because when both people can see the same truth, trust no
+            longer needs to be assumed. It can be quietly built into the experience.
           </p>
 
           {/* Not --color-amber: that one is fill-only, 1.9:1 as type on white.
               This is the same dark amber the step numbers below already use. */}
           <blockquote className="font-serif italic text-xl sm:text-2xl leading-snug text-[#8a5d00] text-balance mt-1">
-            &ldquo;Compare clearly. Book confidently. Ride without worry.&rdquo;
+            &ldquo;More road to remember.
+            <br />
+            Less reason to worry.&rdquo;
           </blockquote>
         </div>
       </section>
 
       <section id="how-it-works" className="pt-16 pb-20 sm:pt-24 sm:pb-30">
-        <div className="max-w-[1400px] w-full mx-auto px-5 flex flex-col gap-14">
-          <div className="flex flex-col gap-3">
-            <span className="text-xs font-medium text-ink-3 tracking-wide uppercase">How it works</span>
-            <h2 className="text-2xl sm:text-[2.1rem] font-semibold text-ink tracking-tight">
-              The confidence to go further.
-            </h2>
-          </div>
-
-          <ol className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-12">
+        <div className="max-w-[1400px] w-full mx-auto px-5">
+          <ol className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-12 sm:w-[90%] sm:mx-auto">
             {STEPS.map((s) => (
-              <li key={s.title} className="flex flex-col gap-2 sm:w-[90%]">
+              <li key={s.title} className="flex flex-col gap-2">
                 {/* Decorative: every one of these restates the text beside it,
                     so an alt would just make a screen reader say it twice. */}
                 <img

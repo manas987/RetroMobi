@@ -13,7 +13,10 @@ const ITEMS = [
   ] },
 ];
 
-export function ProfileMenu() {
+export function ProfileMenu({ overlay = false }: {
+  /** Rendered over the homepage's hero photo rather than a white bar. */
+  overlay?: boolean;
+}) {
   const { session, logout } = usePortalSession("user");
   const [, navigate] = useLocation();
 
@@ -21,7 +24,7 @@ export function ProfileMenu() {
     return (
       <Link
         href="/login"
-        className="h-9 px-4 rounded-full border border-line-strong text-sm font-medium text-ink hover:bg-surface-3 transition-colors flex items-center"
+        className={`h-9 px-4 rounded-full border text-sm font-medium transition-colors flex items-center ${overlay ? "border-white/40 text-white hover:bg-white/15" : "border-line-strong text-ink hover:bg-surface-3"}`}
       >
         Sign in
       </Link>

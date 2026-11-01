@@ -1,5 +1,5 @@
-import { test, expect } from "bun:test";
-import { nextSelection } from "./dateRange";
+import { describe, test, expect } from "bun:test";
+import { formatDuration, nextSelection } from "./dateRange";
 
 const d = (iso: string) => new Date(`${iso}T00:00:00`);
 
@@ -35,4 +35,26 @@ test("clicking earlier than the pending check-in restarts there", () => {
 
 test("a cleared selection drops the pending check-in", () => {
   expect(nextSelection(d("2026-11-10"), undefined)).toEqual({ pending: null, commit: null });
+});
+
+describe("formatDuration", () => {
+  const at = (d: number, h: number) => new Date(2026, 10, d, h, 0, 0, 0);
+
+  test("under a day reads in hours", () => {
+    expect(formatDuration(at(1, 10), at(1, 22))).toBe("12 hrs");
+  });
+
+  test("whole days drop the hour part", () => {
+    expect(formatDuration(at(1, 10), at(3, 10))).toBe("2d");
+  });
+
+  test("a part day keeps the remainder", () => {
+    expect(formatDuration(at(1, 10), at(3, 14))).toBe("2d 4h");
+  });
+
+  // A zero-length window would otherwise read "0 hrs", which looks like a bug
+  // rather than a window the user has not finished choosing yet.
+  test("never reports zero", () => {
+    expect(formatDuration(at(1, 10), at(1, 10))).toBe("1 hrs");
+  });
 });

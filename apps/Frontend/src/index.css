@@ -74,6 +74,16 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /* The gutter cut a white stripe down the edge of the full-bleed hero.
+       Only the page scroller — inside Modal, the profile menu and the filter
+       rail a scrollbar is the single hint that there is more to see, so those
+       keep theirs. Scrolling itself is untouched; the position indicator is
+       what this gives up. */
+    scrollbar-width: none;
+  }
+
+  html::-webkit-scrollbar {
+    display: none;
   }
 
   body {

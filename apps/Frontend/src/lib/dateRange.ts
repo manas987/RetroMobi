@@ -40,3 +40,12 @@ export function nextSelection(pending: Date | null, next: DateRange | undefined)
 
   return { pending: null, commit: { from: next.from, to: next.to } };
 }
+
+/** "12 hrs", "2d", "2d 4h" — the rental window's length, for a trigger badge. */
+export function formatDuration(from: Date, to: Date): string {
+  const hrs = Math.max(1, Math.round((to.getTime() - from.getTime()) / 3_600_000));
+  if (hrs < 24) return `${hrs} hrs`;
+  const days = Math.floor(hrs / 24);
+  const rem = hrs % 24;
+  return rem ? `${days}d ${rem}h` : `${days}d`;
+}
