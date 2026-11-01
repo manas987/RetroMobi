@@ -124,7 +124,7 @@ export function Home() {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-16 sm:py-24">
+      <section id="how-it-works" className="pt-16 pb-20 sm:pt-24 sm:pb-30">
         <div className="max-w-[1400px] w-full mx-auto px-5 flex flex-col gap-14">
           <div className="flex flex-col gap-3">
             <span className="text-xs font-medium text-ink-3 tracking-wide uppercase">How it works</span>
@@ -135,7 +135,7 @@ export function Home() {
 
           <ol className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-12">
             {STEPS.map((s) => (
-              <li key={s.title} className="flex flex-col gap-2">
+              <li key={s.title} className="flex flex-col gap-2 sm:w-[90%]">
                 {/* Decorative: every one of these restates the text beside it,
                     so an alt would just make a screen reader say it twice. */}
                 <img
@@ -153,7 +153,7 @@ export function Home() {
         </div>
       </section>
 
-      <section className="px-5 pb-16 sm:pb-24">
+      <section className="px-5 pb-20 sm:pb-30">
         <div className="max-w-[1400px] w-full mx-auto">
           <div className="flex flex-col items-center text-center gap-3 mb-12">
             <span className="text-xs font-medium text-ink-3 tracking-wide uppercase">First time in the hills?</span>
@@ -179,7 +179,7 @@ export function Home() {
               ))}
             </div>
 
-            <ul className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 items-start xl:flex xl:gap-0 xl:justify-center">
+            <ul className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 xl:flex xl:items-start xl:gap-0 xl:justify-center">
               {FAQS.map((f, i) => {
                 const p = PINBOARD[i]!;
                 return (
@@ -189,7 +189,7 @@ export function Home() {
                     className={`relative rounded-panel xl:w-[22%] xl:shrink-0 xl:-ml-10 xl:first:ml-0 xl:bg-surface xl:rounded-[18px] xl:shadow-[0_14px_34px_-16px_rgba(18,22,26,0.3)] ${p.frame} ${p.tilt} ${i % 2 ? "xl:mt-14" : ""}`}
                   >
                     <Pin at={p.pin} color={p.color} />
-                    <div className={`rounded-panel p-5 ${f.tint}`}>
+                    <div className={`h-full xl:h-auto rounded-panel p-5 ${f.tint}`}>
                       <span className="tnum text-sm font-semibold text-[#8a5d00]">
                         {String(i + 1).padStart(2, "0")}
                       </span>
