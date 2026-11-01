@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
@@ -153,15 +153,54 @@ export function Home() {
         </div>
       </section>
 
-      <section className="pb-16 sm:pb-24 px-5">
-        <div className="max-w-[1400px] w-full mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-8 lg:gap-16">
-          <div className="flex flex-col gap-3">
+      <section className="px-5 pb-16 sm:pb-24">
+        <div className="max-w-[1400px] w-full mx-auto">
+          <div className="flex flex-col items-center text-center gap-3 mb-12">
             <span className="text-xs font-medium text-ink-3 tracking-wide uppercase">First time in the hills?</span>
             <h2 className="text-2xl sm:text-[2.1rem] font-semibold text-ink tracking-tight text-balance">
               Before your first ride
             </h2>
+            <p className="text-ink-3">Quick answers to what riders ask us most.</p>
           </div>
-          <Faq />
+
+          {/* items-start, so each card is only as tall as its own answer —
+              equal heights would read as a table rather than as notes on a
+              board. The tint lives on the inner div, not the li: below xl the
+              li has no box of its own so that div *is* the flat card, and at
+              xl the li becomes the white paper the note is pinned to. One DOM,
+              no branch. */}
+          <div className="relative">
+            <div
+              aria-hidden="true"
+              className="hidden xl:flex absolute -inset-x-5 inset-y-0 flex-col justify-between pointer-events-none"
+            >
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <span key={i} className="border-t border-dashed border-line" />
+              ))}
+            </div>
+
+            <ul className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 items-start xl:flex xl:gap-0 xl:justify-center">
+              {FAQS.map((f, i) => {
+                const p = PINBOARD[i]!;
+                return (
+                  <li
+                    key={f.q}
+                    style={{ zIndex: i }}
+                    className={`relative rounded-panel xl:w-[22%] xl:shrink-0 xl:-ml-10 xl:first:ml-0 xl:bg-surface xl:rounded-[18px] xl:shadow-[0_14px_34px_-16px_rgba(18,22,26,0.3)] ${p.frame} ${p.tilt} ${i % 2 ? "xl:mt-14" : ""}`}
+                  >
+                    <Pin at={p.pin} color={p.color} />
+                    <div className={`rounded-panel p-5 ${f.tint}`}>
+                      <span className="tnum text-sm font-semibold text-[#8a5d00]">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <h3 className="font-medium text-ink mt-2 text-balance">{f.q}</h3>
+                      <p className="text-sm text-ink-2 leading-relaxed mt-2 text-pretty">{f.a}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -197,58 +236,61 @@ const STEPS = [
   },
 ];
 
+// Hand-set, not computed: an even -2/+2/-2 alternation reads as a pattern,
+// which is the opposite of looking pinned up by a person. The uneven frame
+// padding is what makes the white border sit differently on each note. Tilts
+// stay at or under 2deg so the text underneath stays crisp.
+const PINBOARD = [
+  { tilt: "xl:-rotate-2", frame: "xl:p-3 xl:pb-7", pin: "xl:left-[27%]", color: "#e8a93a" },
+  { tilt: "xl:rotate-[1.4deg]", frame: "xl:p-3 xl:pt-8", pin: "xl:left-[18%]", color: "#5f9c76" },
+  { tilt: "xl:-rotate-1", frame: "xl:p-3 xl:pb-6", pin: "xl:left-[62%]", color: "#6f93c4" },
+  { tilt: "xl:rotate-2", frame: "xl:p-3 xl:pt-7", pin: "xl:left-[34%]", color: "#c98a94" },
+  { tilt: "xl:rotate-[-1.4deg]", frame: "xl:p-3 xl:pb-8", pin: "xl:left-[58%]", color: "#a8a096" },
+];
+
+function Pin({ at, color }: { at: string; color: string }) {
+  return (
+    <svg
+      width="20"
+      height="28"
+      viewBox="0 0 20 28"
+      aria-hidden="true"
+      className={`hidden xl:block absolute -top-3.5 ${at} drop-shadow-[0_3px_4px_rgba(18,22,26,0.22)]`}
+    >
+      <path d="M10 11.5v15" stroke="#9aa0a6" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="10" cy="7" r="6.5" fill={color} />
+      <circle cx="7.6" cy="4.8" r="2" fill="#ffffff" opacity="0.45" />
+    </svg>
+  );
+}
+
 const FAQS = [
   {
     q: "Are helmets included?",
     a: "Each listing says how many helmets come with the vehicle and whether there is a charge. A helmet is required for both rider and pillion.",
+    tint: "bg-amber-soft",
   },
   {
     q: "What documents do I need?",
     a: "A valid driving licence for the vehicle class and a government photo ID. You upload the licence once, at the booking step.",
+    tint: "bg-verified-soft",
   },
   {
     q: "How does fuel work?",
     a: "The listing states the fuel policy — usually return it at the level you collected it. Photograph the fuel gauge with your pickup photos.",
+    tint: "bg-[#eef2f6]",
   },
   {
     q: "Can I ride after dark?",
     a: "Check the listing — some shops restrict hill roads after sunset. Roads towards Mussoorie and beyond Rishikesh are narrow and unlit in places.",
+    tint: "bg-[#f7eef0]",
   },
   {
     q: "What if it breaks down?",
     a: "Call the shop's number on your booking first. If it isn't resolved, raise it with our grievance officer from your booking page.",
+    tint: "bg-surface-3",
   },
 ];
-
-function Faq() {
-  const [open, setOpen] = useState<number | null>(null);
-  return (
-    <div className="flex flex-col">
-      {FAQS.map((f, i) => {
-        const isOpen = open === i;
-        return (
-          <div key={f.q} className="border-b border-line">
-            <button
-              type="button"
-              onClick={() => setOpen(isOpen ? null : i)}
-              className="w-full flex items-center justify-between gap-4 py-5 text-left text-lg font-medium text-ink"
-            >
-              {f.q}
-              <span
-                className={`shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-base ${
-                  isOpen ? "border-[#c3cfc4] bg-[#eef3ee] text-ink" : "border-line-strong text-ink-2"
-                }`}
-              >
-                {isOpen ? "−" : "+"}
-              </span>
-            </button>
-            {isOpen && <p className="pb-5 pr-12 text-ink-3 leading-relaxed text-pretty">{f.a}</p>}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function SparkIcon() {
   return (
