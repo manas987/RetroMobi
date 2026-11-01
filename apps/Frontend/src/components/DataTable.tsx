@@ -1,4 +1,5 @@
 import type { Row } from "../lib/portal";
+import { enumLabel } from "../lib/format";
 
 export interface Column {
   key: string;
@@ -58,26 +59,80 @@ function fallbackCell(value: unknown): React.ReactNode {
   return String(value);
 }
 
+const GOOD = "bg-verified-soft text-verified";
+const WARN = "bg-warning-soft text-warning";
+const BAD = "bg-danger-soft text-danger";
+const MUTED = "bg-surface-3 text-ink-3";
+
+// Every status string either portal can render. A value missing from here is
+// not cosmetic: it falls back to MUTED, which is how a FAILED payment used to
+// render identically to an AUTHORIZED one.
+const TONE: Record<string, string> = {
+  // shops / vehicles / models / admins / coupons
+  ACTIVE: GOOD,
+  VERIFIED: GOOD,
+  OPEN: GOOD,
+  PENDING: WARN,
+  UNVERIFIED: MUTED,
+  INACTIVE: MUTED,
+  PAUSED: WARN,
+  CLOSED: MUTED,
+  REJECTED: BAD,
+  SUSPENDED: BAD,
+  EXPIRED: BAD,
+  DELETED: BAD,
+  // bookings
+  HOLD: WARN,
+  CONFIRMED: GOOD,
+  COMPLETED: GOOD,
+  CANCELLED: BAD,
+  // payments / payouts / refunds
+  PAID: GOOD,
+  SUCCEEDED: GOOD,
+  AUTHORIZED: WARN,
+  FAILED: BAD,
+  // security deposits
+  HELD: WARN,
+  CLAIMED: WARN,
+  RELEASED: GOOD,
+  PARTIALLY_DEDUCTED: WARN,
+  // tickets
+  IN_PROGRESS: WARN,
+  RESOLVED: GOOD,
+  // payout stages — not statuses, but rendered in the same column position
+  UPFRONT: MUTED,
+  BALANCE: MUTED,
+  CANCELLATION: MUTED,
+  DEPOSIT_CLAIM: MUTED,
+  // roles, shown as pills by Team/Admins
+  OWNER: "bg-amber-soft text-amber-edge",
+  MANAGER: MUTED,
+  STAFF: MUTED,
+  SUPER_ADMIN: "bg-amber-soft text-amber-edge",
+  ADMIN: MUTED,
+  SUPPORT: MUTED,
+};
+
+// Only where the generic enum formatter would read badly. Everything else
+// falls through to `enumLabel`.
+const LABEL: Record<string, string> = {
+  IN_PROGRESS: "In progress",
+  PARTIALLY_DEDUCTED: "Partly deducted",
+  SUPER_ADMIN: "Super admin",
+  DEPOSIT_CLAIM: "Deposit claim",
+  UNVERIFIED: "Not verified",
+  GSTIN: "GSTIN",
+  PAN: "PAN",
+  RC: "RC",
+  PUC: "PUC",
+};
+
 export function StatusPill({ value }: { value: unknown }) {
   const s = String(value ?? "").toUpperCase();
-  const tone: Record<string, string> = {
-    ACTIVE: "bg-verified-soft text-verified",
-    VERIFIED: "bg-verified-soft text-verified",
-    CONFIRMED: "bg-verified-soft text-verified",
-    COMPLETED: "bg-verified-soft text-verified",
-    PAID: "bg-verified-soft text-verified",
-    PENDING: "bg-warning-soft text-warning",
-    HOLD: "bg-warning-soft text-warning",
-    OPEN: "bg-warning-soft text-warning",
-    UNVERIFIED: "bg-surface-3 text-ink-3",
-    INACTIVE: "bg-surface-3 text-ink-3",
-    REJECTED: "bg-danger-soft text-danger",
-    CANCELLED: "bg-danger-soft text-danger",
-    SUSPENDED: "bg-danger-soft text-danger",
-  };
+  if (!s) return <span className="text-ink-4">—</span>;
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${tone[s] ?? "bg-surface-3 text-ink-3"}`}>
-      {s || "—"}
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${TONE[s] ?? MUTED}`}>
+      {LABEL[s] ?? enumLabel(s)}
     </span>
   );
 }

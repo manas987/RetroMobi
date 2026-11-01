@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
-import { composeTotal, countRentalDays, priceRental } from "../../../lib/pricing.ts";
+import { composeTotal, priceRental } from "../../../lib/pricing.ts";
 
 export class WalkinUnavailableError extends Error {}
 export class VehicleUnavailableError extends Error {}
@@ -14,6 +14,27 @@ function getMoneyConfig() {
     gstRate: Number(process.env.GST_RATE ?? 18),
   };
 }
+
+/**
+ * A merchant looking at their own bookings needs to know which scooter and
+ * which person. The `vehicles` join was always here; nothing was selected
+ * from it, so both the list and the detail answered neither question.
+ *
+ * `rider_name`/`customer_*` are null for a walk-in and `walkin_*` null for an
+ * online booking — the two are mutually exclusive by source, so the caller
+ * reads whichever side is populated.
+ */
+const BOOKING_SELECT = `
+  select b.*,
+         v.registration_number, m.make, m.model,
+         r.name as rider_name,
+         u.name as customer_name, u.phone as customer_phone
+    from bookings b
+    join vehicles v on v.id = b.vehicle_id
+    join vehicle_models m on m.id = v.model_id
+    left join riders r on r.id = b.rider_id
+    left join booking_groups g on g.id = b.group_id
+    left join users u on u.id = g.user_id`;
 
 export async function listBookings(
   pool: Pool,
@@ -37,8 +58,7 @@ export async function listBookings(
   }
 
   const { rows } = await pool.query(
-    `select b.* from bookings b
-       join vehicles v on v.id = b.vehicle_id
+    `${BOOKING_SELECT}
       where ${conditions.join(" and ")}
       order by b.scheduled_pickup_at desc`,
     values,
@@ -48,9 +68,7 @@ export async function listBookings(
 
 export async function getBooking(pool: Pool, shopId: string, bookingId: string) {
   const { rows } = await pool.query(
-    `select b.* from bookings b
-       join vehicles v on v.id = b.vehicle_id
-      where b.id = $1 and v.shop_id = $2 and b.deleted_at is null`,
+    `${BOOKING_SELECT} where b.id = $1 and v.shop_id = $2 and b.deleted_at is null`,
     [bookingId, shopId],
   );
   return rows[0] ?? null;
@@ -102,9 +120,6 @@ export async function createWalkinRental(
 ): Promise<{ id: string; totals: ReturnType<typeof composeTotal> }> {
   if (input.returnAt.getTime() <= input.pickupAt.getTime()) {
     throw new InvalidDurationError("return must be after pickup");
-  }
-  if (countRentalDays(input.pickupAt, input.returnAt) > 10) {
-    throw new InvalidDurationError("rental cannot exceed 10 days");
   }
 
   const { platformFeePct, gstRate } = getMoneyConfig();

@@ -8,6 +8,7 @@ const router = Router();
 
 router.use(requireAuth);
 router.post("/", validate(CreateHoldSchema), controller.createHold);
+router.get("/", controller.list);
 router.post("/:id/cancel", controller.cancelBooking);
 router.post("/:id/extension", validate(RequestExtensionSchema), controller.requestExtension);
 router.get("/:id/extension", controller.getExtension);

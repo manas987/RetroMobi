@@ -1,8 +1,12 @@
 import { Link, useLocation } from "wouter";
+import { ShoppingCart } from "lucide-react";
 import { ProfileMenu } from "./ProfileMenu";
+import { CartDrawer } from "./CartDrawer";
+import { useCart } from "../lib/cart";
 
 export function Header() {
   const [path, navigate] = useLocation();
+  const { totalUnits, openDrawer } = useCart();
 
   function goHowItWorks(e: React.MouseEvent) {
     e.preventDefault();
@@ -32,12 +36,12 @@ export function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-7 text-sm text-ink-2">
-          <Link href="/browse" className="hover:text-ink transition-colors">
-            Browse scooters
-          </Link>
           <a href="/#how-it-works" onClick={goHowItWorks} className="hover:text-ink transition-colors">
             How it works
           </a>
+          <Link href="/browse" className="hover:text-ink transition-colors">
+            Browse scooters
+          </Link>
         </nav>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -47,9 +51,23 @@ export function Header() {
           >
             List your fleet
           </Link>
+          <button
+            type="button"
+            onClick={openDrawer}
+            aria-label={`Cart, ${totalUnits} item${totalUnits === 1 ? "" : "s"}`}
+            className="relative w-9 h-9 rounded-full flex items-center justify-center text-ink-2 hover:text-ink hover:bg-surface-3 transition-colors"
+          >
+            <ShoppingCart className="h-[18px] w-[18px]" />
+            {totalUnits > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full bg-amber text-on-amber text-[10px] font-semibold flex items-center justify-center">
+                {totalUnits}
+              </span>
+            )}
+          </button>
           <ProfileMenu />
         </div>
       </div>
+      <CartDrawer />
     </header>
   );
 }

@@ -20,7 +20,7 @@ async function pickAssignee(client: PoolClient): Promise<string | null> {
          from admins a
          left join tickets t on t.assigned_to = a.id and t.status <> 'RESOLVED'
         where a.role = $1 and a.status = 'ACTIVE' and a.deleted_at is null
-        group by a.idv√
+        group by a.id
         order by count(t.id) asc
         limit 1`,
       [role],
@@ -218,9 +218,12 @@ export async function getMessages(
 
   if (sinceId) {
     const { rows } = await pool.query(
-      `select m.* from ticket_messages m
+      `select m.*, coalesce(json_agg(a.*) filter (where a.id is not null), '[]') as attachments
+         from ticket_messages m
+         left join ticket_attachments a on a.message_id = m.id
         where m.ticket_id = $1
           and (m.created_at, m.id) > (select created_at, id from ticket_messages where id = $2)
+        group by m.id
         order by m.created_at, m.id`,
       [ticketId, sinceId],
     );
@@ -228,7 +231,12 @@ export async function getMessages(
   }
 
   const { rows } = await pool.query(
-    `select * from ticket_messages where ticket_id = $1 order by created_at, id`,
+    `select m.*, coalesce(json_agg(a.*) filter (where a.id is not null), '[]') as attachments
+       from ticket_messages m
+       left join ticket_attachments a on a.message_id = m.id
+      where m.ticket_id = $1
+      group by m.id
+      order by m.created_at, m.id`,
     [ticketId],
   );
   return rows;
@@ -337,6 +345,22 @@ export async function addAttachment(
     [messageId, input.storageKey, input.fileName ?? null, input.sizeBytes ?? null, input.durationSeconds ?? null],
   );
   return rows[0];
+}
+
+export async function getAttachmentDownloadUrl(
+  pool: Pool,
+  attachmentId: string,
+  requester: { partyType: PartyType; partyId: string },
+) {
+  const { rows } = await pool.query(
+    `select a.storage_key, m.ticket_id from ticket_attachments a
+       join ticket_messages m on m.id = a.message_id
+      where a.id = $1`,
+    [attachmentId],
+  );
+  if (rows.length === 0) throw new TicketNotFoundError(`attachment ${attachmentId} not found`);
+  await requireParticipant(pool, rows[0].ticket_id, requester.partyType, requester.partyId);
+  return rows[0].storage_key as string;
 }
 
 // Populates the support UI's picker: for a ticket with a booking_id, that is

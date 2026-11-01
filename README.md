@@ -2,7 +2,8 @@
 
 Scooter rental marketplace for India. Customers rent a specific scooter from a licensed merchant for a time window.
 
-**Status:** planning. No code yet. Read this, then the doc that matches your job.
+**Status:** backend Phases 1–17 built and tested (`apps/Backend`); frontend has all three
+surfaces scaffolded (`apps/Frontend`). Read this, then the doc that matches your job.
 
 ---
 
@@ -27,11 +28,13 @@ Six rules. Everything in `docs/` exists to serve them.
 
 | I am… | Read |
 |-------|------|
-| building the backend | [`docs/03-architecture.md`](docs/03-architecture.md) — schema, routes, constraints |
-| building the customer or merchant UI | [`docs/01-product.md`](docs/01-product.md) — flows, screens, states |
-| worried about legality | [`docs/02-legal.md`](docs/02-legal.md) — verified sources, what's settled, what isn't |
-| deciding what to build first | [`docs/04-build-plan.md`](docs/04-build-plan.md) — phases + acceptance tests |
-| a founder / PM | this page, then [`docs/02-legal.md`](docs/02-legal.md) §Open questions |
+| building the backend | [`docs/backend.md`](docs/backend.md) — schema, routes, constraints, money logic |
+| building the frontend | [`docs/frontend.md`](docs/frontend.md) — stack, routes, structure, conventions |
+| picking up backend work phase-by-phase | [`docs/implementation.md`](docs/implementation.md) — exact build order and verification per phase |
+| checking what's built vs. not, and what was fixed along the way | [`docs/progress.md`](docs/progress.md) |
+| asking "why is it built this way" | [`docs/decisions.md`](docs/decisions.md) — every non-obvious decision, in sequence, with its reasoning |
+| scoping the market / legality | [`docs/00-market.md`](docs/00-market.md) — sized, sourced, confidence-labelled |
+| building the customer or merchant UI copy/flows | [`apps/Frontend/PRODUCT.md`](apps/Frontend/PRODUCT.md) — users, positioning, constraints, what's not offered |
 
 ---
 
@@ -56,33 +59,37 @@ Every arrow writes an immutable event. Every rupee writes a ledger entry.
 
 ## Stack
 
-Decided, per the spec:
+As built, see `docs/backend.md` and `docs/frontend.md` for the full reasoning:
 
-- **API** — Fastify / Node 24, modular monolith (not microservices)
-- **DB** — PostgreSQL + PostGIS
-- **Cache/locks** — Redis (never the source of truth for a booking or a rupee)
-- **Storage** — private object storage, signed URLs
+- **API** — Express on Bun, one process, three route trees (`/api/user`, `/api/merchant`, `/api/admin`) — a modular monolith, not microservices
+- **DB** — PostgreSQL, `pg` (`Pool`), exclusion constraints for double-booking
+- **No Redis** — rate limiting and holds are Postgres-backed; Bun's own `setInterval` sweeps expired holds
+- **Storage** — Cloudflare R2 (S3-compatible), presigned URLs
+- **Payments / KYC** — Cashfree (orders + Easy Split) and Cashfree Secure ID (DL + DigiLocker)
+- **Tracking** — flespi, read-only passthrough, no telemetry stored
+- **Frontend** — Bun + React 19 + wouter + react-query + Tailwind v4, one app serving all three surfaces (`docs/frontend.md`)
 - **Monorepo** — Turborepo + bun
 
-Not decided: payment aggregator, KYC provider, tracker vendor, frontend framework. See [`docs/04-build-plan.md`](docs/04-build-plan.md) §Blocked on.
+Every vendor integration has a dev-fallback so the whole app runs locally with no vendor
+credentials — see `docs/decisions.md` (2026-10-03) and `docs/backend.md` "Provider dev-fallback".
 
 ---
 
 ## Repo layout
 
 ```
-apps/Backend     Fastify API            (empty — phase 1)
-apps/Frontend    deliberately empty     (three surfaces, decide later)
-packages/        shared types, config   (empty)
-docs/            this plan
+apps/Backend     Express API, Phases 1-17 built and tested — see docs/backend.md
+apps/Frontend    React app, all three surfaces scaffolded — see docs/frontend.md
+packages/        shared eslint config
+docs/            backend.md, frontend.md, decisions.md, implementation.md, progress.md, 00-market.md
 ```
-
-`apps/Frontend` stays empty on purpose. The product needs three surfaces — customer mobile, merchant web, admin web — and that's not one app. Decide when there's an API to call.
 
 ---
 
 ## Before you write code
 
-Eleven things need a human answer, six of them from a lawyer or a CA. They're listed in [`docs/02-legal.md`](docs/02-legal.md) §Open questions and [`docs/04-build-plan.md`](docs/04-build-plan.md) §Blocked on.
+Legal/commercial open questions (payment aggregator terms, GST SAC classification, deposit
+release window, and others not yet resolved) are tracked in `docs/00-market.md` §9 and flagged
+inline in `docs/backend.md`/`apps/Frontend/PRODUCT.md` wherever they block a specific decision.
 
 Three of them change the schema. Don't skip that list.

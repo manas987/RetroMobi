@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { pathParam } from "../../../lib/pathParam.ts";
 import { pool } from "../../../DB/client.ts";
-import { presignUpload } from "../../../lib/storage.ts";
+import { presignDownload, presignUpload } from "../../../lib/storage.ts";
 import * as ticketsService from "../../Tickets/ticketsService.ts";
 
 export async function create(req: Request, res: Response) {
@@ -65,4 +65,14 @@ export async function confirmAttachment(req: Request, res: Response) {
     req.body,
   );
   res.status(201).json(attachment);
+}
+
+export async function downloadAttachment(req: Request, res: Response) {
+  const storageKey = await ticketsService.getAttachmentDownloadUrl(
+    pool,
+    pathParam(req, "attachmentId"),
+    { partyType: "CUSTOMER", partyId: req.userId! },
+  );
+  const downloadUrl = await presignDownload(storageKey);
+  res.status(200).json({ downloadUrl });
 }

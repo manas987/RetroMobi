@@ -30,5 +30,6 @@ router.post(
   validate(ConfirmAttachmentSchema),
   controller.confirmAttachment,
 );
+router.get("/:id/attachments/:attachmentId/download", controller.downloadAttachment);
 
 export default router;

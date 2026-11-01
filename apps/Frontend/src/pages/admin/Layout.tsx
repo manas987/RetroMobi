@@ -5,11 +5,16 @@ import { usePortalSession } from "../../lib/portal";
 const NAV = [
   { href: "/admin", label: "Overview", roles: ["SUPPORT", "ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/tickets", label: "Support", roles: ["SUPPORT", "ADMIN", "SUPER_ADMIN"] },
+  { href: "/admin/merchants", label: "Merchants", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/merchant-review", label: "Merchant review", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/vehicle-review", label: "Vehicle review", roles: ["ADMIN", "SUPER_ADMIN"] },
+  { href: "/admin/licensed-vehicles", label: "Licensed vehicles", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/booking-ops", label: "Booking ops", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/payments", label: "Payments", roles: ["SUPER_ADMIN"] },
   { href: "/admin/audit", label: "Audit", roles: ["SUPER_ADMIN"] },
+  { href: "/admin/admins", label: "Admins", roles: ["SUPER_ADMIN"] },
+  { href: "/admin/models", label: "Vehicle models", roles: ["ADMIN", "SUPER_ADMIN"] },
+  { href: "/admin/coupons", label: "Coupons", roles: ["SUPER_ADMIN"] },
 ];
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {

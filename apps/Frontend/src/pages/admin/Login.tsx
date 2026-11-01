@@ -1,115 +1,89 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { AuthLayout } from "../../components/AuthLayout";
+import { PhoneInput, DEFAULT_COUNTRY } from "../../components/PhoneInput";
+import type { Country } from "../../lib/countries";
+import { OtpInput } from "../../components/OtpInput";
+import { BackRow, ErrorBox, ResendRow, SubmitButton } from "../../components/AuthFormBits";
+import { useCountdown } from "../../lib/useCountdown";
 import { usePortalSession, portalFetch, PortalApiError } from "../../lib/portal";
 
 export function AdminLogin() {
   const { setTokens, deviceId } = usePortalSession("admin");
   const [, navigate] = useLocation();
+  const resend = useCountdown(30);
 
   const [step, setStep] = useState<"phone" | "otp">("phone");
-  const [phone, setPhone] = useState("+91");
+  const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
+  const [localPhone, setLocalPhone] = useState("");
+  const phone = `${country.dial}${localPhone}`;
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function sendOtp(e: React.FormEvent) {
-    e.preventDefault();
+  async function run(fn: () => Promise<void>) {
     setError(null);
     setBusy(true);
     try {
-      await portalFetch("admin", "/auth/otp/send", { method: "POST", body: { phone } });
-      setStep("otp");
+      await fn();
     } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't send the code.");
+      setError(err instanceof PortalApiError ? err.message : "Something went wrong.");
     } finally {
       setBusy(false);
     }
   }
 
-  async function verifyOtp(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
+  const sendOtp = () =>
+    run(async () => {
+      await portalFetch("admin", "/auth/otp/send", { method: "POST", body: { phone } });
+      resend.start();
+      setStep("otp");
+    });
+
+  const verifyOtp = () =>
+    run(async () => {
       const result = await portalFetch<any>("admin", "/auth/otp/verify", {
         method: "POST",
         body: { phone, code, deviceId },
       });
       setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken, role: result.admin?.role });
       navigate("/admin");
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "That code didn't work.");
-    } finally {
-      setBusy(false);
-    }
-  }
+    });
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-5 bg-ink">
-      <div className="w-full max-w-sm bg-surface rounded-panel p-7">
-        <p className="text-xs font-medium text-ink-3 tracking-wide uppercase">RetroMobi internal</p>
-        <h1 className="text-xl font-semibold text-ink mt-1 mb-6">Control room sign-in</h1>
-
-        {error && <p className="mb-4 text-sm text-danger bg-danger-soft rounded-row px-3 py-2">{error}</p>}
-
-        {step === "phone" && (
-          <form onSubmit={sendOtp} className="flex flex-col gap-3">
-            <p className="text-xs text-ink-3">
-              Admin accounts are provisioned ahead of time — there's no self-serve signup here.
-            </p>
-            <Field label="Phone number">
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+919812345678"
-                className="w-full rounded-row border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink"
-              />
-            </Field>
-            <SubmitButton busy={busy}>Send code</SubmitButton>
-          </form>
-        )}
-
-        {step === "otp" && (
-          <form onSubmit={verifyOtp} className="flex flex-col gap-3">
-            <p className="text-sm text-ink-3">
-              Code sent to {phone}. In dev, check the backend log for the <code>[dev-fallback]</code> line.
-            </p>
-            <Field label="6-digit code">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="123456"
-                className="w-full rounded-row border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink tnum"
-              />
-            </Field>
-            <SubmitButton busy={busy}>Verify</SubmitButton>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-ink-3">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function SubmitButton({ busy, children }: { busy: boolean; children: React.ReactNode }) {
-  return (
-    <button
-      type="submit"
-      disabled={busy}
-      className="mt-2 h-10 rounded-row bg-ink text-surface font-medium text-sm disabled:opacity-60"
+    <AuthLayout
+      eyebrow="RetroMobi internal"
+      title="Control room."
+      tagline="Licensing, verification and dispute oversight for the whole marketplace."
     >
-      {busy ? "Working…" : children}
-    </button>
+      {step === "phone" && (
+        <div>
+          <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Internal sign-in</h1>
+          <p className="text-sm text-ink-3 mb-1">Admin accounts are provisioned ahead of time.</p>
+          <p className="text-sm text-ink-3 mb-6">There's no self-serve signup here.</p>
+          {error && <ErrorBox text={error} />}
+          <PhoneInput value={localPhone} onChange={setLocalPhone} country={country} onCountryChange={setCountry} autoFocus />
+          <SubmitButton busy={busy} onClick={sendOtp} disabled={localPhone.length < 10}>
+            Continue
+          </SubmitButton>
+        </div>
+      )}
+
+      {step === "otp" && (
+        <div>
+          <BackRow onBack={() => setStep("phone")} />
+          <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Verify your number</h1>
+          <p className="text-sm text-ink-3 mb-6">
+            We sent a 6-digit code to <span className="text-ink font-medium">{phone}</span>.
+          </p>
+          {error && <ErrorBox text={error} />}
+          <OtpInput value={code} onChange={setCode} />
+          <SubmitButton busy={busy} onClick={verifyOtp} disabled={code.length < 6}>
+            Verify
+          </SubmitButton>
+          <ResendRow resend={resend} onResend={sendOtp} />
+        </div>
+      )}
+    </AuthLayout>
   );
 }

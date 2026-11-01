@@ -41,6 +41,8 @@ export interface SearchResult {
   };
   primaryOffer: SearchOffer;
   offerCount: number;
+  /** vehicleIds of every available unit of this model at this shop, ranked same as offerCount's group. */
+  offerVehicleIds: string[];
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -80,7 +82,10 @@ function toLicence(row: any): Licence | null {
 export async function searchVehicles(
   pool: Pool,
   params: {
-    city: string;
+    /** required unless shopId is given */
+    city?: string;
+    /** scopes results to one shop's inventory, ignoring city (used by the shop page) */
+    shopId?: string;
     pickupAt: Date;
     returnAt: Date;
     lat?: number;
@@ -88,9 +93,14 @@ export async function searchVehicles(
     minPrice?: number;
     maxPrice?: number;
     modelId?: string;
+    /** comma-separated list of brand names — any match passes */
+    make?: string;
     minRating?: number;
     maxDistanceKm?: number;
-    fuelType?: "PETROL" | "ELECTRIC";
+    /** comma-separated list of "PETROL"/"ELECTRIC" — any match passes */
+    fuelType?: string;
+    /** comma-separated list of body types, e.g. "SCOOTER,MOTORCYCLE" — any match passes */
+    bodyType?: string;
     minEngineCc?: number;
     maxEngineCc?: number;
     seatingCapacity?: number;
@@ -99,7 +109,7 @@ export async function searchVehicles(
     page?: number;
     limit?: number;
   },
-): Promise<{ results: SearchResult[]; total: number }> {
+): Promise<{ results: SearchResult[]; total: number; priceHistogram: number[] }> {
   const sort = params.sort ?? "price";
   if (sort === "distance" && (params.lat == null || params.lng == null)) {
     throw new DistanceSortUnavailableError();
@@ -108,22 +118,39 @@ export async function searchVehicles(
   const page = params.page ?? 1;
   const limit = Math.min(params.limit ?? 20, 100);
 
-  const boxClause =
-    params.lat != null && params.lng != null
-      ? `and s.latitude between $4 and $5 and s.longitude between $6 and $7`
-      : "";
-  const boxValues =
-    params.lat != null && params.lng != null
-      ? [params.lat - 0.2, params.lat + 0.2, params.lng - 0.2, params.lng + 0.2]
-      : [];
+  const makeFilter = params.make ? new Set(params.make.split(",")) : null;
+  const fuelTypeFilter = params.fuelType ? new Set(params.fuelType.split(",")) : null;
+  const bodyTypeFilter = params.bodyType ? new Set(params.bodyType.split(",")) : null;
+
+  // The box is a pre-filter for an explicit distance *filter*, not a side
+  // effect of merely knowing the viewer's coordinates — lat/lng alone are
+  // also sent just to label results with "X km away" or to sort by
+  // distance, and silently shrinking the result set to ~22km of wherever
+  // the browser's geolocation resolved to (which may be inaccurate, or
+  // simply far from the city being searched) would hide real results for
+  // no reason the user asked for.
+  const boxActive = params.lat != null && params.lng != null && params.maxDistanceKm != null;
+  const boxClause = boxActive ? `and s.latitude between $4 and $5 and s.longitude between $6 and $7` : "";
+  const boxValues = boxActive
+    ? [params.lat! - 0.2, params.lat! + 0.2, params.lng! - 0.2, params.lng! + 0.2]
+    : [];
+
+  // $1 must stay referenced even when shopId-scoped (city passed as null) —
+  // an unreferenced placeholder leaves Postgres unable to infer its type.
+  const cityClause = params.shopId
+    ? `and ($1::text is null or lower(s.city) = lower($1::text))`
+    : `and lower(s.city) = lower($1::text)`;
+  const shopClause = params.shopId ? `and v.shop_id = $${4 + boxValues.length}::uuid` : "";
+  const shopValues = params.shopId ? [params.shopId] : [];
 
   const { rows } = await pool.query(
     `${VEHICLE_ROW_SELECT}
-      where lower(s.city) = lower($1)
-        and s.deleted_at is null
+      where s.deleted_at is null
         and v.status = 'ACTIVE'
         and v.deleted_at is null
+        ${cityClause}
         ${boxClause}
+        ${shopClause}
         and not exists (
           select 1 from bookings b
            where b.vehicle_id = v.id and b.deleted_at is null
@@ -134,10 +161,10 @@ export async function searchVehicles(
            where u.vehicle_id = v.id
              and tstzrange(u.start_at, u.end_at) && tstzrange($2, $3)
         )`,
-    [params.city, params.pickupAt, params.returnAt, ...boxValues],
+    [params.city ?? null, params.pickupAt, params.returnAt, ...boxValues, ...shopValues],
   );
 
-  if (rows.length === 0) return { results: [], total: 0 };
+  if (rows.length === 0) return { results: [], total: 0, priceHistogram: [] };
 
   const pricingIds: string[] = rows.map((r) => r.pricing_id);
   const { rows: specialRows } = await pool.query(
@@ -164,6 +191,8 @@ export async function searchVehicles(
     seatingCapacity: number | null;
   };
   const candidates: Candidate[] = [];
+  /** pricePerDay (paise) of every vehicle matching every filter except price. */
+  const priceHistogram: number[] = [];
 
   for (const row of rows) {
     const specials = (specialsByPricing.get(row.pricing_id) ?? []).map((s) => ({
@@ -191,16 +220,24 @@ export async function searchVehicles(
 
     const licence = toLicence(row);
 
-    if (params.minPrice != null && rentalAmount < params.minPrice) continue;
-    if (params.maxPrice != null && rentalAmount > params.maxPrice) continue;
+    // Every filter except price, applied first — priceHistogram below is
+    // built from this pre-price-filter set, so the price slider can always
+    // show the full distribution, including what a committed filter hides.
     if (params.modelId != null && row.model_id !== params.modelId) continue;
+    if (makeFilter != null && !makeFilter.has(row.make)) continue;
     if (params.minRating != null && (row.rating == null || Number(row.rating) < params.minRating)) continue;
     if (params.maxDistanceKm != null && (distanceKm == null || distanceKm > params.maxDistanceKm)) continue;
-    if (params.fuelType != null && row.fuel_type !== params.fuelType) continue;
+    if (fuelTypeFilter != null && !fuelTypeFilter.has(row.fuel_type)) continue;
+    if (bodyTypeFilter != null && !bodyTypeFilter.has(row.body_type)) continue;
     if (params.minEngineCc != null && (row.engine_cc == null || row.engine_cc < params.minEngineCc)) continue;
     if (params.maxEngineCc != null && (row.engine_cc == null || row.engine_cc > params.maxEngineCc)) continue;
     if (params.seatingCapacity != null && row.seating_capacity !== params.seatingCapacity) continue;
     if (params.fullyVerified && licence == null) continue;
+
+    priceHistogram.push(days[0]!.amount);
+
+    if (params.minPrice != null && rentalAmount < params.minPrice) continue;
+    if (params.maxPrice != null && rentalAmount > params.maxPrice) continue;
 
     candidates.push({
       vehicleId: row.vehicle_id,
@@ -229,11 +266,14 @@ export async function searchVehicles(
     });
   }
 
-  const byModel = new Map<string, Candidate[]>();
+  // Keyed by model+shop, not model alone — otherwise shop A's 10 Activa 4Gs
+  // and shop B's 10 Activa 4Gs collapse into one card and 9 shops vanish.
+  const byModelShop = new Map<string, Candidate[]>();
   for (const c of candidates) {
-    const list = byModel.get(c.modelId) ?? [];
+    const key = `${c.modelId}:${c.shopId}`;
+    const list = byModelShop.get(key) ?? [];
     list.push(c);
-    byModel.set(c.modelId, list);
+    byModelShop.set(key, list);
   }
 
   function rank(a: Candidate, b: Candidate): number {
@@ -243,12 +283,12 @@ export async function searchVehicles(
   }
 
   let results: SearchResult[] = [];
-  for (const [modelId, offers] of byModel) {
+  for (const offers of byModelShop.values()) {
     offers.sort(rank);
     const primary = offers[0]!;
     results.push({
       model: {
-        id: modelId,
+        id: primary.modelId,
         make: primary.make,
         model: primary.modelName,
         imageKey: primary.imageKey,
@@ -275,6 +315,7 @@ export async function searchVehicles(
         badges: primary.badges,
       },
       offerCount: offers.length,
+      offerVehicleIds: offers.map((o) => o.vehicleId),
     });
   }
 
@@ -284,11 +325,12 @@ export async function searchVehicles(
   const start = (page - 1) * limit;
   results = results.slice(start, start + limit);
 
-  return { results, total };
+  return { results, total, priceHistogram };
 }
 
 export interface VehicleDetail {
   vehicleId: string;
+  modelId: string;
   make: string;
   model: string;
   imageKey: string | null;
@@ -323,6 +365,7 @@ export async function getVehicleDetail(pool: Pool, vehicleId: string): Promise<V
 
   return {
     vehicleId: row.vehicle_id,
+    modelId: row.model_id,
     make: row.make,
     model: row.model,
     imageKey: row.image_key,

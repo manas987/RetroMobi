@@ -1,8 +1,5 @@
 import { z } from "zod";
-
-const phoneSchema = z
-  .string()
-  .regex(/^\+91[6-9]\d{9}$/, "phone must be a valid +91 mobile number");
+import { phoneSchema } from "../../../lib/phone";
 
 export const SendOtpSchema = z.object({
   phone: phoneSchema,

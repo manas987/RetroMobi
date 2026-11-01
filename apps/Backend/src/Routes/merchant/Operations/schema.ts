@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { phoneSchema } from "../../../lib/phone";
 
 export const ListBookingsQuerySchema = z.object({
   status: z.enum(["HOLD", "CONFIRMED", "COMPLETED"]).optional(),
@@ -9,7 +10,7 @@ export const ListBookingsQuerySchema = z.object({
 export const CreateWalkinSchema = z.object({
   vehicleId: z.string().uuid(),
   walkinName: z.string().min(1),
-  walkinPhone: z.string().regex(/^\+91[6-9]\d{9}$/, "phone must be a valid +91 mobile number"),
+  walkinPhone: phoneSchema,
   walkinDlNumber: z.string().min(1),
   pickupAt: z.coerce.date(),
   returnAt: z.coerce.date(),

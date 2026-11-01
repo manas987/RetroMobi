@@ -4,6 +4,13 @@ import index from "./index.html";
 const PORT = Number(process.env.PORT ?? 5173);
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:3000";
 
+// Bun's CSS bundler base64-inlines any font reached through url(), which put
+// ~225KB of Airbnb Cereal into the render-blocking stylesheet and downloaded
+// every weight whether the page used it or not. Serving them as real files
+// keeps the CSS small and lets font-display:swap do its job. A whitelist, not
+// a path join, so the route can't be walked out of the assets directory.
+const FONTS = new Set(["AirbnbCereal_W_Bk.otf", "AirbnbCereal_W_Md.otf", "AirbnbCereal_W_Bd.otf"]);
+
 const server = serve({
   port: PORT,
   routes: {
@@ -39,6 +46,16 @@ const server = serve({
       out.delete("content-encoding");
       out.delete("content-length");
       return new Response(upstream.body, { status: upstream.status, headers: out });
+    },
+
+    "/fonts/:file": (req: Bun.BunRequest<"/fonts/:file">) => {
+      if (!FONTS.has(req.params.file)) return new Response(null, { status: 404 });
+      return new Response(Bun.file(`${import.meta.dir}/assets/${req.params.file}`), {
+        headers: {
+          "content-type": "font/otf",
+          "cache-control": "public, max-age=31536000, immutable",
+        },
+      });
     },
 
     "/*": index,

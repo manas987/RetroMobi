@@ -26,6 +26,12 @@ export const ListBookingsQuerySchema = z.object({
   to: z.coerce.date().optional(),
 });
 
+export const ListLicencesQuerySchema = z.object({
+  ...pagingSchema,
+  q: z.string().optional(),
+  status: z.enum(["PENDING", "ACTIVE", "EXPIRED", "REJECTED"]).optional(),
+});
+
 export const ListPaymentsQuerySchema = z.object({
   ...pagingSchema,
   status: z.string().optional(),

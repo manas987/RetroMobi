@@ -23,6 +23,7 @@ router.post("/google", validate(GoogleAuthSchema), controller.googleAuth);
 router.post("/signup/complete", validate(SignupCompleteSchema), controller.completeSignup);
 router.post("/refresh", validate(RefreshSchema), controller.refresh);
 router.post("/logout", requireAuth, validate(LogoutSchema), controller.logout);
+router.get("/sessions", requireAuth, controller.listSessions);
 router.delete("/sessions/:id", requireAuth, controller.revokeSession);
 
 export default router;

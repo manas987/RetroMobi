@@ -21,12 +21,14 @@ router.get("/licences", controller.list);
 router.post("/licences", validate(CreateLicenceSchema), controller.create);
 router.delete("/licences/:licenceId", controller.remove);
 router.post("/licences/:licenceId/upload", validate(UploadRequestSchema), controller.upload);
+router.get("/licences/:licenceId/download", controller.downloadLicence);
 router.post("/licences/:licenceId/confirm", validate(ConfirmUploadSchema), controller.confirm);
 router.post("/licences/:licenceId/shops", validate(LinkLicenceSchema), controller.linkShop);
 router.delete("/licences/:licenceId/shops/:shopId", controller.unlinkShop);
 
 router.get("/merchant-documents", controller.listDocuments);
 router.post("/merchant-documents", validate(CreateMerchantDocumentSchema), controller.createDocument);
+router.get("/merchant-documents/:documentId/download", controller.downloadDocument);
 router.delete("/merchant-documents/:documentId", controller.removeDocument);
 router.post(
   "/merchant-documents/:documentId/upload",

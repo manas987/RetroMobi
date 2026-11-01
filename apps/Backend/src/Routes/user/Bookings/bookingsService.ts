@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from "pg";
-import { composeTotal, countRentalDays, priceRental, refundForCancellation } from "../../../lib/pricing.ts";
+import { composeTotal, priceRental, refundForCancellation } from "../../../lib/pricing.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import { notify } from "../../../lib/notify.ts";
 import type { CashfreeClient } from "../../../providers/cashfree.ts";
@@ -11,6 +11,8 @@ export class LicenceInvalidError extends Error {}
 export class CouponInvalidError extends Error {}
 export class BookingNotCancellableError extends Error {}
 export class ExtensionPendingError extends Error {}
+export class RiderUnavailableError extends Error {}
+export class DuplicateRiderError extends Error {}
 
 const EXCLUSION_VIOLATION = "23P01";
 const UNIQUE_VIOLATION = "23505";
@@ -93,7 +95,12 @@ export async function createHold(
 
   if (items.length > 5) throw new TooManyVehiclesError("at most 5 vehicles per checkout");
   if (returnAt.getTime() <= pickupAt.getTime()) throw new InvalidDurationError("return must be after pickup");
-  if (countRentalDays(pickupAt, returnAt) > 10) throw new InvalidDurationError("rental cannot exceed 10 days");
+  // One rider can't ride two scooters in the same window -- the exclusion
+  // constraint below also catches this, but failing fast here skips a wasted
+  // round of pricing/insert work for the obviously-invalid case.
+  if (new Set(items.map((i) => i.riderId)).size !== items.length) {
+    throw new DuplicateRiderError("the same rider is assigned to more than one vehicle");
+  }
 
   const { platformFeePct, gstRate } = getMoneyConfig();
 
@@ -196,6 +203,9 @@ export async function createHold(
         bookings.push({ id: insertResult.rows[0].id, vehicleId: item.vehicleId });
       } catch (err: any) {
         if (err.code === EXCLUSION_VIOLATION) {
+          if (err.constraint === "no_overlapping_rider_bookings") {
+            throw new RiderUnavailableError(`rider ${item.riderId} already has a booking for this window`);
+          }
           throw new VehicleUnavailableError(`vehicle ${item.vehicleId} is already booked for this window`);
         }
         throw err;
@@ -431,9 +441,6 @@ export async function requestExtension(
     if (input.newReturnAt.getTime() <= oldReturnAt.getTime()) {
       throw new InvalidDurationError("shortening is not an extension");
     }
-    if (countRentalDays(pickupAt, input.newReturnAt) > 10) {
-      throw new InvalidDurationError("rental cannot exceed 10 days");
-    }
 
     // Price only the extra days, at current rates. Zero deposit -- the
     // existing deposit already covers the whole rental.
@@ -507,6 +514,31 @@ export async function requestExtension(
   } finally {
     client.release();
   }
+}
+
+/** The customer's own bookings, newest first — backs "My bookings" and review eligibility. */
+export async function listMyBookings(pool: Pool, userId: string) {
+  const { rows } = await pool.query(
+    `select b.*, m.make, m.model, s.id as shop_id, s.name as shop_name,
+            s.address_line1 as shop_address, s.city as shop_city, s.phone as shop_phone,
+            r.name as rider_name,
+            sd.status as deposit_status, sd.deducted_amount as deposit_deducted_amount,
+            sd.deduction_reason as deposit_deduction_reason, sd.refund_amount as deposit_refund_amount,
+            c.refund_amount as cancellation_refund_amount, c.penalty_amount as cancellation_penalty_amount,
+            c.cancelled_by, c.reason as cancellation_reason
+       from bookings b
+       join booking_groups g on g.id = b.group_id
+       join vehicles v on v.id = b.vehicle_id
+       join vehicle_models m on m.id = v.model_id
+       join shops s on s.id = v.shop_id
+       left join riders r on r.id = b.rider_id
+       left join security_deposits sd on sd.booking_id = b.id
+       left join booking_cancellations c on c.booking_id = b.id
+      where g.user_id = $1
+      order by b.scheduled_pickup_at desc`,
+    [userId],
+  );
+  return rows;
 }
 
 export async function getExtension(pool: Pool, userId: string, bookingId: string) {

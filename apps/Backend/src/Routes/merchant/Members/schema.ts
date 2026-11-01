@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { phoneSchema } from "../../../lib/phone";
 
 const roleSchema = z.enum(["OWNER", "MANAGER", "STAFF"]);
 
 export const InviteMemberSchema = z.object({
-  phone: z.string().regex(/^\+91[6-9]\d{9}$/, "phone must be a valid +91 mobile number"),
+  phone: phoneSchema,
   role: roleSchema,
 });
 

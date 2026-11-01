@@ -3,6 +3,7 @@ import authRoutes from "./Auth/routes.ts";
 import fleetRoutes from "./Fleet/routes.ts";
 import licencesRoutes from "./Licences/routes.ts";
 import membersRoutes from "./Members/routes.ts";
+import modelsRoutes from "./Models/routes.ts";
 import operationsRoutes from "./Operations/routes.ts";
 import payoutsRoutes from "./Payouts/routes.ts";
 import pricingRoutes from "./Pricing/routes.ts";
@@ -13,6 +14,7 @@ const router = Router();
 
 router.use("/auth", authRoutes);
 router.use("/shops", shopsRoutes);
+router.use("/models", modelsRoutes);
 router.use(membersRoutes);
 router.use(licencesRoutes);
 router.use(fleetRoutes);

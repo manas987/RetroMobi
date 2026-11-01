@@ -43,3 +43,60 @@ export function timeLabel(iso: string): string {
     hour12: true,
   });
 }
+
+/**
+ * Words that are wrong in sentence case. Without these, a document type of
+ * GSTIN renders as "Gstin" and RC as "Rc" — which looks like a bug to anyone
+ * who knows what the paper is called.
+ */
+const ACRONYMS = new Set([
+  "GSTIN",
+  "GST",
+  "CGST",
+  "SGST",
+  "IGST",
+  "PAN",
+  "RC",
+  "PUC",
+  "DL",
+  "ID",
+  "KYC",
+  "UPI",
+  "OTP",
+  "NOC",
+]);
+
+/**
+ * A DB enum as a human label: "BANK_PROOF" -> "Bank proof". Formats whatever
+ * arrives rather than mapping a fixed list, because several of these columns
+ * (`merchant_documents.type`, `vehicle_models.body_type`) are free text
+ * server-side and a new value must not need a redeploy to read correctly.
+ */
+export function enumLabel(value: unknown): string {
+  const s = String(value ?? "");
+  if (!s) return "—";
+
+  const words = s.split("_").map((w) => (ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w.toLowerCase()));
+  const first = words[0]!;
+  // Only the first word is capitalised, and only when it is not already an
+  // acronym carrying its own casing.
+  words[0] = ACRONYMS.has(first.toUpperCase()) ? first : first.charAt(0).toUpperCase() + first.slice(1);
+  return words.join(" ");
+}
+
+/**
+ * For `date` columns, which have no meaningful time. Postgres `date` is
+ * hydrated to a Date and serialised with a `T`, so the generic timestamp
+ * formatter renders a misleading midnight ("1 Apr, 12:00 am") and can shift
+ * the day across timezones. Parsed at local noon to stay on the right date.
+ */
+export function dateLabel(value: unknown): string {
+  if (value == null || value === "") return "—";
+  const iso = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return String(value);
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}

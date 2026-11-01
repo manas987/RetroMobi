@@ -1,4 +1,37 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+/* A flat height-only slide reads as mechanical. This overshoots past full
+   height/scale then settles back — height, scale and opacity move together
+   on a spring-like cubic-bezier, which is what actually reads as "poppy"
+   rather than linear. Used by FilterRail's collapsible groups. */
+@keyframes pop-open {
+  0% {
+    height: 0;
+    opacity: 0;
+    transform: scaleY(0.85);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+@keyframes pop-close {
+  0% {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  100% {
+    height: 0;
+    opacity: 0;
+    transform: scaleY(0.92);
+  }
+}
 
 @theme {
   /* Ink — warm-leaning near-black, never cool grey */
@@ -32,7 +65,7 @@
   --color-warning: #8a5a00;
   --color-warning-soft: #fdf3e2;
 
-  --font-sans: "Anek Latin", "Anek Devanagari", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Airbnb Cereal", "Anek Devanagari", ui-sans-serif, system-ui, sans-serif;
 
   --radius-row: 10px;
   --radius-panel: 14px;
@@ -160,6 +193,41 @@
     transform: rotate(45deg);
   }
 
+  /* Leaflet's default zoom control is a plain bordered square — restyle it to
+     match the rest of the map chrome (clean white rounded buttons, subtle
+     shadow, no visible Leaflet border/divider). */
+  .leaflet-control-zoom {
+    border: none !important;
+    border-radius: var(--radius-row) !important;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(18, 22, 26, 0.18) !important;
+  }
+  .leaflet-control-zoom a {
+    width: 34px !important;
+    height: 34px !important;
+    line-height: 34px !important;
+    background: var(--color-surface) !important;
+    color: var(--color-ink) !important;
+    border: none !important;
+    font-size: 18px !important;
+  }
+  .leaflet-control-zoom a:first-child {
+    border-bottom: 1px solid var(--color-line) !important;
+  }
+  .leaflet-control-zoom a:hover {
+    background: var(--color-surface-3) !important;
+  }
+  /* The pin popup names a real vehicle — it should go to that vehicle's page,
+     not just sit there as inert text. */
+  .map-popup-link {
+    display: block;
+    color: var(--color-ink);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .map-popup-link:hover strong {
+    text-decoration: underline;
+  }
   /* Blur is expensive over a repainting WebGL canvas. The map adds this class
      while it moves, so panning stays smooth. */
   .map-moving .glass-panel {

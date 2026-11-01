@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 export const SearchQuerySchema = z.object({
-  city: z.string().min(1),
+  // Either city or shopId must be present — enforced below, since a shop
+  // page search scopes to one shop's inventory and has no city of its own.
+  city: z.string().min(1).optional(),
+  shopId: z.string().uuid().optional(),
   pickupAt: z.coerce.date(),
   returnAt: z.coerce.date(),
   lat: z.coerce.number().optional(),
@@ -9,9 +12,21 @@ export const SearchQuerySchema = z.object({
   minPrice: z.coerce.number().optional(),
   maxPrice: z.coerce.number().optional(),
   modelId: z.string().uuid().optional(),
+  make: z.string().min(1).optional(),
   minRating: z.coerce.number().optional(),
   maxDistanceKm: z.coerce.number().optional(),
-  fuelType: z.enum(["PETROL", "ELECTRIC"]).optional(),
+  // Comma-separated list, e.g. "PETROL,ELECTRIC" — any match passes.
+  fuelType: z
+    .string()
+    .regex(/^(PETROL|ELECTRIC)(,(PETROL|ELECTRIC))*$/, "fuelType must be PETROL and/or ELECTRIC, comma-separated")
+    .optional(),
+  // Comma-separated list, e.g. "SCOOTER,MOTORCYCLE" — any match passes. Not
+  // an enum: `vehicle_models.body_type` is free text an admin fills in, so a
+  // new type must not need a redeploy here to become filterable.
+  bodyType: z
+    .string()
+    .regex(/^[A-Z_]+(,[A-Z_]+)*$/, "bodyType must be an upper-case, comma-separated list")
+    .optional(),
   minEngineCc: z.coerce.number().optional(),
   maxEngineCc: z.coerce.number().optional(),
   seatingCapacity: z.coerce.number().int().optional(),
@@ -19,7 +34,17 @@ export const SearchQuerySchema = z.object({
   sort: z.enum(["price", "rating", "distance"]).optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
-});
+})
+  .refine((d) => !!d.city || !!d.shopId, { message: "either city or shopId is required", path: ["city"] })
+  // Rental length itself is uncapped, but search is the only public,
+  // unauthenticated endpoint and it prices every candidate vehicle one day at
+  // a time. An unbounded window turns one request into hundreds of thousands
+  // of allocations, so the *window* gets a sanity bound even though a booking
+  // does not.
+  .refine((d) => d.returnAt.getTime() - d.pickupAt.getTime() <= 365 * 86_400_000, {
+    message: "search window cannot exceed 365 days",
+    path: ["returnAt"],
+  });
 
 export const VehicleDetailParamsSchema = z.object({
   vehicleId: z.string().uuid(),

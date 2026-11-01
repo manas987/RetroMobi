@@ -15,14 +15,23 @@ function getClient(): { client: S3Client; bucket: string } | null {
   return { client, bucket };
 }
 
+/**
+ * `devFallback` is present only when no storage is configured, and it exists
+ * for the client's benefit: the faked `uploadUrl` points nowhere, so a client
+ * that PUTs to it gets a network error that is indistinguishable from a real
+ * upload failure. Clients used to swallow that error and confirm anyway,
+ * which reported success for a file that was never stored. With this flag the
+ * client skips the PUT when it is set, and treats a failed PUT as fatal when
+ * it is not.
+ */
 export async function presignUpload(
   key: string,
   contentType: string,
-): Promise<{ uploadUrl: string; storageKey: string }> {
+): Promise<{ uploadUrl: string; storageKey: string; devFallback?: true }> {
   const config = getClient();
   if (!config) {
     console.log(`[dev-fallback] storage.presignUpload not configured — faking an upload URL for ${key}`);
-    return { uploadUrl: `https://dev-fallback.local/upload/${key}`, storageKey: key };
+    return { uploadUrl: `https://dev-fallback.local/upload/${key}`, storageKey: key, devFallback: true };
   }
   const { client, bucket } = config;
   const command = new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType });
@@ -30,7 +39,7 @@ export async function presignUpload(
   return { uploadUrl, storageKey: key };
 }
 
-export async function presignDownload(key: string): Promise<string> {
+export async function presignDownload(key: string, expiresIn = 300): Promise<string> {
   const config = getClient();
   if (!config) {
     console.log(`[dev-fallback] storage.presignDownload not configured — faking a download URL for ${key}`);
@@ -38,5 +47,5 @@ export async function presignDownload(key: string): Promise<string> {
   }
   const { client, bucket } = config;
   const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-  return getSignedUrl(client, command, { expiresIn: 300 });
+  return getSignedUrl(client, command, { expiresIn });
 }

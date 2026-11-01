@@ -1,32 +1,45 @@
-import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { MerchantLayout, useMerchantShop } from "./Layout";
-import { portalFetch, type Row } from "../../lib/portal";
+import { usePortalQuery, type Row } from "../../lib/portal";
 import { DataTable, StatusPill } from "../../components/DataTable";
+import { ErrorBox } from "../../components/AuthFormBits";
 import { ActivityChart, bucketByDay } from "../../components/ActivityChart";
+import { enumLabel } from "../../lib/format";
 
 function OverviewBody() {
   const { token, shopId, shops } = useMerchantShop();
-  const shop = shops.find((s) => s.id === shopId);
-  const [vehicles, setVehicles] = useState<Row[] | null>(null);
-  const [bookings, setBookings] = useState<Row[] | null>(null);
-  const [payouts, setPayouts] = useState<Row[] | null>(null);
-  const [licences, setLicences] = useState<Row[] | null>(null);
+  const [, navigate] = useLocation();
+  const shop = shops.find((s) => String(s.id) === shopId);
 
-  useEffect(() => {
-    if (!shopId) return;
-    setVehicles(null);
-    setBookings(null);
-    setPayouts(null);
-    portalFetch<{ vehicles: Row[] }>("merchant", `/shops/${shopId}/vehicles`, { token }).then((r) =>
-      setVehicles(r.vehicles),
-    );
-    portalFetch<{ bookings: Row[] }>("merchant", `/shops/${shopId}/bookings`, { token }).then((r) =>
-      setBookings(r.bookings),
-    );
-    portalFetch<{ payouts: Row[] }>("merchant", "/payouts", { token }).then((r) => setPayouts(r.payouts));
-    portalFetch<{ licences: Row[] }>("merchant", "/licences", { token }).then((r) => setLicences(r.licences));
-  }, [shopId, token]);
+  // Every one of these used to drop its error, so a failed fetch left a "—" in
+  // the card forever, identical to still loading.
+  const { data: vehiclesRes, error: vehiclesError } = usePortalQuery<{ vehicles: Row[] }>(
+    "merchant",
+    shopId ? `/shops/${shopId}/vehicles` : null,
+    token,
+  );
+  const { data: bookingsRes, error: bookingsError } = usePortalQuery<{ bookings: Row[] }>(
+    "merchant",
+    shopId ? `/shops/${shopId}/bookings` : null,
+    token,
+  );
+  const { data: payoutsRes, error: payoutsError } = usePortalQuery<{ payouts: Row[] }>(
+    "merchant",
+    "/payouts",
+    token,
+  );
+  const { data: licencesRes, error: licencesError } = usePortalQuery<{ licences: Row[] }>(
+    "merchant",
+    "/licences",
+    token,
+  );
+
+  const firstError = vehiclesError ?? bookingsError ?? payoutsError ?? licencesError;
+
+  const vehicles = vehiclesRes?.vehicles ?? null;
+  const bookings = bookingsRes?.bookings ?? null;
+  const payouts = payoutsRes?.payouts ?? null;
+  const licences = licencesRes?.licences ?? null;
 
   const activeVehicles = vehicles?.filter((v) => v.status === "ACTIVE").length ?? null;
   const upcoming = bookings?.filter((b) => b.status === "CONFIRMED" || b.status === "HOLD") ?? null;
@@ -36,12 +49,15 @@ function OverviewBody() {
     ...(vehicles ?? [])
       .filter((v) => v.verification_status === "REJECTED" || v.verification_status === "PENDING")
       .map((v) => ({
-        label: `${v.registration_number} verification ${String(v.verification_status).toLowerCase()}`,
+        label: `${String(v.registration_number)} verification ${enumLabel(v.verification_status).toLowerCase()}`,
         href: "/merchant/fleet",
       })),
     ...(licences ?? [])
       .filter((l) => l.status !== "ACTIVE")
-      .map((l) => ({ label: `Licence ${l.licence_number} is ${String(l.status).toLowerCase()}`, href: "/merchant/compliance" })),
+      .map((l) => ({
+        label: `Licence ${String(l.licence_number)} is ${enumLabel(l.status).toLowerCase()}`,
+        href: "/merchant/compliance",
+      })),
   ];
 
   const chartData = bookings
@@ -53,10 +69,18 @@ function OverviewBody() {
       <p className="text-xs font-medium text-ink-3 tracking-wide uppercase">{String(shop?.name ?? "")}</p>
       <h1 className="text-2xl font-semibold text-ink mt-1 mb-6">Overview</h1>
 
+      {firstError && <ErrorBox text={firstError} />}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard label="Active vehicles" value={activeVehicles} />
-        <StatCard label="Upcoming bookings" value={upcoming?.length ?? null} />
-        <StatCard label="Pending payouts" value={pendingPayouts?.length ?? null} />
+        <StatCard label="Active vehicles" value={activeVehicles} failed={vehiclesError != null} />
+        <StatCard label="Upcoming bookings" value={upcoming?.length ?? null} failed={bookingsError != null} />
+        {/* Payouts are merchant-wide while everything beside them is scoped to
+            the shop in the switcher, so the label has to say so. */}
+        <StatCard
+          label="Pending payouts (all shops)"
+          value={pendingPayouts?.length ?? null}
+          failed={payoutsError != null}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 mb-8 items-start">
@@ -81,7 +105,9 @@ function OverviewBody() {
       </div>
 
       <h2 className="text-sm font-semibold text-ink mb-3">Upcoming bookings</h2>
-      {bookings === null ? (
+      {bookingsError ? (
+        <ErrorBox text={bookingsError} />
+      ) : bookings === null ? (
         <p className="text-sm text-ink-3">Loading…</p>
       ) : (
         <DataTable
@@ -89,9 +115,32 @@ function OverviewBody() {
           emptyLabel="No upcoming bookings for this shop."
           columns={[
             { key: "status", label: "Status", render: (r) => <StatusPill value={r.status} /> },
+            {
+              key: "vehicle",
+              label: "Vehicle",
+              render: (r) =>
+                r.registration_number ? (
+                  `${String(r.make ?? "")} ${String(r.model ?? "")} · ${String(r.registration_number)}`
+                ) : (
+                  <span className="text-ink-4">—</span>
+                ),
+            },
             { key: "scheduled_pickup_at", label: "Pickup" },
             { key: "scheduled_return_at", label: "Return" },
-            { key: "source", label: "Source" },
+            { key: "source", label: "Source", render: (r) => enumLabel(r.source) },
+            {
+              key: "__open",
+              label: "",
+              render: () => (
+                <button
+                  type="button"
+                  onClick={() => navigate("/merchant/bookings")}
+                  className="text-xs font-medium text-ink hover:underline"
+                >
+                  Open
+                </button>
+              ),
+            },
           ]}
         />
       )}
@@ -99,11 +148,15 @@ function OverviewBody() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number | null }) {
+function StatCard({ label, value, failed }: { label: string; value: number | null; failed: boolean }) {
   return (
     <div className="bg-surface rounded-panel border border-line px-5 py-4">
       <p className="text-xs text-ink-3">{label}</p>
-      <p className="tnum text-2xl font-semibold text-ink mt-1">{value ?? "—"}</p>
+      {failed ? (
+        <p className="text-sm text-danger mt-2">Couldn't load</p>
+      ) : (
+        <p className="tnum text-2xl font-semibold text-ink mt-1">{value ?? "—"}</p>
+      )}
     </div>
   );
 }

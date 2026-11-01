@@ -85,9 +85,17 @@ const COLUMN_BY_KEY: Record<string, string> = {
   engineCc: "engine_cc",
   bodyType: "body_type",
   seatingCapacity: "seating_capacity",
+  isActive: "is_active",
 };
 
-export async function updateModel(pool: Pool, adminId: string, modelId: string, input: Partial<ModelInput>) {
+/** `isActive` is accepted here but not on create — it is the only way back
+ *  from `deactivateModel`, which sets it false. */
+export async function updateModel(
+  pool: Pool,
+  adminId: string,
+  modelId: string,
+  input: Partial<ModelInput> & { isActive?: boolean },
+) {
   const sets: string[] = [];
   const values: unknown[] = [];
   for (const [key, value] of Object.entries(input)) {

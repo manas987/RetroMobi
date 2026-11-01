@@ -1,12 +1,26 @@
 import type { Request, Response } from "express";
 import { pathParam } from "../../../lib/pathParam.ts";
 import { pool } from "../../../DB/client.ts";
+import { presignDownload } from "../../../lib/storage.ts";
 import * as verificationService from "./verificationService.ts";
 
 export async function queue(req: Request, res: Response) {
-  const { type } = req.validatedQuery as { type: verificationService.VerifiableType };
-  const rows = await verificationService.listVerificationQueue(pool, type);
+  const { type, status } = req.validatedQuery as {
+    type: verificationService.VerifiableType;
+    status?: string;
+  };
+  const rows = await verificationService.listVerificationQueue(pool, type, status);
   res.status(200).json({ rows });
+}
+
+export async function document(req: Request, res: Response) {
+  const storageKey = await verificationService.getVerificationStorageKey(
+    pool,
+    pathParam(req, "type") as verificationService.VerifiableType,
+    pathParam(req, "id"),
+  );
+  const downloadUrl = await presignDownload(storageKey);
+  res.status(200).json({ downloadUrl });
 }
 
 export async function shop(req: Request, res: Response) {

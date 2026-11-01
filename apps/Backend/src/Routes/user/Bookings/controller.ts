@@ -12,6 +12,11 @@ export async function createHold(req: Request, res: Response) {
   res.status(201).json(result);
 }
 
+export async function list(req: Request, res: Response) {
+  const bookings = await bookingsService.listMyBookings(pool, req.userId!);
+  res.status(200).json({ bookings });
+}
+
 export async function cancelBooking(req: Request, res: Response) {
   const result = await bookingsService.cancelBooking(
     pool,

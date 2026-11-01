@@ -2,12 +2,17 @@ import type { SearchCriteria, SortKey } from "./types";
 
 const SORTS: SortKey[] = ["price", "distance", "rating"];
 
-/** Default window: Rishikesh demand is same-day, so today 10:00 -> tomorrow 10:00. */
+/** Launch city shown when a page is reached with no city in the URL (e.g. the
+ *  header's bare "Browse scooters" link). */
+export const DEFAULT_CITY = "Dehradun";
+
+/** Default window: Rishikesh demand is same-day, so today 10am -> today 10pm. */
 export function defaultWindow(): { pickupAt: string; returnAt: string } {
-  const base = new Date();
-  base.setHours(10, 0, 0, 0);
-  const next = new Date(base.getTime() + 24 * 60 * 60 * 1000);
-  return { pickupAt: toIsoWithOffset(base), returnAt: toIsoWithOffset(next) };
+  const pickup = new Date();
+  pickup.setHours(10, 0, 0, 0);
+  const ret = new Date();
+  ret.setHours(22, 0, 0, 0);
+  return { pickupAt: toIsoWithOffset(pickup), returnAt: toIsoWithOffset(ret) };
 }
 
 /** Always emit an explicit offset. A naked local datetime prices a different
@@ -29,8 +34,6 @@ function num(v: string | null): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-export const MAX_RENTAL_DAYS = 10;
-
 export function parseSearchParams(search: string): SearchCriteria {
   const p = new URLSearchParams(search);
   const win = defaultWindow();
@@ -38,16 +41,19 @@ export function parseSearchParams(search: string): SearchCriteria {
 
   return {
     city: p.get("city") ?? "",
+    shopId: p.get("shopId") ?? undefined,
     pickupAt: p.get("pickupAt") ?? win.pickupAt,
     returnAt: p.get("returnAt") ?? win.returnAt,
-    lat: num(p.get("lat")),
-    lng: num(p.get("lng")),
     minPrice: num(p.get("minPrice")),
     maxPrice: num(p.get("maxPrice")),
     modelId: p.get("modelId") ?? undefined,
+    make: p.get("make") ? p.get("make")!.split(",") : undefined,
     minRating: num(p.get("minRating")),
     maxDistanceKm: num(p.get("maxDistanceKm")),
-    fuelType: (p.get("fuelType") as "PETROL" | "ELECTRIC" | null) ?? undefined,
+    bodyType: p.get("bodyType") ? p.get("bodyType")!.split(",") : undefined,
+    fuelType: p.get("fuelType")
+      ? (p.get("fuelType")!.split(",") as ("PETROL" | "ELECTRIC")[])
+      : undefined,
     minEngineCc: num(p.get("minEngineCc")),
     maxEngineCc: num(p.get("maxEngineCc")),
     seatingCapacity: num(p.get("seatingCapacity")),
@@ -65,16 +71,17 @@ export function toSearchParams(c: Partial<SearchCriteria>): string {
     p.set(k, String(v));
   };
   put("city", c.city);
+  put("shopId", c.shopId);
   put("pickupAt", c.pickupAt);
   put("returnAt", c.returnAt);
-  put("lat", c.lat);
-  put("lng", c.lng);
   put("minPrice", c.minPrice);
   put("maxPrice", c.maxPrice);
   put("modelId", c.modelId);
+  put("make", c.make && c.make.length > 0 ? c.make.join(",") : undefined);
   put("minRating", c.minRating);
   put("maxDistanceKm", c.maxDistanceKm);
-  put("fuelType", c.fuelType);
+  put("bodyType", c.bodyType && c.bodyType.length > 0 ? c.bodyType.join(",") : undefined);
+  put("fuelType", c.fuelType && c.fuelType.length > 0 ? c.fuelType.join(",") : undefined);
   put("minEngineCc", c.minEngineCc);
   put("maxEngineCc", c.maxEngineCc);
   put("seatingCapacity", c.seatingCapacity);
@@ -84,16 +91,57 @@ export function toSearchParams(c: Partial<SearchCriteria>): string {
   return p.toString();
 }
 
-/** Which filters are active, for the removable chip row. */
-export function activeFilters(c: SearchCriteria): { key: keyof SearchCriteria; label: string }[] {
-  const out: { key: keyof SearchCriteria; label: string }[] = [];
-  if (c.fuelType) out.push({ key: "fuelType", label: c.fuelType === "ELECTRIC" ? "Electric" : "Petrol" });
-  if (c.maxPrice) out.push({ key: "maxPrice", label: `Under ₹${Math.round(c.maxPrice / 100).toLocaleString("en-IN")}` });
-  if (c.maxDistanceKm) out.push({ key: "maxDistanceKm", label: `Within ${c.maxDistanceKm} km` });
-  if (c.minRating) out.push({ key: "minRating", label: `${c.minRating}★ and up` });
-  if (c.seatingCapacity) out.push({ key: "seatingCapacity", label: `${c.seatingCapacity} seats` });
+/** "MOTORCYCLE" -> "Motorcycle". The values are free text server-side, so
+ *  this formats whatever arrives rather than mapping a fixed list. */
+export function bodyTypeLabel(bodyType: string): string {
+  return bodyType.charAt(0) + bodyType.slice(1).toLowerCase().replace(/_/g, " ");
+}
+
+/** Which filters are active, for the removable chip row. Each chip carries
+ *  its own removal patch — needed for `make`/`fuelType` since removing one
+ *  selected value must keep the others, not clear the whole filter. */
+export function activeFilters(c: SearchCriteria): { key: string; label: string; clear: Partial<SearchCriteria> }[] {
+  const out: { key: string; label: string; clear: Partial<SearchCriteria> }[] = [];
+  for (const bt of c.bodyType ?? []) {
+    out.push({
+      key: `bodyType:${bt}`,
+      label: bodyTypeLabel(bt),
+      clear: { bodyType: c.bodyType!.filter((v) => v !== bt) },
+    });
+  }
+  for (const ft of c.fuelType ?? []) {
+    out.push({
+      key: `fuelType:${ft}`,
+      label: ft === "ELECTRIC" ? "Electric" : "Petrol",
+      clear: { fuelType: c.fuelType!.filter((v) => v !== ft) },
+    });
+  }
+  for (const m of c.make ?? []) {
+    out.push({ key: `make:${m}`, label: m, clear: { make: c.make!.filter((v) => v !== m) } });
+  }
+  if (c.maxPrice)
+    out.push({
+      key: "maxPrice",
+      label: `Under ₹${Math.round(c.maxPrice / 100).toLocaleString("en-IN")}`,
+      clear: { maxPrice: undefined },
+    });
+  if (c.maxDistanceKm)
+    out.push({ key: "maxDistanceKm", label: `Within ${c.maxDistanceKm} km`, clear: { maxDistanceKm: undefined } });
+  if (c.minRating)
+    out.push({ key: "minRating", label: `${c.minRating}★ and up`, clear: { minRating: undefined } });
+  if (c.seatingCapacity)
+    out.push({
+      key: "seatingCapacity",
+      label: `${c.seatingCapacity} seats`,
+      clear: { seatingCapacity: undefined },
+    });
   if (c.minEngineCc || c.maxEngineCc)
-    out.push({ key: "minEngineCc", label: `${c.minEngineCc ?? 0}–${c.maxEngineCc ?? "∞"} cc` });
-  if (c.fullyVerified) out.push({ key: "fullyVerified", label: "Fully verified only" });
+    out.push({
+      key: "minEngineCc",
+      label: `${c.minEngineCc ?? 0}–${c.maxEngineCc ?? "∞"} cc`,
+      clear: { minEngineCc: undefined, maxEngineCc: undefined },
+    });
+  if (c.fullyVerified)
+    out.push({ key: "fullyVerified", label: "Fully verified only", clear: { fullyVerified: undefined } });
   return out;
 }

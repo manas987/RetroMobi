@@ -28,6 +28,11 @@ export async function listBookings(req: Request, res: Response) {
   res.status(200).json({ bookings: rows });
 }
 
+export async function listLicences(req: Request, res: Response) {
+  const licences = await oversightService.listLicences(pool, req.validatedQuery as never);
+  res.status(200).json({ licences });
+}
+
 export async function listPayments(req: Request, res: Response) {
   const rows = await oversightService.listAllPayments(pool, req.validatedQuery as any);
   res.status(200).json({ payments: rows });

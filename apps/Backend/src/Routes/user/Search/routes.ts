@@ -8,5 +8,6 @@ const router = Router();
 
 router.get("/", rateLimit, validate(SearchQuerySchema, "query"), controller.search);
 router.get("/vehicle/:vehicleId", rateLimit, controller.detail);
+router.get("/models/:modelId/image", rateLimit, controller.modelImage);
 
 export default router;

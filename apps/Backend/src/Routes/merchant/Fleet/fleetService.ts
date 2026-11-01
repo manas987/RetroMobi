@@ -15,10 +15,17 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 export async function listVehicles(pool: Pool, shopId: string) {
+  // `vehicle_pricing` is a LEFT join on purpose: adding a vehicle writes the
+  // row and its pricing in two separate calls, so a vehicle whose second call
+  // failed has no pricing and must still appear in the fleet list — with a
+  // visibly missing rate rather than vanishing from the page that is the only
+  // place to fix it.
   const { rows } = await pool.query(
-    `select v.*, m.make, m.model
+    `select v.*, m.make, m.model,
+            vp.amount, vp.weekend_amount, vp.security_deposit_amount, vp.late_fee_amount
        from vehicles v
        join vehicle_models m on m.id = v.model_id
+       left join vehicle_pricing vp on vp.vehicle_id = v.id
       where v.shop_id = $1 and v.deleted_at is null
       order by v.created_at desc`,
     [shopId],
@@ -215,6 +222,21 @@ export async function createDocument(
   return rows[0];
 }
 
+/**
+ * `PUT /registration` appends a new row every time rather than updating, so
+ * "the" registration record is the newest one. Returns null rather than
+ * throwing when none has been filed — a vehicle with no record is ordinary,
+ * not an error.
+ */
+export async function getRegistrationRecord(pool: Pool, vehicleId: string) {
+  const { rows } = await pool.query(
+    `select * from vehicle_registration_records where vehicle_id = $1
+      order by verified_at desc nulls last, id desc limit 1`,
+    [vehicleId],
+  );
+  return rows[0] ?? null;
+}
+
 async function requireDocument(pool: Pool, vehicleId: string, documentId: string) {
   const { rows } = await pool.query(
     `select * from vehicle_documents where id = $1 and vehicle_id = $2 and deleted_at is null`,
@@ -232,6 +254,17 @@ export async function attachDocumentFile(pool: Pool, merchantUserId: string, doc
   );
   if (rows.length === 0) throw new VehicleNotFoundError(`document ${documentId} not found`);
   return rows[0];
+}
+
+export class NoFileError extends Error {}
+
+/** Vehicle scope is already enforced by `requirePermission` resolving the
+ *  shop from `:vehicleId`; `requireDocument` pins the document to that
+ *  vehicle, so a presigned GET can never cross to another shop's paperwork. */
+export async function getDocumentStorageKey(pool: Pool, vehicleId: string, documentId: string): Promise<string> {
+  const doc = await requireDocument(pool, vehicleId, documentId);
+  if (!doc.storage_key) throw new NoFileError(`document ${documentId} has no file attached`);
+  return doc.storage_key;
 }
 
 export async function softDeleteDocument(pool: Pool, merchantUserId: string, vehicleId: string, documentId: string) {
@@ -291,6 +324,15 @@ export async function softDeleteMedia(pool: Pool, merchantUserId: string, vehicl
     [mediaId, vehicleId],
   );
   if (!rowCount) throw new VehicleNotFoundError(`media ${mediaId} not found on this vehicle`);
+}
+
+export async function getMediaStorageKey(pool: Pool, vehicleId: string, mediaId: string): Promise<string> {
+  const { rows } = await pool.query(
+    `select storage_key from vehicle_media where id = $1 and vehicle_id = $2 and deleted_at is null`,
+    [mediaId, vehicleId],
+  );
+  if (rows.length === 0) throw new VehicleNotFoundError(`media ${mediaId} not found on this vehicle`);
+  return rows[0].storage_key;
 }
 
 export async function listAccessories(pool: Pool, vehicleId: string) {

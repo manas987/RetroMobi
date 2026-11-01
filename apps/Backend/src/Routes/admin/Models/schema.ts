@@ -10,10 +10,20 @@ export const CreateModelSchema = z.object({
   seatingCapacity: z.number().int().positive().optional(),
 });
 
-export const UpdateModelSchema = CreateModelSchema.partial();
+// `isActive` is update-only, never part of create (a new model is active by
+// default). Without it here, DELETE /models/:id — which is a deactivate, not
+// a delete — was irreversible through the API.
+export const UpdateModelSchema = CreateModelSchema.partial().extend({
+  isActive: z.boolean().optional(),
+});
 
 export const ListModelsQuerySchema = z.object({
-  isActive: z.coerce.boolean().optional(),
+  // Not z.coerce.boolean(): that is JS truthiness, so the string "false"
+  // coerces to true and `?isActive=false` filtered the wrong way.
+  isActive: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .optional(),
   q: z.string().optional(),
 });
 

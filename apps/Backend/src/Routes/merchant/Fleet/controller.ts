@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { pathParam } from "../../../lib/pathParam.ts";
 import { pool } from "../../../DB/client.ts";
-import { presignUpload } from "../../../lib/storage.ts";
+import { presignDownload, presignUpload } from "../../../lib/storage.ts";
 import { trackerClient } from "../../../providers/tracker.ts";
 import * as fleetService from "./fleetService.ts";
 
@@ -89,6 +89,31 @@ export async function confirmDocument(req: Request, res: Response) {
     req.body.storageKey,
   );
   res.status(200).json(document);
+}
+
+export async function downloadDocument(req: Request, res: Response) {
+  const storageKey = await fleetService.getDocumentStorageKey(
+    pool,
+    pathParam(req, "vehicleId"),
+    pathParam(req, "documentId"),
+  );
+  const downloadUrl = await presignDownload(storageKey);
+  res.status(200).json({ downloadUrl });
+}
+
+export async function downloadMedia(req: Request, res: Response) {
+  const storageKey = await fleetService.getMediaStorageKey(
+    pool,
+    pathParam(req, "vehicleId"),
+    pathParam(req, "mediaId"),
+  );
+  const downloadUrl = await presignDownload(storageKey);
+  res.status(200).json({ downloadUrl });
+}
+
+export async function getRegistration(req: Request, res: Response) {
+  const record = await fleetService.getRegistrationRecord(pool, pathParam(req, "vehicleId"));
+  res.status(200).json({ record });
 }
 
 export async function listMedia(req: Request, res: Response) {

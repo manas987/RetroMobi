@@ -7,6 +7,7 @@ import ridersRoutes from "./Riders/routes.ts";
 import reviewsRoutes from "./Reviews/routes.ts";
 import searchRoutes from "./Search/routes.ts";
 import ticketsRoutes from "./Tickets/routes.ts";
+import shopsRoutes from "./Shops/routes.ts";
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.use("/bookings", pickupRoutes);
 router.use("/payments", paymentsRoutes);
 router.use("/riders", ridersRoutes);
 router.use("/tickets", ticketsRoutes);
+router.use("/shops", shopsRoutes);
 router.use(reviewsRoutes);
 
 export default router;

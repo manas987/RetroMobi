@@ -41,10 +41,13 @@ export interface SearchResult {
   primaryOffer: SearchOffer;
   /** number of offers that matched the active filters */
   offerCount: number;
+  /** vehicleIds of every available unit of this model at this shop, ranked like primaryOffer */
+  offerVehicleIds: string[];
 }
 
 export interface VehicleDetail {
   vehicleId: string;
+  modelId: string;
   make: string;
   model: string;
   imageKey: string | null;
@@ -71,20 +74,57 @@ export interface VehicleDetail {
   licence: Licence | null;
 }
 
+/** Mirrors apps/Backend/src/Routes/user/Shops/shopProfileService.ts exactly. */
+export interface ShopHours {
+  dayOfWeek: number;
+  opensAt: string;
+  closesAt: string;
+}
+
+export interface ShopLicence {
+  licenceNumber: string;
+  issuingAuthority: string | null;
+  issuedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface ShopProfile {
+  shopId: string;
+  name: string;
+  ownerName: string | null;
+  phone: string | null;
+  addressLine1: string;
+  city: string;
+  state: string;
+  pincode: string;
+  latitude: number | null;
+  longitude: number | null;
+  status: string;
+  rating: number | null;
+  reviewCount: number;
+  memberSince: string;
+  hours: ShopHours[];
+  licences: ShopLicence[];
+  bodyTypes: string[];
+}
+
 export type SortKey = "price" | "distance" | "rating";
 
 export interface SearchCriteria {
   city: string;
+  /** scopes results to one shop's inventory, ignoring city — used by the shop page */
+  shopId?: string;
   pickupAt: string;
   returnAt: string;
-  lat?: number;
-  lng?: number;
   minPrice?: number;
   maxPrice?: number;
   modelId?: string;
+  make?: string[];
   minRating?: number;
   maxDistanceKm?: number;
-  fuelType?: "PETROL" | "ELECTRIC";
+  /** `vehicle_models.body_type` values, e.g. SCOOTER / MOTORCYCLE — free text server-side, so not a union */
+  bodyType?: string[];
+  fuelType?: ("PETROL" | "ELECTRIC")[];
   minEngineCc?: number;
   maxEngineCc?: number;
   seatingCapacity?: number;

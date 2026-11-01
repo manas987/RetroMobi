@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { pathParam } from "../../../lib/pathParam.ts";
 import { pool } from "../../../DB/client.ts";
-import { presignUpload } from "../../../lib/storage.ts";
+import { presignDownload, presignUpload } from "../../../lib/storage.ts";
 import * as licencesService from "./licencesService.ts";
 
 export async function list(req: Request, res: Response) {
@@ -35,6 +35,16 @@ export async function confirm(req: Request, res: Response) {
   res.status(200).json(licence);
 }
 
+export async function downloadLicence(req: Request, res: Response) {
+  const storageKey = await licencesService.getLicenceStorageKey(
+    pool,
+    req.merchantUserId!,
+    pathParam(req, "licenceId"),
+  );
+  const downloadUrl = await presignDownload(storageKey);
+  res.status(200).json({ downloadUrl });
+}
+
 export async function linkShop(req: Request, res: Response) {
   await licencesService.linkLicenceToShop(pool, req.merchantUserId!, pathParam(req, "licenceId"), req.body);
   res.status(204).send();
@@ -58,6 +68,16 @@ export async function listDocuments(req: Request, res: Response) {
 export async function createDocument(req: Request, res: Response) {
   const document = await licencesService.createMerchantDocument(pool, req.merchantUserId!, req.body);
   res.status(201).json(document);
+}
+
+export async function downloadDocument(req: Request, res: Response) {
+  const storageKey = await licencesService.getMerchantDocumentStorageKey(
+    pool,
+    req.merchantUserId!,
+    pathParam(req, "documentId"),
+  );
+  const downloadUrl = await presignDownload(storageKey);
+  res.status(200).json({ downloadUrl });
 }
 
 export async function removeDocument(req: Request, res: Response) {

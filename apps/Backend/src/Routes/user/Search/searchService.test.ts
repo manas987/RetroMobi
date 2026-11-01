@@ -197,6 +197,49 @@ describe("grouping by model", () => {
     const { results } = await searchVehicles(pool, { city, pickupAt, returnAt });
     expect(results.length).toBeGreaterThanOrEqual(2);
   });
+
+  test("the same model at two different shops produces two results, not one", async () => {
+    const shopA = await isolatedCity();
+    const shopB = await createShop(pool, (await createMerchant(pool)).id, { city: shopA.city });
+    const model = await createModel(pool);
+    await createBookableVehicle(pool, { shopId: shopA.shopId, modelId: model.id });
+    await createBookableVehicle(pool, { shopId: shopB.id, modelId: model.id });
+    const { pickupAt, returnAt } = futureWindow(630);
+
+    const { results } = await searchVehicles(pool, { city: shopA.city, pickupAt, returnAt });
+    const forModel = results.filter((r) => r.model.id === model.id);
+
+    expect(forModel).toHaveLength(2);
+    expect(forModel.every((r) => r.offerCount === 1)).toBe(true);
+  });
+
+  test("offerVehicleIds lists every unit in the group, ranked like primaryOffer", async () => {
+    const { shopId, city } = await isolatedCity();
+    const model = await createModel(pool);
+    const cheap = await createBookableVehicle(pool, { shopId, modelId: model.id, amount: 20_000 });
+    const pricey = await createBookableVehicle(pool, { shopId, modelId: model.id, amount: 80_000 });
+    const { pickupAt, returnAt } = futureWindow(640);
+
+    const { results } = await searchVehicles(pool, { city, pickupAt, returnAt, sort: "price" });
+    const forModel = results.find((r) => r.model.id === model.id)!;
+
+    expect(forModel.offerVehicleIds).toEqual([cheap.id, pricey.id]);
+  });
+});
+
+describe("shopId-scoped search", () => {
+  test("returns only that shop's vehicles, across any city", async () => {
+    const a = await isolatedCity();
+    const b = await isolatedCity();
+    const inA = await createBookableVehicle(pool, { shopId: a.shopId });
+    const inB = await createBookableVehicle(pool, { shopId: b.shopId });
+    const { pickupAt, returnAt } = futureWindow(650);
+
+    const { results } = await searchVehicles(pool, { shopId: a.shopId, pickupAt, returnAt });
+    const ids = vehicleIdsIn(results);
+    expect(ids).toContain(inA.id);
+    expect(ids).not.toContain(inB.id);
+  });
 });
 
 describe("city matching", () => {
@@ -345,6 +388,31 @@ describe("fuelType filter", () => {
 
     const { results } = await searchVehicles(pool, { city, pickupAt, returnAt, fuelType: "PETROL" });
     expect(results).toHaveLength(0);
+  });
+});
+
+describe("bodyType filter", () => {
+  test("excludes a model of another body type and keeps a matching one", async () => {
+    const { shopId, city } = await isolatedCity();
+    const stamp = Date.now();
+    const { rows: scooter } = await pool.query(
+      `insert into vehicle_models (make, model, body_type) values ('Honda', $1, 'SCOOTER') returning id`,
+      [`Activa${stamp}`],
+    );
+    const { rows: motorcycle } = await pool.query(
+      `insert into vehicle_models (make, model, body_type) values ('Bajaj', $1, 'MOTORCYCLE') returning id`,
+      [`Pulsar${stamp}`],
+    );
+    await createBookableVehicle(pool, { shopId, modelId: scooter[0].id });
+    await createBookableVehicle(pool, { shopId, modelId: motorcycle[0].id });
+    const { pickupAt, returnAt } = futureWindow(1140);
+
+    const scooters = await searchVehicles(pool, { city, pickupAt, returnAt, bodyType: "SCOOTER" });
+    expect(scooters.results).toHaveLength(1);
+    expect(scooters.results[0]!.model.bodyType).toBe("SCOOTER");
+
+    const both = await searchVehicles(pool, { city, pickupAt, returnAt, bodyType: "SCOOTER,MOTORCYCLE" });
+    expect(both.results).toHaveLength(2);
   });
 });
 

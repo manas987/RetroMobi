@@ -1,0 +1,41 @@
+import { test, expect } from "bun:test";
+import { dateLabel, enumLabel, rupees } from "./format";
+
+test("enumLabel turns a DB enum into a sentence", () => {
+  expect(enumLabel("BANK_PROOF")).toBe("Bank proof");
+  expect(enumLabel("IN_PROGRESS")).toBe("In progress");
+  expect(enumLabel("OWNER")).toBe("Owner");
+  expect(enumLabel(null)).toBe("—");
+  expect(enumLabel("")).toBe("—");
+});
+
+test("enumLabel keeps acronyms upper-case", () => {
+  // "Gstin" and "Rc" read as bugs to anyone who knows the document.
+  expect(enumLabel("GSTIN")).toBe("GSTIN");
+  expect(enumLabel("PAN")).toBe("PAN");
+  expect(enumLabel("RC")).toBe("RC");
+  expect(enumLabel("PUC")).toBe("PUC");
+  expect(enumLabel("GST_RATE")).toBe("GST rate");
+  expect(enumLabel("BANK_PROOF")).toBe("Bank proof");
+});
+
+test("dateLabel drops the meaningless midnight a Postgres date serialises with", () => {
+  // What `pg` actually hands back for a `date` column, via JSON.
+  expect(dateLabel("2026-04-01T00:00:00.000Z")).toBe("1 Apr 2026");
+  expect(dateLabel("2026-04-01")).toBe("1 Apr 2026");
+});
+
+test("dateLabel keeps the stored day regardless of the viewer's timezone", () => {
+  // Parsed at local noon: UTC midnight would render as 31 Mar anywhere west
+  // of Greenwich, which is the bug this exists to avoid.
+  expect(dateLabel("2026-04-01T00:00:00.000Z")).toContain("1 Apr");
+});
+
+test("dateLabel passes through anything that is not a date", () => {
+  expect(dateLabel("not a date")).toBe("not a date");
+  expect(dateLabel(null)).toBe("—");
+});
+
+test("rupees still formats integer paise", () => {
+  expect(rupees(50_000)).toBe("₹500");
+});

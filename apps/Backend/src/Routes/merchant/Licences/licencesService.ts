@@ -4,9 +4,27 @@ import { writeAudit } from "../../../lib/audit.ts";
 export class LicenceNotFoundError extends Error {}
 export class DocumentNotFoundError extends Error {}
 
+/**
+ * The `shops` aggregate is why this is not a plain `select *`: without it the
+ * merchant portal had no way to read a licence's branch links back, so the
+ * UI could only offer attach and detach blindly and say it did not know which
+ * was in effect — the POST is `on conflict do nothing`, so even a 204 proved
+ * nothing. Only non-deleted branches are counted, since a soft-deleted shop
+ * leaves its `license_shops` row behind.
+ */
 export async function listLicences(pool: Pool, merchantUserId: string) {
   const { rows } = await pool.query(
-    `select * from shop_licenses where merchant_user_id = $1 and deleted_at is null order by created_at desc`,
+    `select sl.*,
+            coalesce(
+              (select json_agg(json_build_object('id', s.id, 'name', s.name, 'city', s.city))
+                 from license_shops ls
+                 join shops s on s.id = ls.shop_id and s.deleted_at is null
+                where ls.license_id = sl.id),
+              '[]'::json
+            ) as shops
+       from shop_licenses sl
+      where sl.merchant_user_id = $1 and sl.deleted_at is null
+      order by sl.created_at desc`,
     [merchantUserId],
   );
   return rows;
@@ -50,6 +68,17 @@ async function requireOwnedLicence(pool: Pool, merchantUserId: string, licenceId
   );
   if (rows.length === 0) throw new LicenceNotFoundError(`licence ${licenceId} not found`);
   return rows[0];
+}
+
+export class NoFileError extends Error {}
+
+/** Ownership is re-checked here, not just at upload — a presigned GET is a
+ *  readable copy of the file, so it must never be handed out on a licence the
+ *  caller does not hold. */
+export async function getLicenceStorageKey(pool: Pool, merchantUserId: string, licenceId: string): Promise<string> {
+  const licence = await requireOwnedLicence(pool, merchantUserId, licenceId);
+  if (!licence.storage_key) throw new NoFileError(`licence ${licenceId} has no file attached`);
+  return licence.storage_key;
 }
 
 export async function attachLicenceFile(pool: Pool, merchantUserId: string, licenceId: string, storageKey: string) {
@@ -200,6 +229,16 @@ export async function attachMerchantDocumentFile(pool: Pool, merchantUserId: str
     [storageKey, documentId],
   );
   return rows[0];
+}
+
+export async function getMerchantDocumentStorageKey(
+  pool: Pool,
+  merchantUserId: string,
+  documentId: string,
+): Promise<string> {
+  const doc = await requireOwnedDocument(pool, merchantUserId, documentId);
+  if (!doc.storage_key) throw new NoFileError(`document ${documentId} has no file attached`);
+  return doc.storage_key;
 }
 
 export async function softDeleteMerchantDocument(pool: Pool, merchantUserId: string, documentId: string) {

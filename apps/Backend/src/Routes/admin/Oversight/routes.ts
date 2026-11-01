@@ -6,6 +6,7 @@ import {
   ListAuditLogsQuerySchema,
   ListBookingsQuerySchema,
   ListMerchantsQuerySchema,
+  ListLicencesQuerySchema,
   ListPaymentsQuerySchema,
   ListPayoutsQuerySchema,
   ListShopsQuerySchema,
@@ -41,6 +42,14 @@ router.get(
   requireAdminRole("ADMIN", "SUPER_ADMIN"),
   validate(ListBookingsQuerySchema, "query"),
   controller.listBookings,
+);
+
+// Licence linking is an ADMIN job, so the list it needs is ADMIN-visible.
+router.get(
+  "/licences",
+  requireAdminRole("ADMIN", "SUPER_ADMIN"),
+  validate(ListLicencesQuerySchema, "query"),
+  controller.listLicences,
 );
 
 // SUPER_ADMIN gets money and logs.

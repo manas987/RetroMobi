@@ -1,12 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { combine, splitIso } from "./DateTimeField";
+import { DateRangeField } from "./DateRangeField";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { toIsoWithOffset } from "../lib/searchParams";
 
-const CITIES = ["Dehradun", "Haridwar", "Rishikesh"];
-
-/** <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm", our ISO carries an offset too. */
-function toLocalInputValue(iso: string): string {
-  return iso.slice(0, 16);
-}
+export const CITIES = ["Dehradun", "Haridwar", "Rishikesh"];
 
 export interface SearchCapsuleValue {
   city: string;
@@ -24,59 +22,80 @@ export function SearchCapsule({
   compact?: boolean;
 }) {
   const [city, setCity] = useState(initial.city);
-  const [pickupAt, setPickupAt] = useState(toLocalInputValue(initial.pickupAt));
-  const [returnAt, setReturnAt] = useState(toLocalInputValue(initial.returnAt));
+
+  // Browse lands with no city in the URL, so `initial.city` starts as "" —
+  // the dropdown locks onto that empty value (useState's initializer only
+  // runs once on mount) even after Browse's own bootstrap effect silently
+  // navigates to a real default city and the results grid updates. Stay in
+  // sync with whatever the URL actually ends up saying.
+  useEffect(() => setCity(initial.city), [initial.city]);
+
+  const initPickup = splitIso(initial.pickupAt);
+  const initReturn = splitIso(initial.returnAt);
+  const [pickupDate, setPickupDate] = useState(initPickup.date);
+  const [pickupTime, setPickupTime] = useState(initPickup.time);
+  const [returnDate, setReturnDate] = useState(initReturn.date);
+  const [returnTime, setReturnTime] = useState(initReturn.time);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!city || !pickupAt || !returnAt) return;
+    if (!city) return;
     onSearch({
       city,
-      pickupAt: toIsoWithOffset(new Date(pickupAt)),
-      returnAt: toIsoWithOffset(new Date(returnAt)),
+      pickupAt: toIsoWithOffset(combine(pickupDate, pickupTime)),
+      returnAt: toIsoWithOffset(combine(returnDate, returnTime)),
+    });
+  }
+
+  // Changing the city only moves the trigger label if it waits for the
+  // Search button — the results grid stays on the old city in the meantime,
+  // looking like it belongs to the newly-picked one. Search right away.
+  function changeCity(next: string) {
+    setCity(next);
+    onSearch({
+      city: next,
+      pickupAt: toIsoWithOffset(combine(pickupDate, pickupTime)),
+      returnAt: toIsoWithOffset(combine(returnDate, returnTime)),
     });
   }
 
   return (
     <form
       onSubmit={submit}
-      className={`bg-surface rounded-panel shadow-[0_1px_2px_rgba(18,22,26,0.06),0_12px_32px_rgba(18,22,26,0.1)] border border-line flex flex-col sm:flex-row ${compact ? "text-sm" : ""}`}
+      className={`bg-surface rounded-panel shadow-[0_1px_2px_rgba(18,22,26,0.06),0_12px_32px_rgba(18,22,26,0.1)] border border-line flex flex-col min-[900px]:flex-row ${compact ? "text-sm" : ""}`}
     >
       <Field label="Pick-up location">
-        <select
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          className="w-full bg-transparent outline-none text-ink font-medium"
-        >
-          {CITIES.map((c) => (
-            <option key={c} value={c}>
-              {c}, Uttarakhand
-            </option>
-          ))}
-        </select>
+        <Select value={city} onValueChange={changeCity}>
+          <SelectTrigger className="h-auto w-full border-0 rounded-none bg-transparent p-0 justify-start gap-1.5 text-ink font-medium hover:bg-transparent">
+            <SelectValue className="truncate" />
+          </SelectTrigger>
+          <SelectContent>
+            {CITIES.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}, Uttarakhand
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
       <Divider />
-      <Field label="Pick-up">
-        <input
-          type="datetime-local"
-          value={pickupAt}
-          onChange={(e) => setPickupAt(e.target.value)}
-          className="w-full bg-transparent outline-none text-ink font-medium"
+      <div className="px-4 py-2.5 shrink-0">
+        <DateRangeField
+          label=""
+          pickupDate={pickupDate}
+          pickupTime={pickupTime}
+          returnDate={returnDate}
+          returnTime={returnTime}
+          onPickupDate={setPickupDate}
+          onReturnDate={setReturnDate}
+          onPickupTime={setPickupTime}
+          onReturnTime={setReturnTime}
         />
-      </Field>
-      <Divider />
-      <Field label="Return">
-        <input
-          type="datetime-local"
-          value={returnAt}
-          onChange={(e) => setReturnAt(e.target.value)}
-          className="w-full bg-transparent outline-none text-ink font-medium"
-        />
-      </Field>
+      </div>
       <div className="p-2 flex items-stretch">
         <button
           type="submit"
-          className="w-full sm:w-auto px-6 rounded-row bg-amber text-on-amber font-semibold text-sm flex items-center justify-center gap-2 hover:brightness-95 transition-[filter]"
+          className="w-full min-[900px]:w-auto px-6 rounded-row bg-amber text-on-amber font-semibold text-sm flex items-center justify-center gap-2 hover:brightness-95 transition-[filter]"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
@@ -91,14 +110,13 @@ export function SearchCapsule({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="flex-1 min-w-0 px-4 py-2.5 flex flex-col gap-0.5">
+    <div className="flex-1 min-w-0 px-4 py-2.5 flex flex-col gap-0.5">
       <span className="text-[11px] uppercase tracking-wide text-ink-3">{label}</span>
       {children}
-    </label>
+    </div>
   );
 }
 
 function Divider() {
-  return <div className="hidden sm:block w-px my-2 bg-line" />;
+  return <div className="hidden min-[900px]:block w-px my-2 bg-line" />;
 }
-

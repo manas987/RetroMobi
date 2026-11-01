@@ -457,6 +457,26 @@ export interface RevokeSessionInput {
 }
 
 /** Returns false when the session doesn't exist or isn't owned by this user — caller maps that to 404 without distinguishing the two. */
+/**
+ * Signed-in devices. `token_hash` is deliberately never selected — it is the
+ * refresh token's only secret and listing it would hand every device's
+ * credential to any one of them.
+ *
+ * Expired rows are excluded rather than shown as dead entries: a session past
+ * `expires_at` cannot be used, so listing it would invite someone to revoke
+ * something that is already gone.
+ */
+export async function listSessions(pool: Pool, userId: string) {
+  const { rows } = await pool.query(
+    `select id, device_id, created_at, last_used_at, expires_at
+       from sessions
+      where user_id = $1 and revoked_at is null and expires_at > now()
+      order by last_used_at desc`,
+    [userId],
+  );
+  return rows;
+}
+
 export async function revokeSession(pool: Pool, input: RevokeSessionInput): Promise<boolean> {
   const { rowCount } = await pool.query(
     `update sessions set revoked_at = now()

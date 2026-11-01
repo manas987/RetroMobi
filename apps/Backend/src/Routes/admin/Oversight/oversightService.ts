@@ -45,6 +45,52 @@ export async function getMerchant(pool: Pool, merchantUserId: string) {
   return { ...rows[0], shops };
 }
 
+/**
+ * Admin-facing licence list. It exists because the only other place a licence
+ * id surfaced was `GET /verification/queue?type=SHOP_LICENCE`, which is
+ * `status = 'PENDING'` only — so approving a licence made its id vanish from
+ * the API, and nothing could then link a vehicle to it.
+ *
+ * Joins the holder and the branches the licence covers, because a bare
+ * licence number is not enough to pick the right one.
+ */
+export async function listLicences(
+  pool: Pool,
+  filters: Paging & { q?: string; status?: string },
+) {
+  const conditions: string[] = ["sl.deleted_at is null"];
+  const values: unknown[] = [];
+  if (filters.q) {
+    values.push(`%${filters.q}%`);
+    conditions.push(`(sl.licence_number ilike $${values.length} or mu.name ilike $${values.length})`);
+  }
+  if (filters.status) {
+    values.push(filters.status);
+    conditions.push(`sl.status = $${values.length}`);
+  }
+  const limitClause = pagingClause(filters, values);
+  const { rows } = await pool.query(
+    `select sl.id, sl.licence_number, sl.issuing_authority, sl.issued_at, sl.expires_at,
+            sl.status, sl.storage_key, sl.created_at,
+            sl.merchant_user_id, mu.name as merchant_name, mu.phone as merchant_phone,
+            coalesce(
+              (select json_agg(json_build_object('id', s.id, 'name', s.name, 'city', s.city))
+                 from license_shops ls
+                 join shops s on s.id = ls.shop_id and s.deleted_at is null
+                where ls.license_id = sl.id),
+              '[]'::json
+            ) as shops,
+            (select count(*) from license_vehicles lv
+              where lv.license_id = sl.id and lv.removed_at is null) as vehicle_count
+       from shop_licenses sl
+       join merchant_users mu on mu.id = sl.merchant_user_id
+      where ${conditions.join(" and ")}
+      order by sl.created_at desc ${limitClause}`,
+    values,
+  );
+  return rows;
+}
+
 export async function listAllShops(pool: Pool, filters: Paging & { city?: string; verificationStatus?: string }) {
   const conditions: string[] = ["deleted_at is null"];
   const values: unknown[] = [];
@@ -99,8 +145,25 @@ export async function listAllBookings(pool: Pool, filters: Paging & { status?: s
     conditions.push(`scheduled_pickup_at <= $${values.length}`);
   }
   const limitClause = pagingClause(filters, values);
+  // Joined so an admin row names the scooter, the shop and the renter instead
+  // of three UUIDs. Every join is LEFT except the vehicle's: a booking always
+  // has a vehicle, but `group_id`/`rider_id` are null for walk-ins and
+  // `walkin_*` null for online bookings.
   const { rows } = await pool.query(
-    `select * from bookings where ${conditions.join(" and ")} order by created_at desc ${limitClause}`,
+    `select b.*,
+            v.registration_number, m.make, m.model,
+            s.id as shop_id, s.name as shop_name, s.city as shop_city,
+            r.name as rider_name,
+            u.name as customer_name, u.phone as customer_phone
+       from bookings b
+       join vehicles v on v.id = b.vehicle_id
+       join vehicle_models m on m.id = v.model_id
+       join shops s on s.id = v.shop_id
+       left join riders r on r.id = b.rider_id
+       left join booking_groups g on g.id = b.group_id
+       left join users u on u.id = g.user_id
+      where ${conditions.map((c) => `b.${c}`).join(" and ")}
+      order by b.created_at desc ${limitClause}`,
     values,
   );
   return rows;

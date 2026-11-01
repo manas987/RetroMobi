@@ -1,41 +1,69 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { AuthLayout } from "../../components/AuthLayout";
+import { PhoneInput, DEFAULT_COUNTRY } from "../../components/PhoneInput";
+import type { Country } from "../../lib/countries";
+import { OtpInput } from "../../components/OtpInput";
+import { BackRow, ErrorBox, ResendRow, SubmitButton, TextField } from "../../components/AuthFormBits";
+import { useCountdown } from "../../lib/useCountdown";
 import { usePortalSession, portalFetch, PortalApiError } from "../../lib/portal";
 
 type Step = "phone" | "otp" | "signup";
 
+/** Mirrors MerchantLoginResult / MerchantSignupRequiredResult in
+ *  merchant/Auth/merchantAuthService.ts — a discriminated union on `status`. */
+type VerifyResult =
+  | {
+      status: "LOGIN";
+      accessToken: string;
+      refreshToken: string;
+      merchant: { id: string; phone: string; name: string | null; email: string | null };
+    }
+  | { status: "SIGNUP_REQUIRED"; signupTicket: string; ticketExpiresInSeconds: number };
+
 export function MerchantLogin() {
-  const { setTokens, deviceId } = usePortalSession("merchant");
+  const { session, setTokens, deviceId } = usePortalSession("merchant");
   const [, navigate] = useLocation();
+  const resend = useCountdown(30);
+
+  // Signing in while already signed in otherwise re-renders the form over a
+  // live session.
+  useEffect(() => {
+    if (session) navigate("/merchant", { replace: true });
+  }, [session, navigate]);
 
   const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("+91");
+  const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
+  const [localPhone, setLocalPhone] = useState("");
+  const phone = `${country.dial}${localPhone}`;
   const [code, setCode] = useState("");
   const [signupTicket, setSignupTicket] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function sendOtp(e: React.FormEvent) {
-    e.preventDefault();
+  async function run(fn: () => Promise<void>) {
     setError(null);
     setBusy(true);
     try {
-      await portalFetch("merchant", "/auth/otp/send", { method: "POST", body: { phone } });
-      setStep("otp");
+      await fn();
     } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't send the code.");
+      setError(err instanceof PortalApiError ? err.message : "Something went wrong.");
     } finally {
       setBusy(false);
     }
   }
 
-  async function verifyOtp(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      const result = await portalFetch<any>("merchant", "/auth/otp/verify", {
+  const sendOtp = () =>
+    run(async () => {
+      await portalFetch("merchant", "/auth/otp/send", { method: "POST", body: { phone } });
+      resend.start();
+      setStep("otp");
+    });
+
+  const verifyOtp = () =>
+    run(async () => {
+      const result = await portalFetch<VerifyResult>("merchant", "/auth/otp/verify", {
         method: "POST",
         body: { phone, code, deviceId },
       });
@@ -46,109 +74,64 @@ export function MerchantLogin() {
         setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
         navigate("/merchant");
       }
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "That code didn't work.");
-    } finally {
-      setBusy(false);
-    }
-  }
+    });
 
-  async function completeSignup(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      const result = await portalFetch<any>("merchant", "/auth/signup/complete", {
+  const completeSignup = () =>
+    run(async () => {
+      const result = await portalFetch<Extract<VerifyResult, { status: "LOGIN" }>>("merchant", "/auth/signup/complete", {
         method: "POST",
         body: { signupTicket, deviceId, name },
       });
       setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
       navigate("/merchant");
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't finish signing up.");
-    } finally {
-      setBusy(false);
-    }
-  }
+    });
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-5 bg-surface-2">
-      <div className="w-full max-w-sm bg-surface rounded-panel border border-line p-7">
-        <p className="text-xs font-medium text-ink-3 tracking-wide uppercase">RetroMobi for shops</p>
-        <h1 className="text-xl font-semibold text-ink mt-1 mb-6">Merchant sign-in</h1>
-
-        {error && <p className="mb-4 text-sm text-danger bg-danger-soft rounded-row px-3 py-2">{error}</p>}
-
-        {step === "phone" && (
-          <form onSubmit={sendOtp} className="flex flex-col gap-3">
-            <Field label="Phone number">
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+919812345678"
-                className="w-full rounded-row border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink"
-              />
-            </Field>
-            <SubmitButton busy={busy}>Send code</SubmitButton>
-          </form>
-        )}
-
-        {step === "otp" && (
-          <form onSubmit={verifyOtp} className="flex flex-col gap-3">
-            <p className="text-sm text-ink-3">
-              Code sent to {phone}. In dev, check the backend log for the <code>[dev-fallback]</code> line.
-            </p>
-            <Field label="6-digit code">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="123456"
-                className="w-full rounded-row border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink tnum"
-              />
-            </Field>
-            <SubmitButton busy={busy}>Verify</SubmitButton>
-          </form>
-        )}
-
-        {step === "signup" && (
-          <form onSubmit={completeSignup} className="flex flex-col gap-3">
-            <p className="text-sm text-ink-3">New number — tell us your name to finish setting up.</p>
-            <Field label="Your name">
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-row border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink"
-              />
-            </Field>
-            <SubmitButton busy={busy}>Create account</SubmitButton>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-ink-3">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function SubmitButton({ busy, children }: { busy: boolean; children: React.ReactNode }) {
-  return (
-    <button
-      type="submit"
-      disabled={busy}
-      className="mt-2 h-10 rounded-row bg-ink text-surface font-medium text-sm disabled:opacity-60"
+    <AuthLayout
+      eyebrow="RetroMobi for shops"
+      title="List your fleet, lawfully."
+      tagline="Every vehicle you list is named on your Rent-a-Motorcycle licence, visible to riders before they book."
     >
-      {busy ? "Working…" : children}
-    </button>
+      {step === "phone" && (
+        <div>
+          <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Merchant sign-in</h1>
+          <p className="text-sm text-ink-3 mb-6">Sign in or set up your shop with your phone number.</p>
+          {error && <ErrorBox text={error} />}
+          <PhoneInput value={localPhone} onChange={setLocalPhone} country={country} onCountryChange={setCountry} autoFocus />
+          <SubmitButton busy={busy} onClick={sendOtp} disabled={localPhone.length < 10}>
+            Continue
+          </SubmitButton>
+        </div>
+      )}
+
+      {step === "otp" && (
+        <div>
+          <BackRow onBack={() => setStep("phone")} />
+          <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Verify your number</h1>
+          <p className="text-sm text-ink-3 mb-6">
+            We sent a 6-digit code to <span className="text-ink font-medium">{phone}</span>.
+          </p>
+          {error && <ErrorBox text={error} />}
+          <OtpInput value={code} onChange={setCode} />
+          <SubmitButton busy={busy} onClick={verifyOtp} disabled={code.length < 6}>
+            Verify
+          </SubmitButton>
+          <ResendRow resend={resend} onResend={sendOtp} />
+        </div>
+      )}
+
+      {step === "signup" && (
+        <div>
+          <BackRow onBack={() => setStep("phone")} />
+          <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Almost there</h1>
+          <p className="text-sm text-ink-3 mb-6">New number — tell us your name to finish setting up.</p>
+          {error && <ErrorBox text={error} />}
+          <TextField label="Your name" value={name} onChange={setName} autoFocus />
+          <SubmitButton busy={busy} onClick={completeSignup} disabled={!name}>
+            Create account
+          </SubmitButton>
+        </div>
+      )}
+    </AuthLayout>
   );
 }

@@ -5,10 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
     <title>RetroMobi — scooter rental in Uttarakhand</title>
+    <!-- Airbnb Cereal, self-hosted and served by src/index.ts. These live here
+         rather than in index.css because Bun's CSS bundler base64-inlines any
+         font it can reach through url() — that put ~225KB into the
+         render-blocking stylesheet and fetched every weight whether the page
+         used it or not. An inline <style> is passed through untouched, and the
+         fetch starts from the head before the bundled CSS arrives.
+         No 600 cut exists and none is wanted: CSS resolves a requested 600 up
+         to 700, so font-medium lands on Medium and font-semibold on Bold,
+         keeping the two visibly distinct. -->
+    <style>
+      @font-face {
+        font-family: "Airbnb Cereal";
+        src: url("/fonts/AirbnbCereal_W_Bk.otf") format("opentype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Airbnb Cereal";
+        src: url("/fonts/AirbnbCereal_W_Md.otf") format("opentype");
+        font-weight: 500;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Airbnb Cereal";
+        src: url("/fonts/AirbnbCereal_W_Bd.otf") format("opentype");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Anek+Latin:wght@400;500;600;700&family=Anek+Devanagari:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Anek+Devanagari:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
   </head>

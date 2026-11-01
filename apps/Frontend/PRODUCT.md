@@ -9,7 +9,7 @@ web
 ## Users
 
 **Primary: the rider.** A domestic Indian tourist or local resident in Uttarakhand who wants a
-scooter for one to ten days. Typically on a mid-range Android phone, outdoors in hill daylight with
+scooter for anywhere from a few hours to several weeks. Typically on a mid-range Android phone, outdoors in hill daylight with
 glare, on patchy or metered mobile data, often standing in the town they are renting in. Pilgrimage
 and tourist traffic dominates (Haridwar alone sees crore-scale annual footfall), so a large share of
 visitors are first-time users who will never return to the site twice in a year.
@@ -45,7 +45,7 @@ driving licence → pay → collect in person at the shop → record the scooter
 ride → return → deposit released by the shop.
 
 Pricing is per **IST calendar day**, with separate weekday and weekend rates and optional seasonal
-overrides. No minimum duration; **maximum ten days**. All prices are tax-inclusive — GST is
+overrides. **No minimum and no maximum duration** — long rentals bill at the same daily rates, with no monthly tier. All prices are tax-inclusive — GST is
 extracted from the listed price, never added on top. All amounts are integer paise. The client never
 sends an amount; the server's snapshot is authoritative.
 
@@ -71,7 +71,10 @@ Explicitly undecided, and not to be invented:
 
 - The deposit release window (how long after return the shop must release it).
 - The GST SAC classification. The rate must vary by propulsion and engine capacity; it is currently a single flat constant, which is a known defect.
-- Whether a monthly plan exists — the ten-day cap currently forecloses it.
+- Whether a *discounted* monthly tier should exist. Rentals of any length are now allowed, but
+  they bill at plain daily rates, so a 30-day booking costs ~50% more than the ~₹9,000/month the
+  market charges (see `docs/00-market.md`). Merchants can approximate one today via
+  `special_pricings`; a first-class monthly product is undecided.
 
 Not offered at MVP, and not to be implied: damage waiver or add-on insurance, doorstep delivery,
 cross-branch one-way return, inter-state riding, foreign and NRI riders, peer-to-peer listings,

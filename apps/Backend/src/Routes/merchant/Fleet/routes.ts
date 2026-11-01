@@ -37,6 +37,7 @@ router.patch(
   controller.update,
 );
 router.delete("/vehicles/:vehicleId", requirePermission("fleet:write"), controller.remove);
+router.get("/vehicles/:vehicleId/registration", requirePermission("fleet:read"), controller.getRegistration);
 router.put(
   "/vehicles/:vehicleId/registration",
   requirePermission("fleet:write"),
@@ -69,7 +70,18 @@ router.post(
   controller.confirmDocument,
 );
 
+router.get(
+  "/vehicles/:vehicleId/documents/:documentId/download",
+  requirePermission("fleet:read"),
+  controller.downloadDocument,
+);
+
 router.get("/vehicles/:vehicleId/media", requirePermission("fleet:read"), controller.listMedia);
+router.get(
+  "/vehicles/:vehicleId/media/:mediaId/download",
+  requirePermission("fleet:read"),
+  controller.downloadMedia,
+);
 router.post(
   "/vehicles/:vehicleId/media/upload",
   requirePermission("fleet:write"),

@@ -11,14 +11,17 @@ import {
 import { sweepExpiredHolds } from "../../../lib/holds.ts";
 import {
   CouponInvalidError,
+  DuplicateRiderError,
   ExtensionPendingError,
   InvalidDurationError,
   LicenceInvalidError,
+  RiderUnavailableError,
   TooManyVehiclesError,
   VehicleUnavailableError,
   cancelBooking,
   createHold,
   getExtension,
+  listMyBookings,
   requestExtension,
 } from "./bookingsService.ts";
 import { handlePaymentWebhook } from "../Payments/paymentsService.ts";
@@ -48,6 +51,7 @@ async function customerWithRider(opts: { dlExpiresOn?: string; verified?: boolea
 describe("createHold", () => {
   test("creates a group with one booking per vehicle, all HOLD", async () => {
     const { userId, riderId } = await customerWithRider();
+    const rider2 = await createRider(pool, userId);
     const a = await createBookableVehicle(pool);
     const b = await createBookableVehicle(pool);
     const { pickupAt, returnAt } = futureWindow(40);
@@ -56,7 +60,7 @@ describe("createHold", () => {
       userId,
       items: [
         { vehicleId: a.id, riderId },
-        { vehicleId: b.id, riderId },
+        { vehicleId: b.id, riderId: rider2.id },
       ],
       pickupAt,
       returnAt,
@@ -156,6 +160,7 @@ describe("createHold", () => {
   // A partial group is worse than a clean failure the customer can retry.
   test("if ONE vehicle in the group is taken, NOTHING is created", async () => {
     const { userId, riderId } = await customerWithRider();
+    const rider2 = await createRider(pool, userId);
     const free = await createBookableVehicle(pool);
     const taken = await createBookableVehicle(pool);
     const { pickupAt, returnAt } = futureWindow(80);
@@ -171,7 +176,7 @@ describe("createHold", () => {
         userId,
         items: [
           { vehicleId: free.id, riderId },
-          { vehicleId: taken.id, riderId },
+          { vehicleId: taken.id, riderId: rider2.id },
         ],
         pickupAt,
         returnAt,
@@ -183,6 +188,38 @@ describe("createHold", () => {
       [free.id],
     );
     expect(rows).toHaveLength(0);
+  });
+
+  test("the same rider on two vehicles in one checkout is rejected", async () => {
+    const { userId, riderId } = await customerWithRider();
+    const a = await createBookableVehicle(pool);
+    const b = await createBookableVehicle(pool);
+    const { pickupAt, returnAt } = futureWindow(100);
+
+    await expect(
+      createHold(pool, {
+        userId,
+        items: [
+          { vehicleId: a.id, riderId },
+          { vehicleId: b.id, riderId },
+        ],
+        pickupAt,
+        returnAt,
+      }),
+    ).rejects.toBeInstanceOf(DuplicateRiderError);
+  });
+
+  test("a rider who already has an overlapping booking cannot be double-booked", async () => {
+    const { userId, riderId } = await customerWithRider();
+    const a = await createBookableVehicle(pool);
+    const b = await createBookableVehicle(pool);
+    const { pickupAt, returnAt } = futureWindow(110);
+
+    await createHold(pool, { userId, items: [{ vehicleId: a.id, riderId }], pickupAt, returnAt });
+
+    await expect(
+      createHold(pool, { userId, items: [{ vehicleId: b.id, riderId }], pickupAt, returnAt }),
+    ).rejects.toBeInstanceOf(RiderUnavailableError);
   });
 
   test("more than 5 vehicles is rejected", async () => {
@@ -202,15 +239,22 @@ describe("createHold", () => {
     ).rejects.toBeInstanceOf(TooManyVehiclesError);
   });
 
-  test("longer than 10 days is rejected", async () => {
+  // The 10-day cap was removed deliberately; this pins that so it cannot creep
+  // back in. Long rentals bill at daily rates -- there is no monthly tier.
+  test("a rental longer than 10 days is allowed", async () => {
     const { userId, riderId } = await customerWithRider();
     const v = await createBookableVehicle(pool);
     const { pickupAt } = futureWindow(100);
-    const returnAt = new Date(pickupAt.getTime() + 11 * 86_400_000);
+    const returnAt = new Date(pickupAt.getTime() + 30 * 86_400_000);
 
-    await expect(
-      createHold(pool, { userId, items: [{ vehicleId: v.id, riderId }], pickupAt, returnAt }),
-    ).rejects.toBeInstanceOf(InvalidDurationError);
+    const result = await createHold(pool, {
+      userId,
+      items: [{ vehicleId: v.id, riderId }],
+      pickupAt,
+      returnAt,
+    });
+    expect(result.bookings).toHaveLength(1);
+    expect(result.totals.rentalAmount).toBeGreaterThan(0);
   });
 
   test("a same-day round trip is allowed", async () => {
@@ -399,6 +443,7 @@ describe("cancelBooking", () => {
 
   test("cancels ONE vehicle, leaving the rest of the group standing", async () => {
     const { userId, riderId } = await customerWithRider();
+    const rider2 = await createRider(pool, userId);
     const a = await createBookableVehicle(pool);
     const b = await createBookableVehicle(pool);
     const { pickupAt, returnAt } = futureWindow(220);
@@ -407,7 +452,7 @@ describe("cancelBooking", () => {
       userId,
       items: [
         { vehicleId: a.id, riderId },
-        { vehicleId: b.id, riderId },
+        { vehicleId: b.id, riderId: rider2.id },
       ],
       pickupAt,
       returnAt,
@@ -684,5 +729,50 @@ describe("requestExtension (pay-first)", () => {
     );
     const extension = await getExtension(pool, b.userId, b.bookingId);
     expect(extension.status).toBe("PENDING");
+  });
+});
+
+describe("listMyBookings", () => {
+  test("returns only the caller's own bookings, newest pickup first", async () => {
+    const mine = await customerWithRider();
+    const someoneElse = await customerWithRider();
+    const v = await createBookableVehicle(pool);
+
+    const myGroup = await pool.query(`insert into booking_groups (user_id) values ($1) returning id`, [
+      mine.userId,
+    ]);
+    const theirGroup = await pool.query(`insert into booking_groups (user_id) values ($1) returning id`, [
+      someoneElse.userId,
+    ]);
+
+    const earlier = futureWindow(1300);
+    const later = futureWindow(1310);
+    await insertBooking(pool, {
+      vehicleId: v.id,
+      pickupAt: earlier.pickupAt.toISOString(),
+      returnAt: earlier.returnAt.toISOString(),
+      riderId: mine.riderId,
+      groupId: myGroup.rows[0].id,
+    });
+    await insertBooking(pool, {
+      vehicleId: v.id,
+      pickupAt: later.pickupAt.toISOString(),
+      returnAt: later.returnAt.toISOString(),
+      riderId: mine.riderId,
+      groupId: myGroup.rows[0].id,
+    });
+    await insertBooking(pool, {
+      vehicleId: v.id,
+      pickupAt: futureWindow(1305).pickupAt.toISOString(),
+      returnAt: futureWindow(1305).returnAt.toISOString(),
+      riderId: someoneElse.riderId,
+      groupId: theirGroup.rows[0].id,
+    });
+
+    const bookings = await listMyBookings(pool, mine.userId);
+    expect(bookings).toHaveLength(2);
+    expect(new Date(bookings[0]!.scheduled_pickup_at).getTime()).toBeGreaterThan(
+      new Date(bookings[1]!.scheduled_pickup_at).getTime(),
+    );
   });
 });

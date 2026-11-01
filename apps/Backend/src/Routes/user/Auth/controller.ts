@@ -86,6 +86,13 @@ export async function logout(req: Request, res: Response) {
   res.status(204).send();
 }
 
+export async function listSessions(req: Request, res: Response) {
+  const sessions = await authService.listSessions(pool, req.userId!);
+  // The caller needs to know which row is the device it is asking from, so it
+  // can label it and warn that revoking it signs them out here.
+  res.status(200).json({ sessions, currentSessionId: req.sessionId ?? null });
+}
+
 export async function revokeSession(req: Request, res: Response) {
   const found = await authService.revokeSession(pool, {
     userId: req.userId!,

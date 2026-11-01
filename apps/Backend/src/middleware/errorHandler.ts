@@ -12,9 +12,11 @@ import { SmsDeliveryError } from "../providers/smsSender.ts";
 import {
   BookingNotCancellableError,
   CouponInvalidError,
+  DuplicateRiderError,
   ExtensionPendingError,
   InvalidDurationError,
   LicenceInvalidError,
+  RiderUnavailableError,
   TooManyVehiclesError,
   VehicleUnavailableError,
 } from "../Routes/user/Bookings/bookingsService.ts";
@@ -148,6 +150,14 @@ export function errorHandler(
   }
   if (err instanceof VehicleUnavailableError) {
     res.status(409).json({ error: "vehicle_unavailable", message: err.message });
+    return;
+  }
+  if (err instanceof RiderUnavailableError) {
+    res.status(409).json({ error: "rider_unavailable", message: err.message });
+    return;
+  }
+  if (err instanceof DuplicateRiderError) {
+    res.status(400).json({ error: "duplicate_rider", message: err.message });
     return;
   }
   if (err instanceof TooManyVehiclesError) {
