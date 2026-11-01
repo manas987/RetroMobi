@@ -24,7 +24,7 @@ export function Footer() {
   }
 
   return (
-    <footer className="border-t border-line bg-surface-2 overflow-hidden">
+    <footer className="border-t border-line overflow-hidden">
       <div className="max-w-[1400px] mx-auto px-5 pt-16 flex flex-wrap gap-12 justify-between">
         <div className="flex-1 min-w-[260px] max-w-sm flex flex-col gap-4">
           <Link href="/" className="flex items-center gap-2">

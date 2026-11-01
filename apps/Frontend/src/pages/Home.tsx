@@ -6,6 +6,10 @@ import { SearchCapsule, type SearchCapsuleValue } from "../components/SearchCaps
 import { VehicleCard } from "../components/VehicleCard";
 import { useSearch } from "../lib/api";
 import heroMountains from "../assets/hero-mountains.png";
+import howSearch from "../assets/how-search.jpg";
+import howCompare from "../assets/how-compare.jpg";
+import howPay from "../assets/how-pay.jpg";
+import howRide from "../assets/how-ride.jpg";
 import { DEFAULT_CITY, defaultWindow, toSearchParams } from "../lib/searchParams";
 
 const WINDOW = defaultWindow();
@@ -92,7 +96,35 @@ export function Home() {
         </section>
       )}
 
-      <section id="how-it-works" className="bg-surface-2 border-t border-line py-16 sm:py-24">
+      {/* Everything around this is a grid of things to scan; this is the only
+          place that just talks, so it gets a single narrow centred column and
+          nothing else competing for the eye. */}
+      <section className="px-5 py-20 sm:py-28">
+        <div className="max-w-[46rem] mx-auto flex flex-col items-center text-center gap-9">
+          <SparkIcon />
+
+          <h2 className="text-2xl sm:text-[2.1rem] font-semibold text-ink tracking-tight leading-[1.25] text-balance">
+            Renting a ride should feel like the beginning of your trip—not the first risk you take.
+          </h2>
+
+          <p className="text-lg sm:text-xl leading-relaxed text-ink-2 text-pretty">
+            <strong className="font-semibold text-ink">Retromobi was created</strong> because renting a two-wheeler
+            still involves too much guesswork. Prices are difficult to compare, vehicle details are often unclear, and
+            trusting an unfamiliar rental shop can feel like a gamble. We bring verified rental businesses into one
+            marketplace, where you can compare the total price, pickup distance, rental duration, deposit and vehicle
+            details before booking. Every ride begins with a condition video, creating a shared record for a smooth,
+            dispute-free return.
+          </p>
+
+          {/* Not --color-amber: that one is fill-only, 1.9:1 as type on white.
+              This is the same dark amber the step numbers below already use. */}
+          <blockquote className="font-serif italic text-xl sm:text-2xl leading-snug text-[#8a5d00] text-balance mt-1">
+            &ldquo;Compare clearly. Book confidently. Ride without worry.&rdquo;
+          </blockquote>
+        </div>
+      </section>
+
+      <section id="how-it-works" className="py-16 sm:py-24">
         <div className="max-w-[1400px] w-full mx-auto px-5 flex flex-col gap-14">
           <div className="flex flex-col gap-3">
             <span className="text-xs font-medium text-ink-3 tracking-wide uppercase">How it works</span>
@@ -101,35 +133,18 @@ export function Home() {
             </h2>
           </div>
 
-          <ol className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-0">
-            {/* Same dashed-road + amber-dot language as the footer scene — one
-                continuous track running from the first card's centre to the
-                last, not per-card segments, so the dots land on each card's
-                middle rather than its edge. Desktop-only: it would just break
-                apart once the grid wraps to 2 or 1 columns. */}
-            <div className="hidden lg:block absolute inset-x-0 top-0 h-5 pointer-events-none" aria-hidden="true">
-              <span
-                className="absolute top-1/2 -translate-y-1/2 h-0 border-t-2 border-dashed border-[#c3cfc4]"
-                style={{ left: `${50 / STEPS.length}%`, right: `${50 / STEPS.length}%` }}
-              />
-              {STEPS.map((s, i) => (
-                <span
-                  key={s.title}
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full bg-amber shadow-[0_0_0_4px_#fdf0cf]"
-                  style={{ left: `${((i + 0.5) / STEPS.length) * 100}%` }}
-                />
-              ))}
-            </div>
-
+          <ol className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-12">
             {STEPS.map((s) => (
-              <li key={s.title} className="flex flex-col gap-3 lg:px-3.5">
-                <div className="hidden lg:block h-5" />
-
-                <div className="h-26 rounded-[14px] bg-surface border border-line flex flex-col justify-center gap-2.5 px-4.5">
-                  {s.preview}
-                </div>
-
-                <span className="tnum text-sm font-semibold text-[#8a5d00] mt-2">{s.n}</span>
+              <li key={s.title} className="flex flex-col gap-2">
+                {/* Decorative: every one of these restates the text beside it,
+                    so an alt would just make a screen reader say it twice. */}
+                <img
+                  src={s.img}
+                  alt=""
+                  loading="lazy"
+                  className="w-full aspect-[3/2] object-cover rounded-[14px] border border-line bg-surface mb-3"
+                />
+                <span className="tnum text-sm font-semibold text-[#8a5d00]">{s.n}</span>
                 <h3 className="font-medium text-lg text-ink">{s.title}</h3>
                 <p className="text-ink-3 leading-relaxed text-pretty">{s.body}</p>
               </li>
@@ -138,7 +153,7 @@ export function Home() {
         </div>
       </section>
 
-      <section className="bg-surface-2 pb-16 sm:pb-24 px-5">
+      <section className="pb-16 sm:pb-24 px-5">
         <div className="max-w-[1400px] w-full mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-8 lg:gap-16">
           <div className="flex flex-col gap-3">
             <span className="text-xs font-medium text-ink-3 tracking-wide uppercase">First time in the hills?</span>
@@ -158,75 +173,29 @@ export function Home() {
 const STEPS = [
   {
     n: "01",
-    title: "Search",
-    body: "Pick a city and your dates. Nothing asks who you are until the booking step.",
-    preview: (
-      <>
-        <span className="self-start inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-2 border border-line text-sm text-ink">
-          <span className="w-2 h-2 rounded-full bg-[#708a76]" /> Browsing as guest
-        </span>
-        <span className="text-sm text-ink-3">No sign-in until you book</span>
-      </>
-    ),
+    title: "Find your ride",
+    body: "Pick your city and dates. Explore scooters near you, with no sign-up until you book.",
+    img: howSearch,
   },
   {
     n: "02",
-    title: "Compare",
-    body: "See the real price, the shop and its licence. A scooter only appears when its registration is named on that licence.",
-    preview: (
-      <div className="flex items-center gap-2.5">
-        <span className="font-mono text-sm px-2 py-1 border-[1.5px] border-ink rounded-md tracking-wide text-ink">
-          UK07 TA 2481
-        </span>
-        <CheckIcon />
-      </div>
-    ),
+    title: "Compare with confidence",
+    body: "Compare prices, pickup distance and rental timings. See the full cost and shop details upfront, so you know exactly what you're choosing.",
+    img: howCompare,
   },
   {
     n: "03",
-    title: "Verify & pay",
-    body: "Confirm your driving licence once and pay. The deposit's amount, who holds it and how it's returned are stated upfront.",
-    preview: (
-      <>
-        <div className="flex justify-between items-baseline text-sm">
-          <span className="text-ink-3">Refundable deposit</span>
-          <span className="font-semibold text-[17px] text-ink">₹1,500</span>
-        </div>
-        <div className="h-px bg-line" />
-        <div className="flex justify-between gap-2.5 text-xs text-ink-3">
-          <span>Held by the shop</span>
-          <span>Returned at drop-off</span>
-        </div>
-      </>
-    ),
+    title: "Know before you pay",
+    body: "See the deposit, rental terms and return policy before booking. Clear details, fewer surprises.",
+    img: howPay,
   },
   {
     n: "04",
-    title: "Collect & ride",
-    body: "Pick up at the shop, record the scooter's condition, and go.",
-    preview: (
-      <>
-        <div className="flex gap-1.5">
-          <span className="w-8.5 h-6.5 rounded-[5px] bg-[#e7ece6]" />
-          <span className="w-8.5 h-6.5 rounded-[5px] bg-[#e7ece6]" />
-          <span className="w-8.5 h-6.5 rounded-[5px] bg-[#e7ece6]" />
-          <span className="w-8.5 h-6.5 rounded-[5px] bg-[#e7ece6] flex items-center justify-center text-[11px] text-ink-3">
-            +3
-          </span>
-        </div>
-        <span className="text-sm text-ink-3">Condition recorded at pickup</span>
-      </>
-    ),
+    title: "Record. Ride. Return.",
+    body: "Record a pickup video to document your scooter's condition. Ride with confidence, then return it with a clear record that helps resolve any questions.",
+    img: howRide,
   },
 ];
-
-function CheckIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#4f6e58" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 const FAQS = [
   {
@@ -278,6 +247,14 @@ function Faq() {
         );
       })}
     </div>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" className="text-amber" aria-hidden="true">
+      <path d="M12 1.5Q13.1 10.9 22.5 12 13.1 13.1 12 22.5 10.9 13.1 1.5 12 10.9 10.9 12 1.5Z" />
+    </svg>
   );
 }
 

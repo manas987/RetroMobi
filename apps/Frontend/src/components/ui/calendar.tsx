@@ -51,12 +51,12 @@ export function Calendar({
         // inset-x resolves against root's *padding box*, so inset-x-0 would put
         // the chevrons flush against the popover border and skip root's p-3
         // entirely. 8px leaves them just outside the grid, as in Airbnb's.
-        nav: "flex items-center justify-between absolute inset-x-2 top-3 h-9",
+        nav: "flex items-center justify-between absolute inset-x-2 top-3 h-9 z-10 pointer-events-none",
         button_previous: cn(
-          "h-9 w-9 flex items-center justify-center rounded-row text-ink-3 hover:text-ink hover:bg-surface-3 transition-colors aria-disabled:opacity-30 aria-disabled:pointer-events-none",
+          "h-9 w-9 pointer-events-auto flex items-center justify-center rounded-row text-ink-3 hover:text-ink hover:bg-surface-3 transition-colors aria-disabled:opacity-30 aria-disabled:pointer-events-none",
         ),
         button_next: cn(
-          "h-9 w-9 flex items-center justify-center rounded-row text-ink-3 hover:text-ink hover:bg-surface-3 transition-colors aria-disabled:opacity-30 aria-disabled:pointer-events-none",
+          "h-9 w-9 pointer-events-auto flex items-center justify-center rounded-row text-ink-3 hover:text-ink hover:bg-surface-3 transition-colors aria-disabled:opacity-30 aria-disabled:pointer-events-none",
         ),
         month_grid: "w-full border-collapse mt-2",
         weekdays: "flex",
@@ -64,7 +64,7 @@ export function Calendar({
         week: "flex w-full mt-1",
         day: "w-12 p-0 text-center text-sm relative first:rounded-l-md last:rounded-r-md",
         day_button:
-          "h-12 w-12 flex items-center justify-center rounded-full font-normal text-ink hover:bg-surface-3 transition-colors",
+          "h-12 w-full flex items-center justify-center rounded-full font-normal text-ink hover:bg-surface-3 transition-colors",
         // react-day-picker v10 applies these as plain classes on the day cell
         // (not data-* attributes on the button) — reach into the nested
         // button so the fill and text color actually land on it. `selected`
@@ -76,8 +76,8 @@ export function Calendar({
         // a separate block butted up against a solid square.
         selected: "[&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
         range_start:
-          "bg-surface-3 rounded-l-md [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
-        range_end: "bg-surface-3 rounded-r-md [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
+          "bg-surface-3 rounded-l-full! [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
+        range_end: "bg-surface-3 rounded-r-full! [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
         range_middle: "bg-surface-3 [&>button]:bg-surface-3! [&>button]:text-ink! [&>button]:hover:bg-surface-3!",
         outside: "text-ink-4",
         disabled: "text-ink-4 opacity-40 pointer-events-none",

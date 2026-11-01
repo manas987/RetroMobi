@@ -126,13 +126,13 @@ export function DateRangeField({
             // background (DayPicker needs both from and to for that), so
             // without this the circular button leaves white crescents where
             // the grey begins.
-            preview_start: "bg-surface-3 rounded-l-md",
+            preview_start: "bg-surface-3 rounded-l-full!",
             preview_middle: "bg-surface-3",
             // The day under the cursor is the prospective check-out, so it
             // gets the same dark circle as the check-in. The explicit hover:
             // is needed — day_button's own hover:bg-surface-3 outranks a bare
             // bg-ink in the cascade.
-            preview_end: "bg-surface-3 rounded-r-md [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
+            preview_end: "bg-surface-3 rounded-r-full! [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
           }}
           autoFocus
         />

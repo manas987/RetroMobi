@@ -10,7 +10,7 @@ const CITY_DEFS = [
   { name: "Rishikesh", fx: 0.8, fxNarrow: 0.82, layer: 2 },
 ];
 
-const SKY = "#faf9f7";
+const SKY = "#ffffff";
 const HORIZON = "#f7ead6";
 const GLOW = "#f0a501";
 const SUN = "#f6c25a";
@@ -98,6 +98,15 @@ export function FooterScene({
   const H = width < 640 ? 240 : width < 1000 ? 300 : 340;
   const narrow = width < 640;
 
+  // The skyline is generated in pixel space, so a wider container used to just
+  // reveal more mountain while the sun sat at a fraction of the width — the two
+  // slid past each other on every resize. Sampling the ridges through this
+  // factor puts peak, sun and city pin in one proportional space, so they stay
+  // aligned at any width. Floored, because below ~720px an un-clamped factor
+  // squeezes 1200px of noise into a phone and the ridges turn jagged.
+  const SCENE_W = 1200;
+  const u = Math.max(0.6, width / SCENE_W);
+
   const layers = [
     { f: ridge(3, H * 0.5, H * 0.3, 150, true), color: LAYER_COLORS[0]!, trees: 0 },
     { f: ridge(7, H * 0.6, H * 0.2, 300), color: LAYER_COLORS[1]!, trees: 0 },
@@ -108,21 +117,22 @@ export function FooterScene({
 
   const cities = CITY_DEFS.map((c) => {
     const x = (narrow ? c.fxNarrow : c.fx) * width;
-    return { name: c.name, x, y: layers[c.layer]!.f(x) + 4 };
+    return { name: c.name, x, y: layers[c.layer]!.f(x / u) + 4 };
   });
 
   const step = 6;
   const layerPaths = layers.map((layer, i) => {
     let d = `M0 ${H} L0 ${layer.f(0).toFixed(1)}`;
-    for (let x = step; x <= width + step; x += step) d += ` L${x} ${layer.f(x).toFixed(1)}`;
+    for (let x = step; x <= width + step; x += step) d += ` L${x} ${layer.f(x / u).toFixed(1)}`;
     d += ` L${width + step} ${H} Z`;
     if (layer.trees) {
       const r = noise(40 + i);
-      for (let x = 4; x < width; x += layer.trees * (0.55 + r(x * 0.13) * 0.7)) {
-        if (r(x * 0.07 + i) < 0.25) continue;
-        const th = layer.trees * (1.1 + r(x * 0.3) * 1.4);
+      for (let x = 4; x < width; x += layer.trees * (0.55 + r((x / u) * 0.13) * 0.7)) {
+        const dx = x / u;
+        if (r(dx * 0.07 + i) < 0.25) continue;
+        const th = layer.trees * (1.1 + r(dx * 0.3) * 1.4);
         const tw = th * 0.42;
-        const y = layer.f(x) + 2;
+        const y = layer.f(dx) + 2;
         d += ` M${(x - tw / 2).toFixed(1)} ${y.toFixed(1)} L${x.toFixed(1)} ${(y - th).toFixed(1)} L${(x + tw / 2).toFixed(1)} ${y.toFixed(1)} Z`;
       }
     }
@@ -147,8 +157,16 @@ export function FooterScene({
     roadD += ` C${a} ${(b + e) / 2} ${c} ${(b + e) / 2} ${c} ${e}`;
   }
 
-  const sx = width * 0.66;
-  const sy = H * 0.42;
+  // Above Haridwar, the middle city — reusing the pin's own x means the sun
+  // tracks it through the narrow breakpoint's `fxNarrow` too, instead of
+  // needing its own copy of the fraction.
+  const sx = hx;
+  // Fractions of H, so the disc keeps the same relation to the skyline at every
+  // breakpoint. The ridge crosses Haridwar's x at 0.449H; this sits the disc
+  // mostly above it with its base tucked behind, instead of the old 0.42H that
+  // buried it entirely and left only the bloom showing.
+  const sy = H * 0.404;
+  const sr = H * 0.088;
 
   return (
     <div ref={containerRef} className="relative w-full" style={{ height: H }}>
@@ -171,8 +189,12 @@ export function FooterScene({
         </defs>
 
         <rect x={0} y={0} width={width} height={H} fill="url(#rm-sky)" />
-        <ellipse cx={sx} cy={sy} rx={Math.min(width * 0.42, 380)} ry={sy - 1} fill="url(#rm-glow)" />
-        <circle cx={sx} cy={sy} r={30} fill={SUN} opacity={0.9} />
+        {/* rx was clamped at 380px, so the haze stayed a fixed-size blob while
+            the rest of the scene stretched — the main reason the sun still read
+            as drifting. ry is its own fraction rather than `sy - 1`, so raising
+            the disc doesn't shrink the wash over the horizon. */}
+        <ellipse cx={sx} cy={sy} rx={width * 0.32} ry={H * 0.436} fill="url(#rm-glow)" />
+        <circle cx={sx} cy={sy} r={sr} fill={SUN} opacity={0.9} />
 
         {layerPaths.map((d, i) => (
           <path key={i} d={d} fill={`url(#rm-l${i})`} />

@@ -16,6 +16,14 @@ declare module "*.png" {
   export = path;
 }
 
+declare module "*.jpg" {
+  /**
+   * A path to the JPEG file
+   */
+  const path: `${string}.jpg`;
+  export = path;
+}
+
 declare module "*.css";
 
 declare module "*.module.css" {
