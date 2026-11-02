@@ -22,16 +22,21 @@ export function RangeCalendar({
   onReturnDate,
   onPickupTime,
   onReturnTime,
+  onEnter,
   months = 2,
 }: {
-  pickupDate: Date;
+  /** null until the person picks one — the search bar starts blank. */
+  pickupDate: Date | null;
   pickupTime: string;
-  returnDate: Date;
+  returnDate: Date | null;
   returnTime: string;
   onPickupDate: (d: Date) => void;
   onReturnDate: (d: Date) => void;
   onPickupTime: (t: string) => void;
   onReturnTime: (t: string) => void;
+  /** Enter on a finished range — "done picking, go". Omit and Enter stays the
+   *  day button's own select. */
+  onEnter?: () => void;
   months?: number;
 }) {
   const today = new Date();
@@ -49,13 +54,15 @@ export function RangeCalendar({
   // useRange drops a same-day full range to undefined). Seeding it makes it
   // behave the way it looks.
   const [pendingFrom, setPendingFrom] = useState<Date | null>(
-    isSameDay(pickupDate, returnDate) ? pickupDate : null,
+    pickupDate && returnDate && isSameDay(pickupDate, returnDate) ? pickupDate : null,
   );
   const [hovered, setHovered] = useState<Date | null>(null);
 
-  const range: DateRange = pendingFrom
+  const range: DateRange | undefined = pendingFrom
     ? { from: pendingFrom, to: undefined }
-    : { from: pickupDate, to: returnDate };
+    : pickupDate && returnDate
+      ? { from: pickupDate, to: returnDate }
+      : undefined;
 
   function handleSelect(next: DateRange | undefined) {
     const result = nextSelection(pendingFrom, next);
@@ -77,7 +84,23 @@ export function RangeCalendar({
           pointer-events-none), so crossing a gap fired leave with no matching
           enter. A container's leave doesn't fire for movement between its own
           descendants, so only actually leaving the calendar clears it. */}
-      <div onMouseLeave={() => setHovered(null)}>
+      <div
+        onMouseLeave={() => setHovered(null)}
+        // This panel is portalled out of the search bar's <form>, so Enter
+        // never reaches its submit; and a click leaves focus on the day button,
+        // where Enter re-fires it and resetOnSelect turns the finished range
+        // back into a lone check-in. Both are why Enter is handled here.
+        //
+        // A pending check-in means the pick is mid-flight — the parent still
+        // holds the *previous* range, so searching now would search the wrong
+        // window. Leave Enter alone there; it is the day button's select, and
+        // that is what you are in the middle of doing.
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || !onEnter || pendingFrom || !pickupDate || !returnDate) return;
+          e.preventDefault();
+          onEnter();
+        }}
+      >
         <Calendar
           mode="range"
           numberOfMonths={months}

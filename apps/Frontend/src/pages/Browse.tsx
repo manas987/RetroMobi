@@ -1,24 +1,28 @@
 import { useEffect, useState } from "react";
 import { useLocation, useSearch as useLocationSearch } from "wouter";
 import { Header } from "../components/Header";
-import { Footer } from "../components/Footer";
 import { SlidersHorizontal } from "lucide-react";
 import { SearchCapsule, type SearchCapsuleValue } from "../components/SearchCapsule";
-import { FilterRail } from "../components/FilterRail";
+import { FilterSheet } from "../components/FilterSheet";
 import { MapPanel } from "../components/MapPanel";
 import { VehicleCard } from "../components/VehicleCard";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { useSearch } from "../lib/api";
 import { useGeolocation } from "../lib/useGeolocation";
+import { useMediaQuery } from "../lib/useMediaQuery";
 import { DEFAULT_CITY, defaultWindow, parseSearchParams, toSearchParams, activeFilters } from "../lib/searchParams";
-import type { SearchCriteria, SortKey } from "../lib/types";
+import type { SearchCriteria } from "../lib/types";
 
 export function Browse() {
   const locationSearch = useLocationSearch();
   const [, navigate] = useLocation();
-  const [mapOpen, setMapOpen] = useState(false);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // 660px of capsule plus the logo, two pills and the account cluster needs
+  // about 1300px of bar. Under that the controls get their own strip. It is a
+  // JS branch rather than `hidden`, so exactly one host exists at a time and
+  // the header never renders an empty centre track.
+  const inHeader = useMediaQuery("(min-width: 1300px)");
 
   const criteria = parseSearchParams(locationSearch);
   const geo = useGeolocation();
@@ -47,149 +51,125 @@ export function Browse() {
     navigate(`/browse?${toSearchParams({ ...criteria, ...patch, page: 1 })}`, { replace: true });
   }
 
+  const capsule = (
+    <SearchCapsule
+      compact
+      className="min-[1300px]:w-[660px] max-w-full"
+      initial={{ city: criteria.city, pickupAt: criteria.pickupAt, returnAt: criteria.returnAt }}
+      onSearch={(v: SearchCapsuleValue) => update(v)}
+    />
+  );
+
+  // One group, centred: the capsule and the one pill that opens everything
+  // else. Sort moved inside that sheet, so there is nothing else out here.
+  const controls = (
+    /* items-stretch, not a height on the pill: the capsule sets the group's
+       height and the pill inherits it, so the two stay flush if its padding
+       ever changes again. */
+    <div className="flex items-stretch gap-3">
+      {capsule}
+      <button
+        type="button"
+        onClick={() => setFiltersOpen(true)}
+        className="px-5 shrink-0 rounded-full border border-line-strong text-ink text-[15px] font-medium hover:bg-surface-3 transition-colors flex items-center gap-2"
+      >
+        <SlidersHorizontal className="h-4 w-4" />
+        Filters
+        {activeFilters(criteria).length > 0 && (
+          <span className="h-5 min-w-5 px-1 rounded-full bg-ink text-surface text-[11px] font-semibold flex items-center justify-center">
+            {activeFilters(criteria).length}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
+    /* The page itself does not scroll: the header and the controls row are
+       fixed by being the non-growing children of a viewport-tall column, and
+       the cards column below is the only thing with an overflow. That is what
+       lets the map hold still beside it. */
+    <div className="h-dvh flex flex-col overflow-hidden">
+      <Header center={inHeader ? controls : undefined} />
 
-      <div className="max-w-[1400px] w-full mx-auto px-5 py-5">
-        <SearchCapsule
-          compact
-          initial={{ city: criteria.city, pickupAt: criteria.pickupAt, returnAt: criteria.returnAt }}
-          onSearch={(v: SearchCapsuleValue) => update(v)}
-        />
-      </div>
+      {!inHeader && <div className="shrink-0 border-b border-line px-5 py-3">{controls}</div>}
 
-      <div className="max-w-[1400px] w-full mx-auto px-5 pb-16 flex flex-col md:flex-row gap-8 items-start">
-        <FilterRail
-          criteria={criteria}
-          onChange={update}
-          results={data?.results ?? []}
-          priceHistogram={data?.priceHistogram ?? []}
-          geo={geo}
-          mobileOpen={filtersOpen}
-          onMobileOpenChange={setFiltersOpen}
-        />
+      {/* Two numbers, not one: 40px to the window edges and between the two
+          columns, 24px between cards. The reference uses that same ratio, and
+          it is what binds the grid into a single column against the map — a
+          card gap as wide as the outer gutter reads as four loose cards.
 
-        <div className="flex-1 min-w-0 flex flex-col gap-4 w-full">
-          {/* Stays full-width regardless of the map — only the row below is
-              shared between the grid and the map panel. */}
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-ink-3">
-              {isLoading ? "Searching…" : `${data?.total ?? 0} result${data?.total === 1 ? "" : "s"} in ${criteria.city}`}
+          The padding lives here rather than on the children so the cards column
+          and the map panel end on exactly the same line.
+
+          The gap goes to zero in fullscreen: at basis-0 the cards column is
+          still in the flow, and a gutter beside nothing would double the map's
+          left inset. */}
+      <div className={`flex-1 min-h-0 flex p-10 ${mapFullscreen ? "gap-0" : "gap-10"}`}>
+        {/* Kept mounted and collapsed to basis-0 rather than unmounted: a width
+            that animates has to have something to animate from, and the map's
+            own invalidateSize fires at the tail of this same 300ms.
+
+            grow only while the map is beside it — that is also what fills the
+            row below lg, where the map column is display:none. */}
+        <div
+          className={`min-w-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden transition-[flex-basis,opacity] duration-300 ease-out ${
+            mapFullscreen ? "grow-0 basis-0 opacity-0 overflow-hidden" : "grow basis-[55%] opacity-100"
+          }`}
+        >
+          {isError && (
+            <p className="text-sm text-danger bg-danger-soft rounded-panel px-4 py-3">
+              Couldn't reach the API. Is the backend running?
             </p>
-            <div className="flex items-center gap-3">
-              <SortSelect value={criteria.sort} onChange={(sort) => update({ sort })} distanceAvailable={!!coords} />
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(true)}
-                className="md:hidden h-9 w-9 shrink-0 rounded-full border border-line-strong text-ink hover:bg-surface-3 transition-colors flex items-center justify-center relative"
-                aria-label="Filters"
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                {activeFilters(criteria).length > 0 && (
-                  <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-amber text-on-amber text-[9px] font-semibold flex items-center justify-center">
-                    {activeFilters(criteria).length}
-                  </span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMapOpen((o) => !o);
-                  setMapFullscreen(false);
-                }}
-                className={`h-9 px-3.5 rounded-full border text-sm font-medium flex items-center gap-1.5 transition-colors ${
-                  mapOpen ? "bg-ink text-surface border-ink" : "border-line-strong text-ink hover:bg-surface-3"
-                }`}
-              >
-                <MapIcon /> Map
-              </button>
+          )}
+
+          {!isError && !isLoading && data?.results.length === 0 && (
+            <p className="text-sm text-ink-3 py-16 text-center bg-surface-2 rounded-panel">
+              No scooters match these filters yet. Try widening the dates, price range or city.
+            </p>
+          )}
+
+          {/* Two up, like the reference: the column is just over half the
+              window, and a third card there is narrower than the card was
+              ever designed to be. */}
+          {!isLoading && data && data.results.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {data.results.map((r) => (
+                <VehicleCard key={`${r.model.id}:${r.primaryOffer.shopId}`} result={r} />
+              ))}
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="flex flex-col lg:flex-row gap-6 items-start w-full">
-            {!mapFullscreen && (
-              <div className={`flex-1 min-w-0 w-full ${mapOpen ? "order-2 lg:order-1" : ""}`}>
-                {isError && (
-                  <p className="text-sm text-danger bg-danger-soft rounded-panel px-4 py-3">
-                    Couldn't reach the API. Is the backend running?
-                  </p>
-                )}
-
-                {!isError && !isLoading && data?.results.length === 0 && (
-                  <p className="text-sm text-ink-3 py-16 text-center bg-surface-2 rounded-panel">
-                    No scooters match these filters yet. Try widening the dates, price range or city.
-                  </p>
-                )}
-
-                {!isLoading && data && data.results.length > 0 && (
-                  <div
-                    className={`grid grid-cols-1 sm:grid-cols-2 ${mapOpen ? "" : "lg:grid-cols-3 2xl:grid-cols-4"} gap-5`}
-                  >
-                    {data.results.map((r) => (
-                      <VehicleCard key={`${r.model.id}:${r.primaryOffer.shopId}`} result={r} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {mapOpen && (
-              <MapPanel
-                results={data?.results ?? []}
-                onClose={() => {
-                  setMapOpen(false);
-                  setMapFullscreen(false);
-                }}
-                fullscreen={mapFullscreen}
-                onToggleFullscreen={() => setMapFullscreen((f) => !f)}
-                className="order-1 lg:order-2"
-              />
-            )}
-          </div>
+        <div
+          /* A share of the width, with the height coming free from the row's
+             align-items: stretch — so the map fills top to bottom and ends up
+             slightly taller than wide, as in the reference. aspect-square did
+             the opposite, deriving width from height, which left white space
+             under it on a tall window. */
+          className={`shrink-0 transition-[flex-basis] duration-300 ease-out ${
+            mapFullscreen ? "grow basis-full" : "hidden lg:block basis-[48%]"
+          }`}
+        >
+          <MapPanel
+            results={data?.results ?? []}
+            coords={coords}
+            fullscreen={mapFullscreen}
+            onToggleFullscreen={() => setMapFullscreen((f) => !f)}
+            className="h-full rounded-panel border border-line"
+          />
         </div>
       </div>
 
-      <Footer />
-    </div>
-  );
-}
-
-function SortSelect({
-  value,
-  onChange,
-  distanceAvailable,
-}: {
-  value: SortKey;
-  onChange: (v: SortKey) => void;
-  distanceAvailable: boolean;
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => onChange(v as SortKey)}>
-      <SelectTrigger className="min-w-[180px]">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="price">Price: low to high</SelectItem>
-        <SelectItem value="rating">Rating</SelectItem>
-        <SelectItem value="distance" disabled={!distanceAvailable}>
-          Distance{distanceAvailable ? "" : " (needs location)"}
-        </SelectItem>
-      </SelectContent>
-    </Select>
-  );
-}
-
-function MapIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
+      <FilterSheet
+        criteria={criteria}
+        onChange={update}
+        results={data?.results ?? []}
+        priceHistogram={data?.priceHistogram ?? []}
+        geo={geo}
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
       />
-      <path d="M9 4v14M15 6v14" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
+    </div>
   );
 }

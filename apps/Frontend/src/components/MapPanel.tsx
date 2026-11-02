@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
+import { Navigation, Plus, Minus } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { rupees } from "../lib/format";
 import type { SearchResult } from "../lib/types";
@@ -14,15 +15,20 @@ function pinIcon(): L.DivIcon {
 
 export function MapPanel({
   results,
-  onClose,
+  coords = null,
   fullscreen = false,
   onToggleFullscreen,
   className = "",
 }: {
   results: SearchResult[];
-  onClose: () => void;
+  /** Already-granted position from the page's own `useGeolocation`. The locate
+   *  button re-centres on it rather than calling `map.locate()`, which would
+   *  put a second permission prompt in front of someone who answered once. */
+  coords?: { lat: number; lng: number } | null;
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  /** Size and decoration both come from here — the panel has no dimensions of
+   *  its own, so it fills whatever column Browse gives it. */
   className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -32,7 +38,8 @@ export function MapPanel({
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, { attributionControl: false, zoomControl: true }).setView(
+    // zoomControl off: + and − are ours, in one stack with expand and locate.
+    const map = L.map(containerRef.current, { attributionControl: false, zoomControl: false }).setView(
       DEFAULT_CENTER,
       10,
     );
@@ -51,7 +58,7 @@ export function MapPanel({
     };
   }, []);
 
-  // The container's own size changes when toggling fullscreen (CSS width
+  // The parent's column width changes when toggling fullscreen (CSS width
   // change, not a remount), which Leaflet never notices on its own.
   useEffect(() => {
     if (!mapRef.current) return;
@@ -90,38 +97,67 @@ export function MapPanel({
   }, [ready, results]);
 
   return (
-    <div
-      className={`relative shrink-0 rounded-panel overflow-hidden border border-line transition-[width,height] duration-300 ease-[cubic-bezier(0.34,1.2,0.64,1)] ${
-        fullscreen
-          ? "w-full h-[calc(100dvh-320px)] lg:h-[calc(100vh-280px)]"
-          : "w-full lg:w-[420px] h-[420px] lg:h-[560px] lg:sticky lg:top-24"
-      } ${className}`}
-    >
+    /* isolate, because Leaflet numbers its own layers from the root: panes sit
+       at z-index 400 and controls at 800, and with no stacking context here
+       those compete directly with portalled overlays — the search capsule's
+       calendar is z-50, so the map painted straight over it. One stacking
+       context keeps every Leaflet number local, for every overlay at once. */
+    <div className={`relative isolate overflow-hidden ${className}`}>
       <div ref={containerRef} className="absolute inset-0" />
 
-      <button
-        type="button"
-        onClick={onClose}
-        className="glass-panel absolute top-3 right-3 z-[1000] w-8 h-8 rounded-full flex items-center justify-center text-ink"
-        aria-label="Close map"
-      >
-        ×
-      </button>
+      {/* One stack, two groups: expand stands alone because it changes the
+          page, while locate and zoom only move the map. */}
+      <div className="absolute top-3 right-3 z-[1000] flex flex-col items-end gap-2">
+        {onToggleFullscreen && (
+          <button
+            type="button"
+            onClick={onToggleFullscreen}
+            className={`${CHROME} ${CHROME_SHADOW} w-11 h-11 rounded-full`}
+            aria-label={fullscreen ? "Collapse map" : "Expand map"}
+            title={fullscreen ? "Collapse map" : "Expand map"}
+          >
+            {fullscreen ? <CollapseIcon /> : <ExpandIcon />}
+          </button>
+        )}
 
-      {onToggleFullscreen && (
-        <button
-          type="button"
-          onClick={onToggleFullscreen}
-          className="glass-panel absolute bottom-3 right-3 z-[1000] w-9 h-9 rounded-full flex items-center justify-center text-ink"
-          aria-label={fullscreen ? "Collapse map" : "Expand map"}
-          title={fullscreen ? "Collapse map" : "Expand map"}
-        >
-          {fullscreen ? <CollapseIcon /> : <ExpandIcon />}
-        </button>
-      )}
+        <div className={`rounded-full bg-surface ${CHROME_SHADOW} overflow-hidden flex flex-col divide-y divide-line`}>
+          <button
+            type="button"
+            onClick={() => coords && mapRef.current?.setView([coords.lat, coords.lng], 14)}
+            disabled={!coords}
+            className={`${CHROME} w-11 h-11 disabled:opacity-35 disabled:cursor-not-allowed`}
+            aria-label="Centre on my location"
+            title={coords ? "Centre on my location" : "Location unavailable"}
+          >
+            <Navigation className="h-[18px] w-[18px] -rotate-45" />
+          </button>
+          <button
+            type="button"
+            onClick={() => mapRef.current?.zoomIn()}
+            className={`${CHROME} w-11 h-11`}
+            aria-label="Zoom in"
+          >
+            <Plus className="h-[18px] w-[18px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => mapRef.current?.zoomOut()}
+            className={`${CHROME} w-11 h-11`}
+            aria-label="Zoom out"
+          >
+            <Minus className="h-[18px] w-[18px]" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+
+/* Shared by every control in the stack. Rounding and shadow belong to the
+   group — the pill carries one for all three of its buttons — so this is just
+   the surface. */
+const CHROME = "bg-surface text-ink flex items-center justify-center hover:bg-surface-3 transition-colors";
+const CHROME_SHADOW = "shadow-[0_2px_8px_rgba(18,22,26,0.18)]";
 
 function ExpandIcon() {
   return (

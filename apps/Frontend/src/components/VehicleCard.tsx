@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowRight, ArrowUpRight, Minus, Plus } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import { rupees } from "../lib/format";
 import { useCart } from "../lib/cart";
 import { useModelImage } from "../lib/useModelImage";
@@ -28,16 +28,15 @@ export function VehicleCard({ result }: { result: SearchResult }) {
     if (outcome === "ok" && next > qty) openDrawer();
   }
 
-  // shopAddress is always "{line1}, {city}" (see searchService.ts) — the city
-  // alone reads better here than the full street address.
-  const shopCity = offer.shopAddress.split(",").pop()?.trim();
-
   return (
     <article
       onClick={() => navigate(`/vehicles/${offer.vehicleId}`)}
-      className="group bg-surface rounded-panel border border-line overflow-hidden flex flex-col hover:border-line-strong transition-colors cursor-pointer"
+      className="group flex flex-col cursor-pointer"
     >
-      <div className="relative aspect-[4/3] bg-surface-3">
+      {/* The photo is the card. No panel, no border, no padding box — the only
+          edge on the page is the image's own rounding, and the text sits loose
+          underneath it. */}
+      <div className="relative aspect-[4/3] rounded-[18px] overflow-hidden bg-surface-3">
         <VehiclePhoto modelId={model.id} hasImageKey={Boolean(model.imageKey)} />
         {offer.licence && (
           <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-verified-soft text-verified text-xs font-medium px-2.5 py-1">
@@ -51,82 +50,68 @@ export function VehicleCard({ result }: { result: SearchResult }) {
         )}
       </div>
 
-      <div className="p-4 flex flex-col gap-3 flex-1">
+      <div className="pt-3 flex flex-col">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-ink leading-snug">
+          {/* min-w-0 is what lets truncate beat the flex item's content width. */}
+          <h3 className="min-w-0 truncate font-semibold text-ink">
             {model.make} {model.model}
           </h3>
           <Rating rating={offer.rating} reviewCount={offer.reviewCount} />
         </div>
 
+        {/* The shop name carries the link rather than a separate "View shop"
+            row — same destination, one less line. */}
+        <Link
+          href={`/shops/${offer.shopId}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-sm text-ink-3 truncate hover:text-ink hover:underline underline-offset-2"
+        >
+          {offer.shopName}
+        </Link>
+
         <p className="text-sm text-ink-3">
-          {[model.bodyType, model.seatingCapacity ? `${model.seatingCapacity} seats` : null, offer.distanceKm != null ? `${offer.distanceKm.toFixed(1)} km away` : null]
-            .filter(Boolean)
-            .join(" · ") || offer.shopName}
+          {maxQty} available · {rupees(offer.securityDeposit)} deposit
         </p>
 
-        <div className="mt-auto pt-3 border-t border-line flex items-stretch justify-between gap-3">
-          <div className="min-w-0 flex flex-col justify-between">
-            <div>
-              <div className="flex items-baseline gap-1.5">
-                <span className="tnum text-2xl font-semibold text-ink">{rupees(offer.pricePerDay)}</span>
-                <span className="text-sm text-ink-3">/ day</span>
-              </div>
-              <div className="text-xs text-ink-3 mt-0.5">{rupees(offer.securityDeposit)} refundable deposit</div>
-            </div>
-            <div>
-              <div className="text-sm text-ink truncate">
-                <span className="font-medium">{offer.shopName}</span>
-                {shopCity && <span className="text-ink-4"> · {shopCity}</span>}
-              </div>
-              <Link
-                href={`/shops/${offer.shopId}`}
-                onClick={(e) => e.stopPropagation()}
-                className="text-xs text-ink-4 underline underline-offset-2 hover:text-ink inline-flex items-center gap-0.5"
-              >
-                View shop
-                <ArrowUpRight className="h-3 w-3" />
-              </Link>
-            </div>
-          </div>
-
-          <div className="shrink-0 flex flex-col items-end justify-between gap-2">
-            <span className="text-xs text-ink-4 inline-flex items-center gap-1.5 whitespace-nowrap">
-              <span className="h-1.5 w-1.5 rounded-full bg-verified" />
-              {maxQty} available
-            </span>
-            <div className="h-9 flex items-stretch divide-x divide-line rounded-full border border-line-strong overflow-hidden">
-              <button
-                type="button"
-                onClick={(e) => changeQty(e, qty - 1)}
-                disabled={qty === 0}
-                aria-label="Decrease quantity"
-                className="px-3 flex items-center justify-center text-ink hover:bg-surface-3 disabled:opacity-30 transition-colors"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-              <span className="w-10 flex items-center justify-center text-sm font-semibold tnum">{qty}</span>
-              <button
-                type="button"
-                onClick={(e) => changeQty(e, qty + 1)}
-                disabled={qty >= maxQty}
-                aria-label="Increase quantity"
-                className="px-3 flex items-center justify-center text-ink hover:bg-surface-3 disabled:opacity-30 transition-colors"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <Link
-              href={`/vehicles/${offer.vehicleId}`}
-              onClick={(e) => e.stopPropagation()}
-              className="h-9 px-5 rounded-full bg-ink text-surface text-sm font-medium flex items-center gap-1.5 hover:bg-ink-2 transition-colors"
-            >
-              View ride
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </div>
+        <p className="text-sm text-ink mt-1">
+          <span className="tnum font-semibold underline underline-offset-2">{rupees(offer.pricePerDay)}</span>
+          <span className="text-ink-3"> / day</span>
+        </p>
       </div>
+
+      {/* Nothing in the cart yet is a one-decision moment, so it gets one amber
+          button. Once a unit is in, the same strip becomes the stepper, and the
+          minus at 1 drops the line and brings the button back. */}
+      {qty === 0 ? (
+        <button
+          type="button"
+          onClick={(e) => changeQty(e, 1)}
+          className="mt-3 h-9 w-full rounded-full bg-amber text-on-amber text-sm font-semibold hover:brightness-95 transition-[filter] flex items-center justify-center"
+        >
+          Add to cart
+        </button>
+      ) : (
+        <div className="mt-3 h-9 w-full flex items-stretch divide-x divide-line rounded-full border border-line-strong overflow-hidden">
+          <button
+            type="button"
+            onClick={(e) => changeQty(e, qty - 1)}
+            aria-label="Decrease quantity"
+            className="px-5 flex items-center justify-center text-ink hover:bg-surface-3 transition-colors"
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </button>
+          <span className="flex-1 flex items-center justify-center text-sm font-semibold tnum">{qty}</span>
+          <button
+            type="button"
+            onClick={(e) => changeQty(e, qty + 1)}
+            disabled={qty >= maxQty}
+            aria-label="Increase quantity"
+            className="px-5 flex items-center justify-center text-ink hover:bg-surface-3 disabled:opacity-30 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </article>
   );
 }

@@ -1,28 +1,23 @@
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { ShoppingCart } from "lucide-react";
 import { ProfileMenu } from "./ProfileMenu";
 import { CartDrawer } from "./CartDrawer";
 import { useCart } from "../lib/cart";
 
-export function Header({ overlay = false }: {
+export function Header({ overlay = false, center }: {
   /** Sit transparent on top of whatever is behind — the homepage's full-bleed
    *  hero photo. Default off, so every other page is unaffected. */
   overlay?: boolean;
+  /** Dropped on the bar's centre line — Browse's search capsule and Filters
+   *  pill. Supplying it switches the bar from justify-between to a three-track
+   *  grid, which is what centres this against the page rather than against
+   *  whatever the logo and the account cluster happen to measure. */
+  center?: React.ReactNode;
 }) {
-  const [path, navigate] = useLocation();
   const { totalUnits, openDrawer } = useCart();
 
   const brand = overlay ? "text-white" : "text-ink";
   const link = overlay ? "text-white/85 hover:text-white" : "text-ink-2 hover:text-ink";
-
-  function goHowItWorks(e: React.MouseEvent) {
-    e.preventDefault();
-    if (path === "/") {
-      document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" });
-    } else {
-      navigate("/#how-it-works");
-    }
-  }
 
   return (
     <header
@@ -34,7 +29,24 @@ export function Header({ overlay = false }: {
         overlay ? "bg-transparent" : "bg-surface/95 backdrop-blur-sm shadow-[0_1px_0_var(--color-line)]"
       }`}
     >
-      <div className="max-w-[1400px] mx-auto px-5 h-16 flex items-center justify-between gap-6">
+      <div
+        /* Taller only when it carries the capsule: 64px leaves it about 5px of
+           air a side, which reads as clipped. Home's hero still offsets against
+           a 64px bar (-mt-16 / pt-16) and has no `center`, so it is untouched.
+
+           The extra 10px is height *and* padding-top, so all of it lands above
+           the capsule — the content stays centred in what is left, which keeps
+           the gap under it exactly where it was. */
+        className={`max-w-[1619px] mx-auto px-5 gap-6 ${center ? "h-[104px] pt-[10px]" : "h-16"} ${
+          /* minmax(0,1fr), not 1fr: a bare 1fr floors at its own min-content,
+             so the account cluster's width was being mirrored into the empty
+             left track and the centre got squeezed to a sliver. Tailwind's own
+             grid-cols-* emit minmax(0,1fr) for this reason. */
+          center
+            ? "grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
+            : "flex items-center justify-between"
+        }`}
+      >
         <Link href="/" className={`flex items-center gap-2 shrink-0 transition-colors ${brand}`}>
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <circle cx="6" cy="17" r="3.2" stroke="currentColor" strokeWidth="1.6" />
@@ -50,16 +62,9 @@ export function Header({ overlay = false }: {
           <span className={`text-lg font-semibold tracking-tight transition-colors ${brand}`}>retromobi</span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-7 text-sm">
-          <a href="/#how-it-works" onClick={goHowItWorks} className={`transition-colors ${link}`}>
-            How it works
-          </a>
-          <Link href="/browse" className={`transition-colors ${link}`}>
-            Browse scooters
-          </Link>
-        </nav>
+        {center}
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center justify-end gap-3 shrink-0">
           <Link
             href="/merchant/login"
             className={`hidden sm:inline-flex h-9 px-4 rounded-full items-center text-sm font-medium transition-colors ${link}`}

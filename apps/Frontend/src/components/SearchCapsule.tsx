@@ -24,6 +24,11 @@ export interface SearchCapsuleValue {
 
 type Field = "where" | "when";
 
+/** "" means the person has not picked yet. Anything else is a real ISO stamp. */
+function splitOrBlank(iso: string, fallbackTime: string): { date: Date | null; time: string } {
+  return iso ? splitIso(iso) : { date: null, time: fallbackTime };
+}
+
 export function SearchCapsule({
   initial,
   onSearch,
@@ -47,12 +52,17 @@ export function SearchCapsule({
   // sync with whatever the URL actually ends up saying.
   useEffect(() => setCity(initial.city), [initial.city]);
 
-  const initPickup = splitIso(initial.pickupAt);
-  const initReturn = splitIso(initial.returnAt);
-  const [pickupDate, setPickupDate] = useState(initPickup.date);
+  // An empty string means "not chosen yet" — the homepage opens blank rather
+  // than guessing a city and a window on someone's behalf. splitIso on "" would
+  // give an Invalid Date and a "NaN:NaN" time, so it never sees one.
+  const initPickup = splitOrBlank(initial.pickupAt, "10:00");
+  const initReturn = splitOrBlank(initial.returnAt, "22:00");
+  const [pickupDate, setPickupDate] = useState<Date | null>(initPickup.date);
   const [pickupTime, setPickupTime] = useState(initPickup.time);
-  const [returnDate, setReturnDate] = useState(initReturn.date);
+  const [returnDate, setReturnDate] = useState<Date | null>(initReturn.date);
   const [returnTime, setReturnTime] = useState(initReturn.time);
+
+  const ready = Boolean(city && pickupDate && returnDate);
 
   const isDesktop = useMediaQuery("(min-width: 900px)");
   const [active, setActive] = useState<Field | null>(null);
@@ -63,9 +73,15 @@ export function SearchCapsule({
   if (active) lastField.current = active;
   const shown = active ?? lastField.current;
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!city) return;
+  function runSearch() {
+    if (!pickupDate || !returnDate) return;
+    // Enter in the calendar can reach here with the dates done and Where still
+    // blank — the state the homepage opens in. Move to the field that is
+    // actually missing rather than inventing a destination.
+    if (!city) {
+      setActive("where");
+      return;
+    }
     setActive(null);
     onSearch({
       city,
@@ -74,12 +90,20 @@ export function SearchCapsule({
     });
   }
 
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    runSearch();
+  }
+
   // Changing the city only moves the trigger label if it waits for the
   // Search button — the results grid stays on the old city in the meantime,
   // looking like it belongs to the newly-picked one. Search right away.
   function changeCity(next: string) {
     setCity(next);
     setActive(null);
+    // Only when there is a window to search in. On the homepage the dates are
+    // still blank at this point, and searching now would mean inventing one.
+    if (!pickupDate || !returnDate) return;
     onSearch({
       city: next,
       pickupAt: toIsoWithOffset(combine(pickupDate, pickupTime)),
@@ -115,9 +139,12 @@ export function SearchCapsule({
   }, [active]);
 
   const dayLabel = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-  const whenValue = isSameDay(pickupDate, returnDate)
-    ? `${dayLabel(pickupDate)} · ${formatTime(pickupTime)} – ${formatTime(returnTime)}`
-    : `${dayLabel(pickupDate)}, ${formatTime(pickupTime)} – ${dayLabel(returnDate)}, ${formatTime(returnTime)}`;
+  const whenValue =
+    pickupDate && returnDate
+      ? isSameDay(pickupDate, returnDate)
+        ? `${dayLabel(pickupDate)} · ${formatTime(pickupTime)} – ${formatTime(returnTime)}`
+        : `${dayLabel(pickupDate)}, ${formatTime(pickupTime)} – ${dayLabel(returnDate)}, ${formatTime(returnTime)}`
+      : null;
 
   const calendar = (months: number) => (
     <RangeCalendar
@@ -130,6 +157,7 @@ export function SearchCapsule({
       onReturnDate={setReturnDate}
       onPickupTime={setPickupTime}
       onReturnTime={setReturnTime}
+      onEnter={runSearch}
     />
   );
 
@@ -186,11 +214,15 @@ export function SearchCapsule({
         <button type="button" onClick={() => setActive("when")} className={`w-full h-full flex flex-col justify-center gap-1.5 text-left outline-none ${pad} min-[900px]:pr-34`}>
           <span className="flex items-center gap-2 text-[13px] font-semibold text-ink leading-none">
             When
-            <span className="font-normal text-[11px] px-1.5 py-px rounded-full bg-surface-2 text-ink-3">
-              {formatDuration(pickupDate, returnDate)}
-            </span>
+            {pickupDate && returnDate && (
+              <span className="font-normal text-[11px] px-1.5 py-px rounded-full bg-surface-2 text-ink-3">
+                {formatDuration(pickupDate, returnDate)}
+              </span>
+            )}
           </span>
-          <span className="text-[15px] font-medium text-ink truncate">{whenValue}</span>
+          <span className={`text-[15px] truncate ${whenValue ? "font-medium text-ink" : "text-ink-3"}`}>
+            {whenValue ?? "Add dates"}
+          </span>
         </button>
       </Segment>
 
@@ -200,7 +232,8 @@ export function SearchCapsule({
       <button
         type="submit"
         aria-label="Search"
-        className={`relative z-10 shrink-0 flex items-center justify-center gap-2 bg-amber text-on-amber font-semibold text-sm hover:brightness-95 transition-all w-full py-3 rounded-row min-[900px]:absolute min-[900px]:right-3 min-[900px]:top-1/2 min-[900px]:-translate-y-1/2 min-[900px]:h-12 min-[900px]:py-0 min-[900px]:rounded-full ${
+        disabled={!ready}
+        className={`relative z-10 shrink-0 disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100 flex items-center justify-center gap-2 bg-amber text-on-amber font-semibold text-sm hover:brightness-95 transition-all w-full py-3 rounded-row min-[900px]:absolute min-[900px]:right-3 min-[900px]:top-1/2 min-[900px]:-translate-y-1/2 min-[900px]:h-12 min-[900px]:py-0 min-[900px]:rounded-full ${
           active ? "min-[900px]:w-auto min-[900px]:px-6" : "min-[900px]:w-12"
         }`}
       >

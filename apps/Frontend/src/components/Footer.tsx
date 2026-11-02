@@ -25,7 +25,7 @@ export function Footer() {
 
   return (
     <footer className="overflow-hidden">
-      <div className="max-w-[1400px] mx-auto px-5 pt-16 flex flex-wrap gap-12 justify-between">
+      <div className="max-w-[1299px] mx-auto px-5 pt-16 flex flex-wrap gap-12 justify-between">
         <div className="flex-1 min-w-[260px] max-w-sm flex flex-col gap-4">
           <Link href="/" className="flex items-center gap-2">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">

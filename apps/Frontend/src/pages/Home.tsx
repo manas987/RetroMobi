@@ -3,16 +3,12 @@ import { useLocation } from "wouter";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { SearchCapsule, type SearchCapsuleValue } from "../components/SearchCapsule";
-import { VehicleCard } from "../components/VehicleCard";
-import { useSearch } from "../lib/api";
 import heroHimalaya from "../assets/hero-himalaya.jpg";
 import howSearch from "../assets/how-search.jpg";
 import howCompare from "../assets/how-compare.jpg";
 import howPay from "../assets/how-pay.jpg";
 import howRide from "../assets/how-ride.jpg";
-import { DEFAULT_CITY, defaultWindow, toSearchParams } from "../lib/searchParams";
-
-const WINDOW = defaultWindow();
+import { toSearchParams } from "../lib/searchParams";
 
 export function Home() {
   const [, navigate] = useLocation();
@@ -44,17 +40,6 @@ export function Home() {
     navigate(`/browse?${toSearchParams({ ...v, sort: "price", page: 1 })}`);
   }
 
-  // The homepage used to never show an actual scooter — this pulls the same
-  // search the capsule itself would run, for the default city and window.
-  const { data: listingsData } = useSearch({
-    city: DEFAULT_CITY,
-    pickupAt: WINDOW.pickupAt,
-    returnAt: WINDOW.returnAt,
-    sort: "price",
-    page: 1,
-  });
-  const listings = (listingsData?.results ?? []).slice(0, 4);
-
   return (
     <div className="min-h-screen flex flex-col">
       <Header overlay={overHero} />
@@ -64,8 +49,14 @@ export function Home() {
           follows rides up with it and the hero occupies exactly 0 → 88svh.
           pt-16 puts the content back in the middle of the part you can see.
           svh, not vh, so mobile browser chrome can't crop it, and min-h so a
-          short phone grows the section rather than clipping the stacked bar. */}
-      <section className="relative -mt-16 pt-16 sm:pb-[320px] min-h-[88svh] flex items-center justify-center overflow-hidden bg-ink">
+          short phone grows the section rather than clipping the stacked bar.
+
+          The bottom padding is what holds the block above centre, so it is the
+          dial for how far down the block sits: the content is centred between
+          the two paddings, so every 2px off pb moves it 1px down. 320 → 260 is
+          the 30px drop. Only sm and up — a phone has no slack to give, the
+          stacked bar already fills the hero. */}
+      <section className="relative -mt-16 pt-16 sm:pb-[260px] min-h-[88svh] flex items-center justify-center overflow-hidden bg-ink">
         <img
           src={heroHimalaya}
           alt=""
@@ -82,11 +73,8 @@ export function Home() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(18,16,14,0.5)_0%,rgba(18,16,14,0.18)_38%,rgba(18,16,14,0.45)_100%)]" />
 
         <div className="relative z-10 w-full px-5 flex flex-col items-center text-center gap-5">
-          <span className="inline-flex items-center gap-2 rounded-full bg-white/18 backdrop-blur-sm text-white text-xs px-3 py-2">
-            <PinIcon /> Uttarakhand, India
-          </span>
           <h1 className="text-[clamp(2.1rem,5vw,3.9rem)] font-bold text-white leading-[1.04] tracking-[-0.035em] text-balance max-w-[16ch]">
-            Retro Mobi
+            RetroMobi
           </h1>
           <p className="text-[clamp(0.95rem,1.2vw,1.1rem)] leading-[1.6] text-white/85 max-w-[48ch] text-pretty">
             Compare licensed scooters across Dehradun, Haridwar and Rishikesh. Clear prices and
@@ -94,37 +82,15 @@ export function Home() {
           </p>
 
           <div className="w-full mt-4">
-            <SearchCapsule
-              initial={{ city: DEFAULT_CITY, pickupAt: WINDOW.pickupAt, returnAt: WINDOW.returnAt }}
-              onSearch={goSearch}
-            />
+            {/* Blank, not pre-filled: landing on a city and a window nobody
+                chose is exactly what the copy above promises not to do. Search
+                stays disabled until both are set. */}
+            <SearchCapsule initial={{ city: "", pickupAt: "", returnAt: "" }} onSearch={goSearch} />
           </div>
         </div>
 
         <div ref={heroEnd} aria-hidden="true" className="absolute bottom-0 left-0 w-px h-px" />
       </section>
-
-      {listings.length > 0 && (
-        <section className="max-w-[1400px] w-full mx-auto px-5 pt-16 pb-16 flex flex-col gap-6">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="flex flex-col gap-3">
-              <span className="text-xs font-medium text-ink-3 tracking-wide uppercase">Available on your dates</span>
-              <h2 className="text-2xl font-semibold text-ink">In {DEFAULT_CITY}</h2>
-            </div>
-            <a
-              href={`/browse?${toSearchParams({ city: DEFAULT_CITY, pickupAt: WINDOW.pickupAt, returnAt: WINDOW.returnAt, sort: "price", page: 1 })}`}
-              className="text-sm font-medium text-ink pb-0.5 border-b-[1.5px] border-[#708a76]"
-            >
-              See all in {DEFAULT_CITY} →
-            </a>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {listings.map((r) => (
-              <VehicleCard key={`${r.model.id}:${r.primaryOffer.shopId}`} result={r} />
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* Everything around this is a grid of things to scan; this is the only
           place that just talks, so it gets a single narrow centred column and
@@ -152,7 +118,7 @@ export function Home() {
       </section>
 
       <section id="how-it-works" className="pt-16 pb-20 sm:pt-24 sm:pb-30">
-        <div className="max-w-[1400px] w-full mx-auto px-5">
+        <div className="max-w-[1299px] w-full mx-auto px-5">
           <ol className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-12 sm:w-[90%] sm:mx-auto">
             {STEPS.map((s) => (
               <li key={s.title} className="flex flex-col gap-2">
@@ -174,7 +140,7 @@ export function Home() {
       </section>
 
       <section className="px-5 pb-20 sm:pb-30">
-        <div className="max-w-[1400px] w-full mx-auto">
+        <div className="max-w-[1299px] w-full mx-auto">
           <div className="flex flex-col items-center text-center gap-3 mb-12">
             <span className="text-xs font-medium text-ink-3 tracking-wide uppercase">First time in the hills?</span>
             <h2 className="text-2xl sm:text-[2.1rem] font-semibold text-ink tracking-tight text-balance">
@@ -320,15 +286,3 @@ function SparkIcon() {
   );
 }
 
-function PinIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <circle cx="12" cy="9" r="2.3" stroke="currentColor" strokeWidth="2" />
-    </svg>
-  );
-}

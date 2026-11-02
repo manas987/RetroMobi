@@ -25,24 +25,31 @@ function priceHistogram(prices: number[]): number[] {
   return buckets;
 }
 
-export function FilterRail({
+/**
+ * Every filter, in one modal.
+ *
+ * Was a 256px rail down the left of Browse with a phone-only modal fallback.
+ * The map is permanent now and takes that width, so the modal — which already
+ * rendered the identical content — became the only surface, at every size.
+ */
+export function FilterSheet({
   criteria,
   onChange,
   results,
   priceHistogram: priceHistogramSource,
   geo,
-  mobileOpen,
-  onMobileOpenChange,
+  open,
+  onOpenChange,
 }: {
   criteria: SearchCriteria;
   onChange: (patch: Partial<SearchCriteria>) => void;
   results: SearchResult[];
   priceHistogram: number[];
   geo: GeolocationState;
-  /** The small "Filters" trigger lives in Browse's results-controls row, next
-   *  to Map — not here — so the modal's open state is controlled from there. */
-  mobileOpen: boolean;
-  onMobileOpenChange: (open: boolean) => void;
+  /** The "Filters" pill lives in Browse's controls row, not here, so the open
+   *  state is controlled from there. */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const active = activeFilters(criteria);
   const makes = Array.from(new Set(results.map((r) => r.model.make))).sort();
@@ -96,9 +103,22 @@ export function FilterRail({
         </div>
       )}
 
+      {/* Sort is not a filter — it never counts toward the pill's badge — but
+          it belongs to the same "narrow this down" moment, and the sheet is
+          the only surface left out here. */}
+      <Group title="Sort" defaultOpen>
+        <Checkbox label="Price: low to high" checked={criteria.sort === "price"} onChange={() => onChange({ sort: "price" })} />
+        <Checkbox label="Rating" checked={criteria.sort === "rating"} onChange={() => onChange({ sort: "rating" })} />
+        {/* Hidden, not disabled: same gate as the Distance filter below, and an
+            option you cannot pick is noise in a sheet you scroll. */}
+        {geo.status === "granted" && (
+          <Checkbox label="Distance" checked={criteria.sort === "distance"} onChange={() => onChange({ sort: "distance" })} />
+        )}
+      </Group>
+
       <Group title="Verification" defaultOpen>
         <Checkbox
-          label="Licensed to rent — verified only"
+          label="Verified vehicles only"
           checked={!!criteria.fullyVerified}
           onChange={(v) => onChange({ fullyVerified: v || undefined })}
         />
@@ -202,18 +222,9 @@ export function FilterRail({
   );
 
   return (
-    <>
-      <aside className="hidden md:flex md:w-60 lg:w-64 shrink-0 flex-col gap-1">{groups}</aside>
-
-      {/* On a phone/narrow tablet, the full accordion (several groups open by
-          default) rendered inline above the results — a screen's worth of
-          checkboxes before a single vehicle was visible. Below `md:` the rail
-          itself renders nothing; the small trigger lives in Browse's own
-          results-controls row instead, and opens this same content here. */}
-      <Modal open={mobileOpen} onClose={() => onMobileOpenChange(false)} title="Filters">
-        <div className="flex flex-col gap-1">{groups}</div>
-      </Modal>
-    </>
+    <Modal open={open} onClose={() => onOpenChange(false)} title="Filters">
+      <div className="flex flex-col gap-1">{groups}</div>
+    </Modal>
   );
 }
 
