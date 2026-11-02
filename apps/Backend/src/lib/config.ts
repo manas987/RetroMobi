@@ -7,6 +7,14 @@
 // worked. `GST_RATE ?? 18` prices a booking at a rate nobody chose, and
 // `PLATFORM_GSTIN ?? null` issues a GST invoice with no GSTIN on it, which is how
 // that one shipped. A boot failure is cheaper than either.
+//
+// Twilio is the one exception, and only in production: a missing SMS credential
+// doesn't throw loudly at point of use -- smsSender.ts's dev-fallback logs
+// "[dev-fallback]" and returns successfully, because that's what lets `bun test`
+// and local dev run with no vendor creds at all. The same silent success in
+// production means phone OTP -- the only way into the app -- never sends, and
+// nobody finds out until a real signup fails. So it's required, but only when
+// NODE_ENV=production, so dev/test are unaffected.
 
 interface Requirement {
   key: string;
@@ -37,6 +45,13 @@ const REQUIRED: Requirement[] = [
   },
 ];
 
+// Required only outside dev/test -- see the note at the top of the file.
+const REQUIRED_IN_PRODUCTION: Requirement[] = [
+  { key: "TWILIO_ACCOUNT_SID", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
+  { key: "TWILIO_AUTH_TOKEN", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
+  { key: "TWILIO_FROM_NUMBER", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
+];
+
 // Not required: RetroMobi may not be GST-registered yet, and a half-configured
 // tax identity must not stop anyone running the app. But if it IS set it has to be
 // real, because the only thing worse than no GSTIN on an invoice is a wrong one --
@@ -58,7 +73,9 @@ export function assertConfig(env: NodeJS.ProcessEnv = process.env): string[] {
   const problems: string[] = [];
   const warnings: string[] = [];
 
-  for (const { key, why, validate } of REQUIRED) {
+  const required = env.NODE_ENV === "production" ? [...REQUIRED, ...REQUIRED_IN_PRODUCTION] : REQUIRED;
+
+  for (const { key, why, validate } of required) {
     const value = env[key]?.trim();
     if (!value) {
       problems.push(`  ${key} is not set — ${why}`);

@@ -50,4 +50,24 @@ describe("assertConfig", () => {
       }
     }
   });
+
+  test("in production, a missing Twilio credential refuses to boot", () => {
+    expect(() => assertConfig({ ...valid, NODE_ENV: "production" })).toThrow(/TWILIO_ACCOUNT_SID/);
+  });
+
+  test("in production, a complete config including Twilio passes", () => {
+    expect(() =>
+      assertConfig({
+        ...valid,
+        NODE_ENV: "production",
+        TWILIO_ACCOUNT_SID: "ACxxxx",
+        TWILIO_AUTH_TOKEN: "token",
+        TWILIO_FROM_NUMBER: "+15551234567",
+      }),
+    ).not.toThrow();
+  });
+
+  test("outside production, a missing Twilio credential is fine -- that's the dev fallback", () => {
+    expect(() => assertConfig(valid)).not.toThrow();
+  });
 });
