@@ -1,38 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* A flat height-only slide reads as mechanical. This overshoots past full
-   height/scale then settles back — height, scale and opacity move together
-   on a spring-like cubic-bezier, which is what actually reads as "poppy"
-   rather than linear. Used by FilterRail's collapsible groups. */
-@keyframes pop-open {
-  0% {
-    height: 0;
-    opacity: 0;
-    transform: scaleY(0.85);
-  }
-  60% {
-    opacity: 1;
-  }
-  100% {
-    height: var(--radix-collapsible-content-height);
-    opacity: 1;
-    transform: scaleY(1);
-  }
-}
-@keyframes pop-close {
-  0% {
-    height: var(--radix-collapsible-content-height);
-    opacity: 1;
-    transform: scaleY(1);
-  }
-  100% {
-    height: 0;
-    opacity: 0;
-    transform: scaleY(0.92);
-  }
-}
-
 @theme {
   /* Ink — warm-leaning near-black, never cool grey */
   --color-ink: #12161a;

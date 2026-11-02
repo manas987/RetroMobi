@@ -1,8 +1,5 @@
-import { useState } from "react";
-import * as Collapsible from "@radix-ui/react-collapsible";
-import { ChevronDown, Check } from "lucide-react";
 import type { SearchCriteria, SearchResult } from "../lib/types";
-import { activeFilters, bodyTypeLabel } from "../lib/searchParams";
+import { bodyTypeLabel } from "../lib/searchParams";
 import { RangeSlider, MaxSlider } from "./RangeSlider";
 import { Modal } from "./Modal";
 import type { GeolocationState } from "../lib/useGeolocation";
@@ -38,6 +35,7 @@ export function FilterSheet({
   results,
   priceHistogram: priceHistogramSource,
   geo,
+  total,
   open,
   onOpenChange,
 }: {
@@ -46,12 +44,14 @@ export function FilterSheet({
   results: SearchResult[];
   priceHistogram: number[];
   geo: GeolocationState;
+  /** Matches across every page, not just this one — what the footer button
+   *  promises to show. */
+  total: number;
   /** The "Filters" pill lives in Browse's controls row, not here, so the open
    *  state is controlled from there. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const active = activeFilters(criteria);
   const makes = Array.from(new Set(results.map((r) => r.model.make))).sort();
   // Once a brand is selected, `results` only ever contains that one brand —
   // without this, the group (and its only way to clear the filter) would
@@ -85,80 +85,109 @@ export function FilterSheet({
     onChange({ fuelType: next.length > 0 ? next : undefined });
   }
 
-  const groups = (
-    <>
-      {active.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {active.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => onChange(f.clear)}
-              className="inline-flex items-center gap-1 rounded-full bg-surface-3 text-ink-2 text-xs px-2.5 py-1 hover:bg-line transition-colors"
-            >
-              {f.label}
-              <span aria-hidden="true">×</span>
-            </button>
-          ))}
-        </div>
-      )}
+  // One patch, not a fold over activeFilters()' `clear` entries — those are
+  // incremental (they drop *one* body type), so merging them would leave a
+  // multi-value filter half set.
+  function clearAll() {
+    onChange({
+      bodyType: undefined,
+      fuelType: undefined,
+      make: undefined,
+      minPrice: undefined,
+      maxPrice: undefined,
+      minEngineCc: undefined,
+      maxEngineCc: undefined,
+      maxDistanceKm: undefined,
+      minRating: undefined,
+      fullyVerified: undefined,
+      seatingCapacity: undefined,
+    });
+  }
 
-      {/* Sort is not a filter — it never counts toward the pill's badge — but
-          it belongs to the same "narrow this down" moment, and the sheet is
-          the only surface left out here. */}
-      <Group title="Sort" defaultOpen>
-        <Checkbox label="Price: low to high" checked={criteria.sort === "price"} onChange={() => onChange({ sort: "price" })} />
-        <Checkbox label="Rating" checked={criteria.sort === "rating"} onChange={() => onChange({ sort: "rating" })} />
-        {/* Hidden, not disabled: same gate as the Distance filter below, and an
-            option you cannot pick is noise in a sheet you scroll. */}
-        {geo.status === "granted" && (
-          <Checkbox label="Distance" checked={criteria.sort === "distance"} onChange={() => onChange({ sort: "distance" })} />
-        )}
-      </Group>
-
-      <Group title="Verification" defaultOpen>
-        <Checkbox
-          label="Verified vehicles only"
-          checked={!!criteria.fullyVerified}
-          onChange={(v) => onChange({ fullyVerified: v || undefined })}
+  return (
+    <Modal
+      open={open}
+      onClose={() => onOpenChange(false)}
+      title="Filters"
+      size="lg"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-sm font-medium text-ink underline underline-offset-2 hover:text-ink-2 transition-colors"
+          >
+            Clear all
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="h-11 px-6 rounded-full bg-ink text-surface text-sm font-semibold hover:bg-ink-2 transition-colors"
+          >
+            Show {total} {total === 1 ? "vehicle" : "vehicles"}
+          </button>
+        </>
+      }
+    >
+      {/* Sort is the one single-choice group, so it is the one that gets a
+          segmented track — a chip row would not say "pick exactly one". */}
+      <Section title="Sort">
+        <Segmented
+          value={criteria.sort}
+          onChange={(sort) => onChange({ sort: sort as SearchCriteria["sort"] })}
+          options={[
+            { value: "price", label: "Price" },
+            { value: "rating", label: "Rating" },
+            // Hidden, not disabled: same gate as the Distance filter below,
+            // and an option you cannot pick is noise in a sheet you scroll.
+            ...(geo.status === "granted" ? [{ value: "distance", label: "Distance" }] : []),
+          ]}
         />
-      </Group>
+      </Section>
+
+      <Section title="Verification">
+        <ChipRow>
+          <Chip
+            label="Verified vehicles only"
+            selected={!!criteria.fullyVerified}
+            onClick={() => onChange({ fullyVerified: criteria.fullyVerified ? undefined : true })}
+          />
+        </ChipRow>
+      </Section>
 
       {showBodyTypeGroup && (
-        <Group title="Vehicle type" defaultOpen>
-          {bodyTypes.map((bodyType) => (
-            <Checkbox
-              key={bodyType}
-              label={bodyTypeLabel(bodyType)}
-              checked={!!criteria.bodyType?.includes(bodyType)}
-              onChange={() => toggleBodyType(bodyType)}
-            />
-          ))}
-        </Group>
+        <Section title="Vehicle type">
+          <ChipRow>
+            {bodyTypes.map((bodyType) => (
+              <Chip
+                key={bodyType}
+                label={bodyTypeLabel(bodyType)}
+                selected={!!criteria.bodyType?.includes(bodyType)}
+                onClick={() => toggleBodyType(bodyType)}
+              />
+            ))}
+          </ChipRow>
+        </Section>
       )}
 
-      <Group title="Fuel type" defaultOpen>
-        <Checkbox
-          label="Petrol"
-          checked={!!criteria.fuelType?.includes("PETROL")}
-          onChange={() => toggleFuelType("PETROL")}
-        />
-        <Checkbox
-          label="Electric"
-          checked={!!criteria.fuelType?.includes("ELECTRIC")}
-          onChange={() => toggleFuelType("ELECTRIC")}
-        />
-      </Group>
+      <Section title="Fuel type">
+        <ChipRow>
+          <Chip label="Petrol" selected={!!criteria.fuelType?.includes("PETROL")} onClick={() => toggleFuelType("PETROL")} />
+          <Chip label="Electric" selected={!!criteria.fuelType?.includes("ELECTRIC")} onClick={() => toggleFuelType("ELECTRIC")} />
+        </ChipRow>
+      </Section>
 
       {showBrandGroup && (
-        <Group title="Brand">
-          {makes.map((make) => (
-            <Checkbox key={make} label={make} checked={!!criteria.make?.includes(make)} onChange={() => toggleMake(make)} />
-          ))}
-        </Group>
+        <Section title="Brand">
+          <ChipRow>
+            {makes.map((make) => (
+              <Chip key={make} label={make} selected={!!criteria.make?.includes(make)} onClick={() => toggleMake(make)} />
+            ))}
+          </ChipRow>
+        </Section>
       )}
 
-      <Group title="Price per day" defaultOpen>
+      <Section title="Price per day">
         <RangeSlider
           min={0}
           max={MAX_PRICE_RUPEES}
@@ -174,9 +203,9 @@ export function FilterSheet({
           format={(v) => (v >= MAX_PRICE_RUPEES ? `₹${v.toLocaleString("en-IN")}+` : `₹${v.toLocaleString("en-IN")}`)}
           histogram={priceHistogram(priceHistogramSource)}
         />
-      </Group>
+      </Section>
 
-      <Group title="Engine power">
+      <Section title="Engine power">
         <RangeSlider
           min={0}
           max={MAX_ENGINE_CC}
@@ -191,10 +220,10 @@ export function FilterSheet({
           }
           format={(v) => (v >= MAX_ENGINE_CC ? `${v}cc+` : `${v}cc`)}
         />
-      </Group>
+      </Section>
 
       {geo.status === "granted" && (
-        <Group title="Distance">
+        <Section title="Distance">
           <MaxSlider
             min={1}
             max={MAX_DISTANCE_KM}
@@ -203,75 +232,81 @@ export function FilterSheet({
             onCommit={(v) => onChange({ maxDistanceKm: v < MAX_DISTANCE_KM ? v : undefined })}
             format={(v) => (v >= MAX_DISTANCE_KM ? `Any distance` : `Within ${v} km`)}
           />
-        </Group>
+        </Section>
       )}
 
-      <Group title="Rating">
-        {[4.5, 4, 3.5].map((r) => (
-          <Checkbox
-            key={r}
-            label={`${r}★ and up`}
-            // "X and up" tiers nest — checking 3.5 already covers 4 and 4.5,
-            // so a lower checked tier shows every tier above it as checked too.
-            checked={criteria.minRating != null && r >= criteria.minRating}
-            onChange={() => onChange({ minRating: criteria.minRating === r ? undefined : r })}
-          />
-        ))}
-      </Group>
-    </>
-  );
-
-  return (
-    <Modal open={open} onClose={() => onOpenChange(false)} title="Filters">
-      <div className="flex flex-col gap-1">{groups}</div>
+      <Section title="Rating" last>
+        <ChipRow>
+          {[4.5, 4, 3.5].map((r) => (
+            <Chip
+              key={r}
+              label={`${r}★ and up`}
+              // "X and up" tiers nest — checking 3.5 already covers 4 and 4.5,
+              // so a lower selected tier shows every tier above it selected too.
+              selected={criteria.minRating != null && r >= criteria.minRating}
+              onClick={() => onChange({ minRating: criteria.minRating === r ? undefined : r })}
+            />
+          ))}
+        </ChipRow>
+      </Section>
     </Modal>
   );
 }
 
-function Group({ title, defaultOpen, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
-  const [open, setOpen] = useState(!!defaultOpen);
+function Section({ title, last, children }: { title: string; last?: boolean; children: React.ReactNode }) {
   return (
-    <Collapsible.Root open={open} onOpenChange={setOpen} className="border-b border-line py-3">
-      <Collapsible.Trigger className="w-full list-none flex items-center justify-between cursor-pointer text-sm font-medium text-ink outline-none">
-        {title}
-        <ChevronDown
-          className={`h-3 w-3 text-ink-3 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          aria-hidden="true"
-        />
-      </Collapsible.Trigger>
-      <Collapsible.Content
-        className="overflow-hidden origin-top data-[state=open]:[animation:pop-open_340ms_cubic-bezier(0.34,1.56,0.64,1)] data-[state=closed]:[animation:pop-close_200ms_cubic-bezier(0.4,0,1,1)]"
-      >
-        <div className="mt-2 flex flex-col">{children}</div>
-      </Collapsible.Content>
-    </Collapsible.Root>
+    <section className={`py-6 ${last ? "" : "border-b border-line"}`}>
+      <h3 className="text-lg font-semibold text-ink mb-4">{title}</h3>
+      {children}
+    </section>
   );
 }
 
+function ChipRow({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-wrap gap-2.5">{children}</div>;
+}
 
-function Checkbox({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
+/* border-2 in both states, not just the selected one — a border that thickens
+   on selection would shift every chip beside it by a pixel. */
+function Chip({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
-      onClick={() => onChange(!checked)}
-      className="flex items-center gap-2.5 py-1 text-sm text-ink text-left"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`rounded-full border-2 px-4 py-2.5 text-sm transition-colors ${
+        selected ? "border-ink bg-surface-3 text-ink font-medium" : "border-line text-ink-2 hover:border-line-strong"
+      }`}
     >
-      <span
-        className={`shrink-0 w-4 h-4 rounded-[5px] border flex items-center justify-center transition-colors ${
-          checked ? "bg-ink border-ink" : "border-line-strong"
-        }`}
-      >
-        {checked && <Check className="h-3 w-3 text-surface" strokeWidth={3} />}
-      </span>
       {label}
     </button>
+  );
+}
+
+function Segmented({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex bg-surface-3 rounded-full p-1">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
+          className={`flex-1 rounded-full py-2.5 text-sm transition-colors ${
+            value === o.value ? "bg-surface text-ink font-medium shadow-[0_1px_3px_rgba(18,22,26,0.14)]" : "text-ink-2 hover:text-ink"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }

@@ -92,6 +92,8 @@ async function main() {
     chetak: await findOrCreateModel({ make: "Bajaj", model: "Chetak", fuelType: "ELECTRIC", bodyType: "SCOOTER", seats: 2 }),
     iqube: await findOrCreateModel({ make: "TVS", model: "iQube", fuelType: "ELECTRIC", bodyType: "SCOOTER", seats: 2 }),
     four50x: await findOrCreateModel({ make: "Ather", model: "450X", fuelType: "ELECTRIC", bodyType: "SCOOTER", seats: 2 }),
+    himalayan: await findOrCreateModel({ make: "Royal Enfield", model: "Himalayan 450", fuelType: "PETROL", engineCc: 452, bodyType: "MOTORCYCLE", seats: 2 }),
+    jawa: await findOrCreateModel({ make: "Jawa", model: "42 Bobber", fuelType: "PETROL", engineCc: 334, bodyType: "MOTORCYCLE", seats: 1 }),
   };
 
   const priceBook = {
@@ -129,6 +131,7 @@ async function main() {
   const harKiPauriPulsars = await createFleet(harKiPauri, models.pulsar, 3, priceBook.motorcycle);
   await createFleet(harKiPauri, models.iqube, 2, priceBook.ev);
   await createFleet(harKiPauri, models.classic, 1, priceBook.motorcyclePlus);
+  await createFleet(harKiPauri, models.jawa, 2, priceBook.motorcycle);
   await licenseVehicles(haridwarMerchant, harKiPauriPulsars);
 
   // Dehradun — a third shop alongside the two already seeded, same city as
@@ -141,6 +144,7 @@ async function main() {
   await createFleet(clementTown, models.hunter, 2, priceBook.motorcycle);
   await createFleet(clementTown, models.four50x, 3, priceBook.ev);
   await createFleet(clementTown, models.jupiter, 1, priceBook.scooter);
+  await createFleet(clementTown, models.himalayan, 2, priceBook.motorcyclePlus);
 
   console.log("Seed complete:");
   console.log("  merchants: Ganga View Fleet Co., Har Ki Pauri Rides, Clement Town Movers");

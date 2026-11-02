@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useSearch as useLocationSearch } from "wouter";
 import { Header } from "../components/Header";
+import { Footer } from "../components/Footer";
 import { SlidersHorizontal } from "lucide-react";
 import { SearchCapsule, type SearchCapsuleValue } from "../components/SearchCapsule";
 import { FilterSheet } from "../components/FilterSheet";
@@ -85,11 +86,10 @@ export function Browse() {
   );
 
   return (
-    /* The page itself does not scroll: the header and the controls row are
-       fixed by being the non-growing children of a viewport-tall column, and
-       the cards column below is the only thing with an overflow. That is what
-       lets the map hold still beside it. */
-    <div className="h-dvh flex flex-col overflow-hidden">
+    /* The page scrolls normally and the map is sticky rather than fixed, which
+       is what lets the footer arrive at the end and lift it with everything
+       else. The header holds its own place — it is already sticky. */
+    <div className="min-h-screen flex flex-col">
       <Header center={inHeader ? controls : undefined} />
 
       {!inHeader && <div className="shrink-0 border-b border-line px-5 py-3">{controls}</div>}
@@ -105,7 +105,7 @@ export function Browse() {
           The gap goes to zero in fullscreen: at basis-0 the cards column is
           still in the flow, and a gutter beside nothing would double the map's
           left inset. */}
-      <div className={`flex-1 min-h-0 flex p-10 ${mapFullscreen ? "gap-0" : "gap-10"}`}>
+      <div className={`flex-1 flex items-start p-10 ${mapFullscreen ? "gap-0" : "gap-10"}`}>
         {/* Kept mounted and collapsed to basis-0 rather than unmounted: a width
             that animates has to have something to animate from, and the map's
             own invalidateSize fires at the tail of this same 300ms.
@@ -113,7 +113,7 @@ export function Browse() {
             grow only while the map is beside it — that is also what fills the
             row below lg, where the map column is display:none. */}
         <div
-          className={`min-w-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden transition-[flex-basis,opacity] duration-300 ease-out ${
+          className={`min-w-0 transition-[flex-basis,opacity] duration-300 ease-out ${
             mapFullscreen ? "grow-0 basis-0 opacity-0 overflow-hidden" : "grow basis-[55%] opacity-100"
           }`}
         >
@@ -142,12 +142,14 @@ export function Browse() {
         </div>
 
         <div
-          /* A share of the width, with the height coming free from the row's
-             align-items: stretch — so the map fills top to bottom and ends up
-             slightly taller than wide, as in the reference. aspect-square did
-             the opposite, deriving width from height, which left white space
-             under it on a tall window. */
-          className={`shrink-0 transition-[flex-basis] duration-300 ease-out ${
+          /* Sticky, not fixed: it holds its place while the cards scroll past
+             it and then lifts with the page when the footer arrives — which is
+             the whole reason the page scrolls rather than the cards column.
+
+             144px is the 104px header plus this row's own 40px of padding, and
+             the height leaves the same 40px under it, so the map spans the
+             window and comes out slightly taller than its 45% width. */
+          className={`shrink-0 sticky top-[144px] h-[calc(100dvh-184px)] transition-[flex-basis] duration-300 ease-out ${
             mapFullscreen ? "grow basis-full" : "hidden lg:block basis-[48%]"
           }`}
         >
@@ -167,9 +169,12 @@ export function Browse() {
         results={data?.results ?? []}
         priceHistogram={data?.priceHistogram ?? []}
         geo={geo}
+        total={data?.total ?? 0}
         open={filtersOpen}
         onOpenChange={setFiltersOpen}
       />
+
+      <Footer />
     </div>
   );
 }

@@ -82,10 +82,21 @@ export function RangeSlider({
           className="price-range-thumb absolute inset-x-0 w-full appearance-none bg-transparent pointer-events-none"
         />
       </div>
-      <div className="flex items-center justify-between mt-2 text-xs text-ink-2 tnum">
-        <span>{format(a)}</span>
-        <span>{format(b)}</span>
+      <div className="flex items-start justify-between gap-4 mt-4">
+        <Readout label="Minimum" value={format(a)} />
+        <Readout label="Maximum" value={format(b)} />
       </div>
+    </div>
+  );
+}
+
+/* A pill, not a bare number: it reads as the value the thumb above it is
+   setting. Display only — the thumbs stay the input. */
+function Readout({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <span className="text-xs text-ink-3">{label}</span>
+      <span className="rounded-full border border-line-strong px-4 py-2 text-sm text-ink tnum">{value}</span>
     </div>
   );
 }
@@ -133,7 +144,9 @@ export function MaxSlider({
           className="price-range-thumb absolute inset-x-0 w-full appearance-none bg-transparent"
         />
       </div>
-      <div className="mt-2 text-xs text-ink-2 tnum">{format(v)}</div>
+      <div className="mt-4 flex">
+        <span className="rounded-full border border-line-strong px-4 py-2 text-sm text-ink tnum">{format(v)}</span>
+      </div>
     </div>
   );
 }

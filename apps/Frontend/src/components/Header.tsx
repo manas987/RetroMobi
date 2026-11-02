@@ -32,12 +32,8 @@ export function Header({ overlay = false, center }: {
       <div
         /* Taller only when it carries the capsule: 64px leaves it about 5px of
            air a side, which reads as clipped. Home's hero still offsets against
-           a 64px bar (-mt-16 / pt-16) and has no `center`, so it is untouched.
-
-           The extra 10px is height *and* padding-top, so all of it lands above
-           the capsule — the content stays centred in what is left, which keeps
-           the gap under it exactly where it was. */
-        className={`max-w-[1619px] mx-auto px-5 gap-6 ${center ? "h-[104px] pt-[10px]" : "h-16"} ${
+           a 64px bar (-mt-16 / pt-16) and has no `center`, so it is untouched. */
+        className={`max-w-[1619px] mx-auto px-5 gap-6 ${center ? "h-[104px]" : "h-16"} ${
           /* minmax(0,1fr), not 1fr: a bare 1fr floors at its own min-content,
              so the account cluster's width was being mirrored into the empty
              left track and the centre got squeezed to a sliver. Tailwind's own
