@@ -73,7 +73,10 @@ export function Home() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(18,16,14,0.5)_0%,rgba(18,16,14,0.18)_38%,rgba(18,16,14,0.45)_100%)]" />
 
         <div className="relative z-10 w-full px-5 flex flex-col items-center text-center gap-5">
-          <h1 className="text-[clamp(2.1rem,5vw,3.9rem)] font-bold text-white leading-[1.04] tracking-[-0.035em] text-balance max-w-[16ch]">
+          <h1
+            className="text-[clamp(2.1rem,5vw,3.9rem)] font-normal text-white leading-[1.04] tracking-[-0.035em] text-balance max-w-[16ch]"
+            style={{ fontFamily: '"Lakovies Caleste", var(--font-sans)' }}
+          >
             RetroMobi
           </h1>
           <p className="text-[clamp(0.95rem,1.2vw,1.1rem)] leading-[1.6] text-white/85 max-w-[48ch] text-pretty">

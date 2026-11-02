@@ -27,8 +27,13 @@ export function AuthLayout({
       >
         {backgroundImage ? (
           <>
-            <img src={backgroundImage} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/60 to-ink/20" />
+            <img
+              src={backgroundImage}
+              alt=""
+              aria-hidden="true"
+              className="absolute -inset-y-16 inset-x-0 w-full h-[calc(100%+8rem)] object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/70 to-ink/30" />
           </>
         ) : (
           <TerrainBackdrop opacity={0.4} gradientId="auth-fade" />

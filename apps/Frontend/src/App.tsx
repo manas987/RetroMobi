@@ -23,6 +23,7 @@ import { AdminLogin } from "./pages/admin/Login";
 import { AdminOverview } from "./pages/admin/Overview";
 import { AdminMerchantReview } from "./pages/admin/MerchantReview";
 import { AdminVehicleReview } from "./pages/admin/VehicleReview";
+import { AdminRiderReview } from "./pages/admin/RiderReview";
 import { AdminBookingOps } from "./pages/admin/BookingOps";
 import { AdminPayments } from "./pages/admin/Payments";
 import { AdminAudit } from "./pages/admin/Audit";
@@ -63,6 +64,7 @@ export function App() {
       <Route path="/admin/tickets" component={AdminTickets} />
       <Route path="/admin/merchant-review" component={AdminMerchantReview} />
       <Route path="/admin/vehicle-review" component={AdminVehicleReview} />
+      <Route path="/admin/rider-review" component={AdminRiderReview} />
       <Route path="/admin/licensed-vehicles" component={AdminLicenceVehicles} />
       <Route path="/admin/merchants" component={AdminMerchants} />
       <Route path="/admin/booking-ops" component={AdminBookingOps} />

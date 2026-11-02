@@ -52,6 +52,14 @@ router.get(
   controller.listLicences,
 );
 
+// Verification health: review rate, provider outages, pickup mismatches.
+// ADMIN-visible because an ADMIN is who works the review queue.
+router.get(
+  "/verification-health",
+  requireAdminRole("ADMIN", "SUPER_ADMIN"),
+  controller.verificationHealth,
+);
+
 // SUPER_ADMIN gets money and logs.
 router.get(
   "/payments",

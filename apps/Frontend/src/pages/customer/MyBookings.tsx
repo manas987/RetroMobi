@@ -319,7 +319,14 @@ function PickupConfirm({
   }
 
   return (
-    <label className="text-ink font-medium hover:underline cursor-pointer">
+    <div className="flex flex-col gap-1">
+      {/* The order is enforced server-side (identity check first), so say so
+          here rather than letting the customer meet a 409 with no
+          explanation. See docs/dl-verification.md, Phase 5. */}
+      <p className="text-xs text-ink-4">
+        Shop staff check your licence first — then record the vehicle.
+      </p>
+      <label className="text-ink font-medium hover:underline cursor-pointer">
       {busy ? "Uploading…" : "Choose a walk-around video"}
       <input
         type="file"
@@ -331,7 +338,8 @@ function PickupConfirm({
           if (file) onFile(file);
         }}
       />
-    </label>
+      </label>
+    </div>
   );
 }
 

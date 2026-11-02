@@ -8,13 +8,23 @@
 // `PLATFORM_GSTIN ?? null` issues a GST invoice with no GSTIN on it, which is how
 // that one shipped. A boot failure is cheaper than either.
 //
-// Twilio is the one exception, and only in production: a missing SMS credential
-// doesn't throw loudly at point of use -- smsSender.ts's dev-fallback logs
+// Twilio and Cashfree Secure ID are the exceptions, and only in production.
+//
+// Twilio: a missing SMS credential doesn't throw loudly at point of use --
+// smsSender.ts's dev-fallback logs
 // "[dev-fallback]" and returns successfully, because that's what lets `bun test`
 // and local dev run with no vendor creds at all. The same silent success in
 // production means phone OTP -- the only way into the app -- never sends, and
 // nobody finds out until a real signup fails. So it's required, but only when
 // NODE_ENV=production, so dev/test are unaffected.
+//
+// Cashfree Secure ID: the same shape, found later and worse. kyc.ts's
+// dev-fallback returned a faked `VERIFIED` driving licence, so an unset
+// CASHFREE_CLIENT_ID in production approved every rider without a single check
+// and a scooter went out to whoever asked. kyc.ts no longer fakes a pass
+// unless KYC_DEV_AUTO_VERIFY is explicitly on -- which is itself refused in
+// production below -- and the credentials are required here, because in
+// production a licence nobody can verify is a dead feature either way.
 
 interface Requirement {
   key: string;
@@ -50,6 +60,30 @@ const REQUIRED_IN_PRODUCTION: Requirement[] = [
   { key: "TWILIO_ACCOUNT_SID", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
   { key: "TWILIO_AUTH_TOKEN", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
   { key: "TWILIO_FROM_NUMBER", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
+  // Same failure shape as Twilio above, with a worse consequence: without
+  // these, providers/kyc.ts used to return a faked VERIFIED, so every driving
+  // licence was approved without being checked and a scooter went out to
+  // whoever asked. It now reports SANDBOX_UNAVAILABLE instead, but in
+  // production an unverifiable licence is a dead feature, so refuse to boot.
+  { key: "CASHFREE_CLIENT_ID", why: "no driving licence can be verified at all without it" },
+  { key: "CASHFREE_CLIENT_SECRET", why: "no driving licence can be verified at all without it" },
+  // An unpeppered sha256 of a driving licence number is reversible: the format
+  // carries very little entropy, so a lookup table of every plausible Indian
+  // DL number is a weekend's work. The hash is all we keep of the number
+  // (lib/verificationHash.ts), so if it is guessable we have stored the number.
+  { key: "DL_HASH_PEPPER", why: "without it the stored licence hashes are reversible by anyone" },
+];
+
+// Set in production = a silently wrong decision, so these are refused outright.
+// There is no legitimate production value, which is why they are not in
+// REQUIRED_IN_PRODUCTION with a validator -- absence is the only correct state.
+const FORBIDDEN_IN_PRODUCTION: Requirement[] = [
+  {
+    key: "KYC_DEV_AUTO_VERIFY",
+    why: "it fakes a VERIFIED driving licence with no check -- a local-only escape hatch",
+    // "false" and "" are the off state and perfectly fine to leave in a .env.
+    validate: (v) => (v === "true" ? "must not be true in production" : null),
+  },
 ];
 
 // Not required: RetroMobi may not be GST-registered yet, and a half-configured
@@ -83,6 +117,15 @@ export function assertConfig(env: NodeJS.ProcessEnv = process.env): string[] {
     }
     const invalid = validate?.(value);
     if (invalid) problems.push(`  ${key} ${invalid} — ${why}`);
+  }
+
+  if (env.NODE_ENV === "production") {
+    for (const { key, why, validate } of FORBIDDEN_IN_PRODUCTION) {
+      const value = env[key]?.trim();
+      if (!value) continue;
+      const invalid = validate?.(value);
+      if (invalid) problems.push(`  ${key} ${invalid} — ${why}`);
+    }
   }
 
   for (const { key, why, validate } of OPTIONAL_BUT_VALIDATED) {

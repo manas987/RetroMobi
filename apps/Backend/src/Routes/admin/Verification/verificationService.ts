@@ -1,9 +1,23 @@
 import type { Pool, PoolClient } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
+import { presignDownload } from "../../../lib/storage.ts";
+import {
+  IllegalTransitionError,
+  transition,
+} from "../../../lib/verificationStateMachine.ts";
 
 export class VerificationTargetNotFoundError extends Error {}
 
-export type VerifiableType = "SHOP" | "VEHICLE" | "VEHICLE_DOCUMENT" | "MERCHANT_DOCUMENT" | "SHOP_LICENCE";
+export type VerifiableType =
+  | "SHOP"
+  | "VEHICLE"
+  | "VEHICLE_DOCUMENT"
+  | "MERCHANT_DOCUMENT"
+  | "SHOP_LICENCE"
+  | "RIDER_VERIFICATION";
+
+/** Only a session a human is supposed to judge can be approved. */
+export class NotReviewableError extends Error {}
 
 /**
  * Every row has to identify itself to the admin deciding on it. These queries
@@ -56,6 +70,45 @@ const QUEUE_QUERIES: Record<VerifiableType, string> = {
      where d.status = $1 and d.deleted_at is null
      order by d.created_at`,
 
+  // A customer's driving licence, which is a different kind of review from the
+  // five merchant-side ones: there is no document to look at, only evidence to
+  // weigh. So this row carries the reason it needs a human (review_required
+  // with a rejection_code), the assurance level, and the photo's source --
+  // SELF_UPLOADED being the case where there is genuinely nothing to verify
+  // against.
+  //
+  // $1 is the session state, matching the other queries' status filter.
+  RIDER_VERIFICATION: `
+    select s.id, s.state as status, s.method, s.assurance_level, s.review_required,
+           s.rejection_code, s.policy_version, s.created_at,
+           r.id as rider_id, r.name as rider_name,
+           to_char(r.dob, 'YYYY-MM-DD') as rider_dob,
+           u.phone as account_phone,
+           dlv.licence_number as licence_number_masked,
+           dlv.licence_number_hash,
+           dlv.holder_name, dlv.licence_status, dlv.source_type, dlv.issuing_authority,
+           to_char(dlv.expires_on, 'YYYY-MM-DD') as licence_expires_on,
+           p.storage_key as photo_key, p.source as photo_source,
+           coalesce(
+             (select json_agg(json_build_object('code', c.code, 'abbreviation', c.abbreviation)
+                              order by c.code)
+                from driving_licence_categories c
+               where c.licence_verification_id = dlv.id),
+             '[]'::json) as categories,
+           -- The same licence on another account. A flag for a human, never a
+           -- refusal: families share accounts.
+           (select count(*)::int from driving_licence_verifications d2
+              join riders r2 on r2.id = d2.rider_id
+             where d2.licence_number_hash = dlv.licence_number_hash
+               and r2.user_id <> r.user_id) as other_accounts
+      from rider_verification_sessions s
+      join riders r on r.id = s.rider_id
+      join users u on u.id = s.user_id
+      left join driving_licence_verifications dlv on dlv.session_id = s.id
+      left join verification_photos p on p.session_id = s.id and p.deleted_at is null
+     where s.state = $1
+     order by s.created_at`,
+
   SHOP_LICENCE: `
     select sl.id, sl.licence_number, sl.issuing_authority, sl.issued_at, sl.expires_at,
            sl.status, sl.storage_key, sl.created_at,
@@ -78,10 +131,19 @@ const QUEUE_QUERIES: Record<VerifiableType, string> = {
 // (which go PENDING -> ACTIVE, not PENDING -> VERIFIED).
 const DEFAULT_PENDING = "PENDING";
 
+// A verification session's "needs a human" state is not called PENDING, so the
+// shared default would have returned an empty queue for it -- silently, which
+// is the worst kind of empty queue.
+const DEFAULT_STATUS: Partial<Record<VerifiableType, string>> = {
+  RIDER_VERIFICATION: "MANUAL_REVIEW_REQUIRED",
+};
+
 // Switches on type rather than five near-identical endpoints with five
 // near-identical services.
 export async function listVerificationQueue(pool: Pool, type: VerifiableType, status?: string) {
-  const { rows } = await pool.query(QUEUE_QUERIES[type], [status ?? DEFAULT_PENDING]);
+  const { rows } = await pool.query(QUEUE_QUERIES[type], [
+    status ?? DEFAULT_STATUS[type] ?? DEFAULT_PENDING,
+  ]);
   return rows;
 }
 
@@ -253,4 +315,103 @@ export async function decideShopLicence(
   } finally {
     client.release();
   }
+}
+
+/**
+ * The decision on a customer's driving licence.
+ *
+ * Deliberately NOT routed through `decide()` above. That helper writes a status
+ * column straight onto a table, which is right for the five merchant-side
+ * reviews; a verification session has a state machine, and an admin must not be
+ * able to step outside it. So this goes through
+ * `verificationStateMachine.transition`, which means an admin can only approve
+ * a session sitting in MANUAL_REVIEW_REQUIRED -- never one whose document
+ * failed, and never one still waiting on the vendor.
+ */
+export async function decideRiderVerification(
+  pool: Pool,
+  adminId: string,
+  sessionId: string,
+  decision: { status: "VERIFIED" | "REJECTED"; reason: string },
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `select state from rider_verification_sessions where id = $1`,
+      [sessionId],
+    );
+    if (rows.length === 0) {
+      throw new VerificationTargetNotFoundError(`verification session ${sessionId} not found`);
+    }
+    if (rows[0].state !== "MANUAL_REVIEW_REQUIRED") {
+      throw new NotReviewableError(
+        `verification session ${sessionId} is ${rows[0].state}; only a session awaiting review can be decided`,
+      );
+    }
+
+    await transition(client, {
+      sessionId,
+      to: decision.status,
+      actorType: "ADMIN",
+      actorId: adminId,
+      eventType: decision.status === "VERIFIED" ? "approved_by_admin" : "rejected_by_admin",
+      // An approval out of review is a human vouching, not new evidence, so
+      // the assurance level is not raised by it.
+      reviewRequired: false,
+      rejectionCode: decision.status === "REJECTED" ? "REJECTED_ON_REVIEW" : null,
+      metadata: { reason: decision.reason },
+    });
+
+    await writeAudit(client, {
+      actorType: "ADMIN",
+      actorId: adminId,
+      action: "rider_verification.decided",
+      entityType: "rider_verification_session",
+      entityId: sessionId,
+      before: { state: rows[0].state },
+      after: { state: decision.status, reason: decision.reason },
+    });
+    await client.query("COMMIT");
+    return { state: decision.status };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err instanceof IllegalTransitionError) {
+      throw new NotReviewableError(err.message);
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * The photograph behind a queue row. Short-lived and generated per request,
+ * never stored: a licence photograph behind a long-lived URL is a licence
+ * photograph on the internet.
+ */
+export async function getRiderVerificationPhotoUrl(
+  pool: Pool,
+  sessionId: string,
+): Promise<string> {
+  const { rows } = await pool.query(
+    `select storage_key from verification_photos
+      where session_id = $1 and deleted_at is null
+      order by created_at desc limit 1`,
+    [sessionId],
+  );
+  if (rows.length === 0) throw new NoFileError(`verification session ${sessionId} has no photo`);
+  return presignDownload(rows[0].storage_key, 300);
+}
+
+/** The full transition trail, for the admin deciding. Metadata is already masked. */
+export async function getRiderVerificationEvents(pool: Pool, sessionId: string) {
+  const { rows } = await pool.query(
+    `select actor_type, actor_id, event_type, previous_state, next_state, metadata, created_at
+       from rider_verification_events
+      where session_id = $1
+      order by created_at`,
+    [sessionId],
+  );
+  return rows;
 }

@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
-import { createBookableVehicle, createRider, createUser, futureWindow } from "../../../test/fixtures.ts";
+import { createBookableVehicle, createRider, createUser, futureWindow, passIdentityCheck } from "../../../test/fixtures.ts";
 import { createHold } from "../Bookings/bookingsService.ts";
 import { createPaymentIntent, handlePaymentWebhook } from "../Payments/paymentsService.ts";
 import { confirmInspection, merchantReturn } from "./pickupService.ts";
@@ -52,6 +52,11 @@ async function confirmedBookingWithPayment(dayOffset: number) {
     { providerEventId: `evt_${Date.now()}_${Math.random()}`, type: "PAYMENT_SUCCESS", orderId: intent.orderId, payload: {} },
     fakeCashfree,
   );
+
+  // Handover now requires the shop staff to have confirmed the rider's
+  // identity first -- that check is the only thing binding a human to a
+  // licence since automated face matching was dropped.
+  await passIdentityCheck(pool, held.bookings[0]!.id);
 
   const { rows } = await pool.query(`select shop_id from vehicles where id = $1`, [vehicle.id]);
   return { userId: user.id, bookingId: held.bookings[0]!.id, groupId: held.groupId, shopId: rows[0].shop_id };

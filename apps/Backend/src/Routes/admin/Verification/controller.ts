@@ -62,3 +62,31 @@ export async function shopLicence(req: Request, res: Response) {
   );
   res.status(200).json({ decided: true });
 }
+
+// --- rider driving licences (docs/dl-verification.md) -------------------
+
+export async function riderVerificationReview(req: Request, res: Response) {
+  const result = await verificationService.decideRiderVerification(
+    pool,
+    req.adminId!,
+    pathParam(req, "sessionId"),
+    req.body,
+  );
+  res.status(200).json(result);
+}
+
+export async function riderVerificationPhoto(req: Request, res: Response) {
+  const downloadUrl = await verificationService.getRiderVerificationPhotoUrl(
+    pool,
+    pathParam(req, "sessionId"),
+  );
+  res.status(200).json({ downloadUrl });
+}
+
+export async function riderVerificationEvents(req: Request, res: Response) {
+  const events = await verificationService.getRiderVerificationEvents(
+    pool,
+    pathParam(req, "sessionId"),
+  );
+  res.status(200).json({ events });
+}

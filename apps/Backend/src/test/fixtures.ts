@@ -47,24 +47,73 @@ export async function createUser(pool: Pool): Promise<{ id: string; phone: strin
   return rows[0];
 }
 
+/**
+ * A rider who passes the licence gate: a verification session at the current
+ * policy version, a VERIFIED licence with an RTO status, and a category that
+ * entitles them to the vehicle class `createModel` produces.
+ *
+ * `categories` and `licenceStatus` are not decoration -- since the eligibility
+ * engine landed, a licence with no category data or no RTO status does not
+ * pass, which is the whole point of it.
+ */
 export async function createRider(
   pool: Pool,
   userId: string,
-  opts: { dlExpiresOn?: string | null; verified?: boolean } = {},
+  opts: {
+    dlExpiresOn?: string | null;
+    verified?: boolean;
+    dob?: string;
+    categories?: string[];
+    licenceStatus?: string | null;
+    policyVersion?: string;
+  } = {},
 ): Promise<{ id: string }> {
   const { rows } = await pool.query(
-    `insert into riders (user_id, name, dob) values ($1, $2, '1995-01-01') returning id`,
-    [userId, `Rider ${uniq()}`],
+    `insert into riders (user_id, name, dob) values ($1, $2, $3) returning id`,
+    [userId, `Rider ${uniq()}`, opts.dob ?? "1995-01-01"],
   );
   const riderId = rows[0].id;
 
   if (opts.verified !== false) {
-    await pool.query(
-      `insert into driving_licence_verifications
-         (rider_id, provider, licence_number, status, valid_from, expires_on, verified_at)
-       values ($1, 'TEST', $2, 'VERIFIED', '2020-01-01', $3, now())`,
-      [riderId, `DL${uniq()}`, opts.dlExpiresOn ?? "2035-01-01"],
+    const session = await pool.query(
+      `insert into rider_verification_sessions
+         (rider_id, user_id, method, provider, state, verification_id, policy_version,
+          assurance_level, consent_text, consent_at, expires_at)
+       values ($1, $2, 'DL_NUMBER', 'TEST', 'VERIFIED', $3, $4,
+               'MEDIUM', 'test fixture consent', now(), now() + interval '1 day')
+       returning id`,
+      [riderId, userId, `fixture-${uniq()}`, opts.policyVersion ?? "v1"],
     );
+    // licence_number holds the MASK since migration 0015 -- the full number is
+    // never stored. Masked here the same way lib/maskSecrets.ts does it, by
+    // hand rather than by import, because this file must not depend on
+    // application code. The last four stay meaningful: the handover check
+    // compares them against what staff read off the physical card.
+    const fullNumber = `UK${String(SALT + seq).padStart(13, "0")}`.slice(0, 15);
+    const masked =
+      fullNumber.slice(0, 4) + "*".repeat(fullNumber.length - 8) + fullNumber.slice(-4);
+    const verification = await pool.query(
+      `insert into driving_licence_verifications
+         (rider_id, session_id, provider, licence_number, licence_number_hash, status,
+          licence_status, source_type, valid_from, expires_on, verified_at)
+       values ($1, $2, 'TEST', $3, $4, 'VERIFIED', $5, 'RTO_RECORD', '2020-01-01', $6, now())
+       returning id`,
+      [
+        riderId,
+        session.rows[0].id,
+        masked,
+        `hash${uniq()}`,
+        opts.licenceStatus === undefined ? "Active" : opts.licenceStatus,
+        opts.dlExpiresOn ?? "2035-01-01",
+      ],
+    );
+    for (const code of opts.categories ?? ["MCWG"]) {
+      await pool.query(
+        `insert into driving_licence_categories (licence_verification_id, code, issue_date, endorse_date)
+         values ($1, $2, '2020-01-01', '2020-01-01')`,
+        [verification.rows[0].id, code],
+      );
+    }
   }
   return { id: riderId };
 }
@@ -104,11 +153,19 @@ export async function createShop(
   return rows[0];
 }
 
-export async function createModel(pool: Pool): Promise<{ id: string }> {
+/**
+ * `class` is the key into vehicle_class_licence_rules (seeded in 0016), so a
+ * model with an unmapped class fails the licence gate with NO_RULE -- which is
+ * deliberate, and worth knowing when a booking test starts failing.
+ */
+export async function createModel(
+  pool: Pool,
+  opts: { class?: string | null } = {},
+): Promise<{ id: string }> {
   const { rows } = await pool.query(
     `insert into vehicle_models (make, model, class, fuel_type, engine_cc)
-     values ('Honda', $1, 'SCOOTER', 'PETROL', 110) returning id`,
-    [`Activa ${uniq()}`],
+     values ('Honda', $1, $2, 'PETROL', 110) returning id`,
+    [`Activa ${uniq()}`, opts.class === undefined ? "SCOOTER" : opts.class],
   );
   return rows[0];
 }
@@ -198,4 +255,36 @@ export function futureWindow(dayOffset = 30, nights = 2) {
   start.setUTCHours(9, 0, 0, 0);
   const end = new Date(start.getTime() + nights * 86_400_000);
   return { pickupAt: start, returnAt: end };
+}
+
+/**
+ * Records the shop staff's identity check for a booking, which both handover
+ * paths now require (docs/dl-verification.md Phase 5). Inserts directly rather
+ * than calling the service, so a test about pickup does not fail because of
+ * something in the check's own validation.
+ */
+export async function passIdentityCheck(pool: Pool, bookingId: string): Promise<void> {
+  const { rows } = await pool.query(
+    `select b.rider_id, sh.merchant_user_id, dlv.licence_number
+       from bookings b
+       join vehicles v on v.id = b.vehicle_id
+       join shops sh on sh.id = v.shop_id
+       left join driving_licence_verifications dlv
+              on dlv.rider_id = b.rider_id and dlv.status = 'VERIFIED'
+      where b.id = $1
+      order by dlv.verified_at desc nulls last
+      limit 1`,
+    [bookingId],
+  );
+  if (rows.length === 0) throw new Error(`booking ${bookingId} not found`);
+  const row = rows[0];
+  if (!row.rider_id) return; // a walk-in needs no check
+
+  await pool.query(
+    `insert into pickup_identity_checks
+       (booking_id, rider_id, checked_by, photo_matched, physical_dl_seen, dl_number_last4)
+     values ($1, $2, $3, true, true, $4)
+     on conflict (booking_id) do nothing`,
+    [bookingId, row.rider_id, row.merchant_user_id, String(row.licence_number ?? "").slice(-4)],
+  );
 }

@@ -3,7 +3,12 @@ import { requireMerchantAuth } from "../../../middleware/requireMerchantAuth.ts"
 import { requirePermission } from "../../../middleware/requirePermission.ts";
 import { validate } from "../../../middleware/validate.ts";
 import * as controller from "./controller.ts";
-import { CreateWalkinSchema, ListBookingsQuerySchema, ReturnSchema } from "./schema.ts";
+import {
+  CreateWalkinSchema,
+  IdentityCheckSchema,
+  ListBookingsQuerySchema,
+  ReturnSchema,
+} from "./schema.ts";
 
 const router = Router();
 
@@ -25,6 +30,20 @@ router.post(
   requirePermission("bookings:write"),
   validate(CreateWalkinSchema),
   controller.createWalkin,
+);
+// The identity check at handover. With automated face matching dropped, this
+// is the only evidence binding a human to a licence -- see
+// docs/dl-verification.md. bookings:write, same as pickup itself.
+router.get(
+  "/bookings/:bookingId/identity",
+  requirePermission("bookings:write"),
+  controller.identity,
+);
+router.post(
+  "/bookings/:bookingId/identity-check",
+  requirePermission("bookings:write"),
+  validate(IdentityCheckSchema),
+  controller.identityCheck,
 );
 router.post(
   "/bookings/:bookingId/pickup",

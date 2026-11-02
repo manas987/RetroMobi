@@ -8,6 +8,7 @@ const NAV = [
   { href: "/admin/merchants", label: "Merchants", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/merchant-review", label: "Merchant review", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/vehicle-review", label: "Vehicle review", roles: ["ADMIN", "SUPER_ADMIN"] },
+  { href: "/admin/rider-review", label: "Rider licences", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/licensed-vehicles", label: "Licensed vehicles", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/booking-ops", label: "Booking ops", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/payments", label: "Payments", roles: ["SUPER_ADMIN"] },

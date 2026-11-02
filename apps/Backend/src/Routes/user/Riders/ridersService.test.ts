@@ -6,7 +6,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
-import { createBookableVehicle, createUser, futureWindow } from "../../../test/fixtures.ts";
+import {
+  createBookableVehicle,
+  createRider as createVerifiedRider,
+  createUser,
+  futureWindow,
+} from "../../../test/fixtures.ts";
 import { createHold } from "../Bookings/bookingsService.ts";
 import {
   RiderHasActiveBookingError,
@@ -33,12 +38,12 @@ afterAll(async () => {
 describe("ridersService", () => {
   test("deleting a rider with a HOLD booking is rejected", async () => {
     const user = await createUser(pool);
-    const rider = await createRider(pool, user.id, { name: "Test Rider" });
-    await pool.query(
-      `insert into driving_licence_verifications (rider_id, provider, licence_number, status, expires_on, verified_at)
-       values ($1, 'TEST', 'DLTEST', 'VERIFIED', '2035-01-01', now())`,
-      [rider.id],
-    );
+    // The fixture's rider, not this module's createRider plus a hand-rolled
+    // licence row: since the eligibility engine landed, booking needs a
+    // verification session, an RTO status and a category that entitles the
+    // rider to the vehicle's class. Hand-rolling that here would be a second
+    // copy of the gate's requirements, drifting from fixtures.ts.
+    const rider = await createVerifiedRider(pool, user.id);
     const vehicle = await createBookableVehicle(pool);
     const { pickupAt, returnAt } = futureWindow(900);
 

@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { combine, splitIso, DateField } from "../components/DateTimeField";
+import { combine, splitIso } from "../components/DateTimeField";
 import { DateRangeField } from "../components/DateRangeField";
 import { ErrorBox, SubmitButton, TextField } from "../components/AuthFormBits";
+import { RiderVerification } from "../components/RiderVerification";
 import { Modal } from "../components/Modal";
 import { useCart } from "../lib/cart";
 import { usePortalSession, usePortalQuery, portalFetch, PortalApiError, type Row } from "../lib/portal";
@@ -69,10 +70,7 @@ export function Checkout() {
 
   const [addingRider, setAddingRider] = useState(false);
   const [riderName, setRiderName] = useState("");
-  const [riderDob, setRiderDob] = useState("");
   const [verifyingRiderId, setVerifyingRiderId] = useState<string | null>(null);
-  const [licenceNumber, setLicenceNumber] = useState("");
-  const [licenceDob, setLicenceDob] = useState("");
 
   const [paymentIntent, setPaymentIntent] = useState<{ orderId: string; paymentSessionId: string } | null>(
     null,
@@ -110,27 +108,11 @@ export function Checkout() {
       const rider = await portalFetch<Row>("user", "/riders", {
         method: "POST",
         token: session!.accessToken,
-        body: { name: riderName, dob: riderDob || undefined },
+        body: { name: riderName },
       });
       setAddingRider(false);
       setRiderName("");
       setVerifyingRiderId(String(rider.id));
-    });
-
-  const verifyLicence = () =>
-    run(async () => {
-      await portalFetch("user", `/riders/${verifyingRiderId}/licence/manual`, {
-        method: "POST",
-        token: session!.accessToken,
-        body: { licenceNumber, dob: licenceDob },
-      });
-      setVerifyingRiderId(null);
-      setLicenceNumber("");
-      setLicenceDob("");
-      // react-query cache for riders isn't shared with usePortalQuery's own
-      // state, so a page reload is the simplest way to pick up the fresh
-      // licence_status — this is a preview checkout, not a polished SPA yet.
-      window.location.reload();
     });
 
   const submitHold = () =>
@@ -261,17 +243,32 @@ export function Checkout() {
                 + Add a rider
               </button>
 
-              <Modal open={Boolean(verifyingRiderId)} onClose={() => setVerifyingRiderId(null)} title="Verify driving licence">
-                <TextField label="Licence number" value={licenceNumber} onChange={setLicenceNumber} />
-                <DateField label="Date of birth" value={licenceDob} onChange={setLicenceDob} fromYear={1920} toDate={new Date()} />
-                <SubmitButton busy={busy} onClick={verifyLicence} disabled={!licenceNumber || !licenceDob}>
-                  Verify
-                </SubmitButton>
+              <Modal
+                open={Boolean(verifyingRiderId)}
+                onClose={() => setVerifyingRiderId(null)}
+                title="Verify driving licence"
+              >
+                {verifyingRiderId && (
+                  <RiderVerification
+                    riderId={verifyingRiderId}
+                    riderName={String(
+                      riders.find((r) => String(r.id) === verifyingRiderId)?.name ?? "",
+                    )}
+                    token={session!.accessToken}
+                    onDone={() => {
+                      setVerifyingRiderId(null);
+                      // usePortalQuery's state is not shared with the riders
+                      // list here, so a reload is the simplest way to pick up
+                      // the fresh licence status.
+                      window.location.reload();
+                    }}
+                    onCancel={() => setVerifyingRiderId(null)}
+                  />
+                )}
               </Modal>
 
               <Modal open={addingRider} onClose={() => setAddingRider(false)} title="Add a rider">
                 <TextField label="Rider name" value={riderName} onChange={setRiderName} autoFocus />
-                <DateField label="Date of birth" value={riderDob} onChange={setRiderDob} fromYear={1920} toDate={new Date()} />
                 <SubmitButton busy={busy} onClick={addRider} disabled={!riderName}>
                   Add rider
                 </SubmitButton>

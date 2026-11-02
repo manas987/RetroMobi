@@ -8,6 +8,7 @@ import { StatusPill } from "../../components/DataTable";
 import { ErrorBox, SubmitButton, TextField } from "../../components/AuthFormBits";
 import { dateLabel, enumLabel } from "../../lib/format";
 import { uploadFile, UploadFailedError } from "../../lib/upload";
+import { RiderVerification } from "../../components/RiderVerification";
 
 function useRequireCustomer() {
   const { session } = usePortalSession("user");
@@ -32,7 +33,6 @@ function ProfileBody() {
 
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
-  const [dob, setDob] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -40,9 +40,8 @@ function ProfileBody() {
     setAddError(null);
     setBusy(true);
     try {
-      await portalFetch("user", "/riders", { method: "POST", token: session!.accessToken, body: { name, dob: dob || undefined } });
+      await portalFetch("user", "/riders", { method: "POST", token: session!.accessToken, body: { name } });
       setName("");
-      setDob("");
       setAdding(false);
       reload();
     } catch (err) {
@@ -71,7 +70,6 @@ function ProfileBody() {
           <h2 className="font-semibold text-ink mb-3">New rider</h2>
           {addError && <ErrorBox text={addError} />}
           <TextField label="Name" value={name} onChange={setName} autoFocus />
-          <DateField label="Date of birth" value={dob} onChange={setDob} fromYear={1920} toDate={new Date()} />
           <div className="flex items-center gap-3 mt-1">
             <SubmitButton busy={busy} disabled={!name} onClick={addRider}>
               Add rider
@@ -194,67 +192,8 @@ function RiderCard({ rider: r, token, onChanged }: { rider: Row; token: string; 
   const [editName, setEditName] = useState(String(r.name ?? ""));
   const [editDob, setEditDob] = useState(String(r.dob ?? "").slice(0, 10));
   const [verifying, setVerifying] = useState(false);
-  const [licenceNumber, setLicenceNumber] = useState("");
-  const [licenceDob, setLicenceDob] = useState("");
-  const [digilocker, setDigilocker] = useState<{ consentUrl: string; requestId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  async function verify() {
-    setError(null);
-    setBusy(true);
-    try {
-      await portalFetch("user", `/riders/${r.id}/licence/manual`, {
-        method: "POST",
-        token,
-        body: { licenceNumber, dob: licenceDob },
-      });
-      setVerifying(false);
-      onChanged();
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't verify that licence.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function startDigilocker() {
-    setError(null);
-    setBusy(true);
-    try {
-      const result = await portalFetch<{ consentUrl: string; requestId: string }>(
-        "user",
-        `/riders/${r.id}/licence/digilocker/init`,
-        { method: "POST", token, body: { redirectUrl: window.location.href } },
-      );
-      setDigilocker(result);
-      window.open(result.consentUrl, "_blank", "noopener");
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't start DigiLocker.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function finishDigilocker() {
-    if (!digilocker) return;
-    setError(null);
-    setBusy(true);
-    try {
-      await portalFetch("user", `/riders/${r.id}/licence/digilocker/callback`, {
-        method: "POST",
-        token,
-        body: { requestId: digilocker.requestId },
-      });
-      setDigilocker(null);
-      setVerifying(false);
-      onChanged();
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't confirm that DigiLocker consent.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   /** Name and date of birth only. The licence verification records are
    *  immutable and an edit never touches them, so a verified rider stays
@@ -360,41 +299,21 @@ function RiderCard({ rider: r, token, onChanged }: { rider: Row; token: string; 
         </div>
       )}
 
-      {verifying && !digilocker && (
+      {verifying && (
         <div className="mt-3 pt-3 border-t border-line">
-          <div className="flex items-end gap-3 flex-wrap mb-3">
-            <TextField label="Licence number" value={licenceNumber} onChange={setLicenceNumber} />
-            <DateField label="Date of birth" value={licenceDob} onChange={setLicenceDob} fromYear={1920} toDate={new Date()} />
-            <button
-              type="button"
-              disabled={busy || !licenceNumber || !licenceDob}
-              onClick={verify}
-              className="h-10 px-4 rounded-row bg-ink text-surface font-medium text-sm disabled:opacity-40 hover:bg-ink-2 transition-colors mb-4"
-            >
-              {busy ? "Working…" : "Submit manually"}
-            </button>
-          </div>
-          <button type="button" disabled={busy} onClick={startDigilocker} className="text-sm text-ink font-medium hover:underline disabled:opacity-40">
-            Or verify instantly with DigiLocker
-          </button>
+          <RiderVerification
+            riderId={String(r.id)}
+            riderName={String(r.name ?? "")}
+            token={token}
+            onDone={() => {
+              setVerifying(false);
+              onChanged();
+            }}
+            onCancel={() => setVerifying(false)}
+          />
         </div>
       )}
 
-      {digilocker && (
-        <div className="mt-3 pt-3 border-t border-line">
-          <p className="text-sm text-ink-2 mb-2">
-            Complete the consent in the tab that just opened, then come back and confirm.
-          </p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={finishDigilocker}
-            className="h-10 px-4 rounded-row bg-ink text-surface font-medium text-sm disabled:opacity-40 hover:bg-ink-2 transition-colors"
-          >
-            {busy ? "Working…" : "I've completed it"}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

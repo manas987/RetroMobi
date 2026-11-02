@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { pathParam } from "../../../lib/pathParam.ts";
 import { pool } from "../../../DB/client.ts";
 import * as oversightService from "./oversightService.ts";
+import { verificationMetrics } from "../../../lib/verificationMetrics.ts";
 
 export async function listMerchants(req: Request, res: Response) {
   const rows = await oversightService.listMerchants(pool, req.validatedQuery as any);
@@ -46,4 +47,11 @@ export async function listPayouts(req: Request, res: Response) {
 export async function listAuditLogs(req: Request, res: Response) {
   const rows = await oversightService.listAuditLogs(pool, req.validatedQuery as any);
   res.status(200).json({ auditLogs: rows });
+}
+
+/** Rider verification health. See lib/verificationMetrics.ts for why it is one query. */
+export async function verificationHealth(req: Request, res: Response) {
+  const days = Number((req.query.days as string) ?? 30);
+  const metrics = await verificationMetrics(pool, Number.isFinite(days) && days > 0 ? days : 30);
+  res.status(200).json(metrics);
 }

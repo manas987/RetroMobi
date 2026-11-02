@@ -3,6 +3,7 @@ import { app } from "./src/index.ts";
 import { assertConfig } from "./src/lib/config.ts";
 import { sweepExpiredHolds } from "./src/lib/holds.ts";
 import { sendPendingNotifications, sweepBookingReminders } from "./src/lib/notificationSweep.ts";
+import { sweepVerificationPhotos } from "./src/lib/verificationRetention.ts";
 import { sendEmail } from "./src/providers/emailSender.ts";
 import { sendSms } from "./src/providers/smsSender.ts";
 
@@ -29,6 +30,9 @@ setInterval(async () => {
     await sweepExpiredHolds(pool);
     await sweepBookingReminders(pool);
     await sendPendingNotifications(pool, { sms: sendSms, email: sendEmail });
+    // Retention is a promise made in the consent text, so something has to
+    // keep it. Small batch, same timer -- see lib/verificationRetention.ts.
+    await sweepVerificationPhotos(pool);
   } catch (e) {
     console.error("sweep failed", e);
   } finally {

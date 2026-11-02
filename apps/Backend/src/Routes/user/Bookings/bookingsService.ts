@@ -2,12 +2,24 @@ import type { Pool, PoolClient } from "pg";
 import { composeTotal, priceRental, refundForCancellation } from "../../../lib/pricing.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import { notify } from "../../../lib/notify.ts";
+import {
+  evaluateRiderForVehicle,
+  flagSessionForReview,
+  istDate,
+} from "../../../lib/licenceGate.ts";
 import type { CashfreeClient } from "../../../providers/cashfree.ts";
 
 export class VehicleUnavailableError extends Error {}
 export class TooManyVehiclesError extends Error {}
 export class InvalidDurationError extends Error {}
 export class LicenceInvalidError extends Error {}
+/**
+ * The licence could not be judged either way -- an RTO that returned no status,
+ * a class of vehicle nobody has mapped. Separate from LicenceInvalidError
+ * because telling a customer their licence is invalid when it is our data that
+ * is missing is both wrong and the kind of thing they phone about.
+ */
+export class LicenceReviewRequiredError extends Error {}
 export class CouponInvalidError extends Error {}
 export class BookingNotCancellableError extends Error {}
 export class ExtensionPendingError extends Error {}
@@ -108,27 +120,36 @@ export async function createHold(
   try {
     await client.query("BEGIN");
 
-    // Every rider in the checkout must belong to this account and be licensed
-    // for the whole rental, not just at pickup.
+    // Every rider in the checkout must belong to this account and be entitled
+    // to the vehicle they are assigned, for the whole rental -- not just hold
+    // some licence, and not just be licensed at pickup. The entitlement half
+    // is new: driving_licence_categories had been collected since 0006 and
+    // read by nothing, so a gearless-scooter licence could book a motorcycle.
+    // lib/licenceGate.ts is shared with the handover gate so the two cannot
+    // drift apart.
     for (const item of items) {
-      const { rows } = await client.query(
-        `select dlv.status, dlv.expires_on
-           from riders r
-           left join driving_licence_verifications dlv on dlv.rider_id = r.id and dlv.status = 'VERIFIED'
-          where r.id = $1 and r.user_id = $2 and r.deleted_at is null
-          order by dlv.verified_at desc
-          limit 1`,
-        [item.riderId, userId],
-      );
-      const verification = rows[0];
-      const returnDateIst = new Date(returnAt.getTime() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      if (
-        !verification ||
-        verification.status !== "VERIFIED" ||
-        !verification.expires_on ||
-        verification.expires_on.toISOString().slice(0, 10) < returnDateIst
-      ) {
-        throw new LicenceInvalidError(`rider ${item.riderId} has no valid licence for this window`);
+      const gate = await evaluateRiderForVehicle(client, {
+        userId,
+        riderId: item.riderId,
+        vehicleId: item.vehicleId,
+        rentalStart: istDate(pickupAt),
+        rentalEnd: istDate(returnAt),
+      });
+
+      if (gate.outcome === "FAIL") {
+        throw new LicenceInvalidError(
+          `rider ${item.riderId} is not eligible for this vehicle or window: ${gate.reasons.join(", ")}`,
+        );
+      }
+      if (gate.outcome === "REVIEW") {
+        throw new LicenceReviewRequiredError(
+          `rider ${item.riderId}'s licence needs review before booking: ${gate.reasons.join(", ")}`,
+        );
+      }
+      // A pass that still wants a human -- a licence grandfathered in by the
+      // legacy grace window. The booking goes ahead; the session is flagged.
+      if (gate.flagForReview && gate.sessionId) {
+        await flagSessionForReview(client, gate.sessionId, gate.reasons);
       }
     }
 

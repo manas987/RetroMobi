@@ -9,7 +9,12 @@ const BACKEND = process.env.BACKEND_URL ?? "http://localhost:3000";
 // every weight whether the page used it or not. Serving them as real files
 // keeps the CSS small and lets font-display:swap do its job. A whitelist, not
 // a path join, so the route can't be walked out of the assets directory.
-const FONTS = new Set(["AirbnbCereal_W_Bk.otf", "AirbnbCereal_W_Md.otf", "AirbnbCereal_W_Bd.otf"]);
+const FONTS = new Set([
+  "AirbnbCereal_W_Bk.otf",
+  "AirbnbCereal_W_Md.otf",
+  "AirbnbCereal_W_Bd.otf",
+  "LakoviesCaleste-Regular.otf",
+]);
 
 const server = serve({
   port: PORT,

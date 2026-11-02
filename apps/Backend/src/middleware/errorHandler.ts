@@ -16,6 +16,7 @@ import {
   ExtensionPendingError,
   InvalidDurationError,
   LicenceInvalidError,
+  LicenceReviewRequiredError,
   RiderUnavailableError,
   TooManyVehiclesError,
   VehicleUnavailableError,
@@ -23,9 +24,25 @@ import {
 import { DistanceSortUnavailableError } from "../Routes/user/Search/searchService.ts";
 import {
   DigilockerRequestNotFoundError,
+  KycUnavailableError,
   RiderHasActiveBookingError,
   RiderNotFoundError,
 } from "../Routes/user/Riders/ridersService.ts";
+import {
+  ConsentRequiredError,
+  PhotoNotExpectedError,
+  RetryLimitError,
+  SessionNotFoundError,
+  SessionNotPendingError,
+} from "../Routes/user/Riders/verificationService.ts";
+import { IllegalTransitionError } from "../lib/verificationStateMachine.ts";
+import { NotReviewableError } from "../Routes/admin/Verification/verificationService.ts";
+import {
+  AlreadyCheckedError,
+  IdentityCheckFailedError,
+  IdentityCheckMissingError,
+  VerificationRequiredError,
+} from "../Routes/merchant/Operations/identityService.ts";
 import {
   AlreadyInspectedError,
   BookingNotFoundError,
@@ -172,6 +189,13 @@ export function errorHandler(
     res.status(400).json({ error: "licence_invalid", message: err.message });
     return;
   }
+  // 409, not 400: the request is well-formed and the licence may be perfectly
+  // good -- it is our evidence about it that is incomplete, and the resolution
+  // is a review rather than a corrected field.
+  if (err instanceof LicenceReviewRequiredError) {
+    res.status(409).json({ error: "licence_review_required", message: err.message });
+    return;
+  }
   if (err instanceof CouponInvalidError) {
     res.status(400).json({ error: "coupon_invalid", message: err.message });
     return;
@@ -190,6 +214,63 @@ export function errorHandler(
   }
   if (err instanceof DigilockerRequestNotFoundError) {
     res.status(404).json({ error: "digilocker_request_not_found", message: err.message });
+    return;
+  }
+  // 503, not 400: nothing is wrong with what the customer sent -- we just
+  // cannot check it. Retryable, and never an approval.
+  // 403: the request is fine and the caller is who they say -- the rider is
+  // simply not cleared to take this vehicle.
+  if (err instanceof VerificationRequiredError) {
+    res.status(403).json({ error: "verification_required", message: err.message });
+    return;
+  }
+  // 409: nothing is wrong with the request, a step is just missing. The
+  // merchant records the identity check first, then the customer the vehicle.
+  if (err instanceof IdentityCheckMissingError) {
+    res.status(409).json({ error: "identity_check_missing", message: err.message });
+    return;
+  }
+  if (err instanceof IdentityCheckFailedError) {
+    res.status(422).json({ error: "identity_check_failed", message: err.message });
+    return;
+  }
+  if (err instanceof AlreadyCheckedError) {
+    res.status(409).json({ error: "identity_already_checked", message: err.message });
+    return;
+  }
+  // 409: an admin tried to decide a session that is not awaiting a decision.
+  // The transition table forbids approving a failed document, and this is that
+  // refusal surfaced.
+  if (err instanceof NotReviewableError) {
+    res.status(409).json({ error: "not_reviewable", message: err.message });
+    return;
+  }
+  if (err instanceof SessionNotFoundError) {
+    // 404 and not 403: another account's session must be indistinguishable
+    // from one that does not exist.
+    res.status(404).json({ error: "verification_session_not_found", message: err.message });
+    return;
+  }
+  if (err instanceof ConsentRequiredError) {
+    res.status(400).json({ error: "consent_required", message: err.message });
+    return;
+  }
+  // 409: the session has moved on -- a duplicate submit, or a redirect
+  // replayed. The caller should read the status rather than retry blindly.
+  if (err instanceof SessionNotPendingError || err instanceof PhotoNotExpectedError) {
+    res.status(409).json({ error: "verification_session_state", message: err.message });
+    return;
+  }
+  if (err instanceof IllegalTransitionError) {
+    res.status(409).json({ error: "illegal_verification_transition", message: err.message });
+    return;
+  }
+  if (err instanceof RetryLimitError) {
+    res.status(429).json({ error: "verification_retry_limit", message: err.message });
+    return;
+  }
+  if (err instanceof KycUnavailableError) {
+    res.status(503).json({ error: "kyc_unavailable", message: err.message });
     return;
   }
   if (err instanceof BookingNotFoundError || err instanceof TicketNotFoundError) {

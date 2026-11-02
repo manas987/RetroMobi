@@ -1,4 +1,9 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 function getClient(): { client: S3Client; bucket: string } | null {
@@ -48,4 +53,50 @@ export async function presignDownload(key: string, expiresIn = 300): Promise<str
   const { client, bucket } = config;
   const command = new GetObjectCommand({ Bucket: bucket, Key: key });
   return getSignedUrl(client, command, { expiresIn });
+}
+
+/**
+ * Server-side upload, for bytes that never pass through a browser: the DL
+ * holder's photograph, which arrives from the KYC vendor as base64 or behind a
+ * 24-hour presigned URL and has to be stored before that expires.
+ *
+ * `presignUpload` + a PUT would also work, but that is a pointless round trip
+ * when the backend already holds the bytes and the credentials.
+ */
+export async function putObject(
+  key: string,
+  body: Uint8Array,
+  contentType: string,
+): Promise<{ storageKey: string; devFallback?: true }> {
+  const config = getClient();
+  if (!config) {
+    console.log(
+      `[dev-fallback] storage.putObject not configured — discarding ${body.byteLength} bytes for ${key}`,
+    );
+    return { storageKey: key, devFallback: true };
+  }
+  const { client, bucket } = config;
+  await client.send(
+    new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }),
+  );
+  return { storageKey: key };
+}
+
+/**
+ * Deletes a stored object. Needed because retention is a promise, not a
+ * preference: the consent text tells the customer their licence photograph is
+ * deleted after their last rental, so something has to actually delete it.
+ *
+ * An object that is already gone is not an error -- a retention sweep that
+ * crashes on a missing key stops deleting everything after it.
+ */
+export async function deleteObject(key: string): Promise<{ devFallback?: true }> {
+  const config = getClient();
+  if (!config) {
+    console.log(`[dev-fallback] storage.deleteObject not configured — nothing to delete for ${key}`);
+    return { devFallback: true };
+  }
+  const { client, bucket } = config;
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  return {};
 }

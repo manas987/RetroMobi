@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
 import { notify } from "../../../lib/notify.ts";
 import type { CashfreeClient } from "../../../providers/cashfree.ts";
+import { assertHandoverAllowed } from "../../merchant/Operations/identityService.ts";
 
 export class BookingNotFoundError extends Error {}
 export class AlreadyInspectedError extends Error {}
@@ -30,6 +31,21 @@ export async function confirmInspection(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // Re-checked here, not just at booking: a licence can expire between the
+    // two, and the shop staff's identity check is the only evidence binding
+    // this person to the licence (automated face matching was dropped --
+    // decisions.md 2026-11-02).
+    //
+    // ORDER MATTERS, and the UI has to say so: the merchant records the
+    // identity check FIRST, then the customer records the vehicle. A customer
+    // who opens the inspection screen before staff have checked their licence
+    // gets a 409, so the copy on that screen explains the sequence rather than
+    // leaving them staring at an error.
+    await assertHandoverAllowed(client, {
+      bookingId: input.bookingId,
+      requireIdentityCheck: true,
+    });
 
     await client.query(
       `insert into vehicle_inspections (booking_id, storage_key) values ($1, $2)`,
@@ -81,9 +97,28 @@ export async function merchantPickup(pool: Pool, input: { merchantUserId: string
     throw new BookingNotFoundError(`walk-in booking ${input.bookingId} not found for this merchant`);
   }
 
-  await pool.query(`update bookings set actual_pickup_at = now(), updated_at = now() where id = $1`, [
-    input.bookingId,
-  ]);
+  // Same gate as the customer path. This route only serves OFFLINE walk-ins,
+  // which have no rider record and are exempt inside assertHandoverAllowed --
+  // but the call stays, so that if this route ever accepts an online booking
+  // the gate is already there rather than needing to be remembered.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await assertHandoverAllowed(client, {
+      bookingId: input.bookingId,
+      requireIdentityCheck: true,
+    });
+    await client.query(
+      `update bookings set actual_pickup_at = now(), updated_at = now() where id = $1`,
+      [input.bookingId],
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function merchantReturn(

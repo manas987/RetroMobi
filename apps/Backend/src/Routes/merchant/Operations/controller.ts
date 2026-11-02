@@ -6,6 +6,7 @@ import * as ticketsService from "../../Tickets/ticketsService.ts";
 import { BookingNotFoundError } from "../../user/Pickup/pickupService.ts";
 import * as pickupService from "../../user/Pickup/pickupService.ts";
 import * as operationsService from "./operationsService.ts";
+import * as identityService from "./identityService.ts";
 
 export async function list(req: Request, res: Response) {
   const query = req.validatedQuery as { status?: string; from?: Date; to?: Date };
@@ -53,4 +54,24 @@ export async function returnBooking(req: Request, res: Response) {
     (args) => ticketsService.openTicket(pool, args),
   );
   res.status(200).json(result);
+}
+
+/** What staff compare the person in front of them against. Minimal on purpose. */
+export async function identity(req: Request, res: Response) {
+  const result = await identityService.getIdentityForPickup(
+    pool,
+    req.merchantUserId!,
+    pathParam(req, "bookingId"),
+  );
+  res.status(200).json(result);
+}
+
+export async function identityCheck(req: Request, res: Response) {
+  const result = await identityService.recordIdentityCheck(
+    pool,
+    req.merchantUserId!,
+    pathParam(req, "bookingId"),
+    req.body,
+  );
+  res.status(201).json(result);
 }

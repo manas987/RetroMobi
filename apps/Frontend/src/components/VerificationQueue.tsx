@@ -4,7 +4,13 @@ import { usePortalSession, portalFetch, handleSessionExpiry, PortalApiError, typ
 import { DataTable, StatusPill, type Column } from "./DataTable";
 import { dateLabel, enumLabel } from "../lib/format";
 
-export type QueueType = "SHOP" | "VEHICLE" | "VEHICLE_DOCUMENT" | "MERCHANT_DOCUMENT" | "SHOP_LICENCE";
+export type QueueType =
+  | "SHOP"
+  | "VEHICLE"
+  | "VEHICLE_DOCUMENT"
+  | "MERCHANT_DOCUMENT"
+  | "SHOP_LICENCE"
+  | "RIDER_VERIFICATION";
 
 export interface QueueTypeDef {
   value: QueueType;
@@ -16,6 +22,18 @@ export interface QueueTypeDef {
   /** The statuses this type can be reviewed in. A licence goes PENDING -> ACTIVE, not -> VERIFIED. */
   decidedStatuses: string[];
   columns: Column[];
+  /**
+   * Which body field carries the reviewer's words. The five merchant-side
+   * decisions call it `note` and treat it as optional; a rider's driving
+   * licence calls it `reason` and requires it on BOTH outcomes, because
+   * approving one overrides the automated evidence and has to justify itself.
+   */
+  reasonField?: "note" | "reason";
+  reasonRequiredOnApprove?: boolean;
+  /** Defaults to the shared `/verification/:type/:id/document` route. */
+  filePath?: (id: string) => string;
+  /** The column that says whether there is a file at all. */
+  fileKeyColumn?: string;
 }
 
 function shopColumns(): Column[] {
@@ -94,6 +112,21 @@ export const QUEUE_TYPES: Record<QueueType, QueueTypeDef> = {
     decidedStatuses: ["VERIFIED", "REJECTED", "EXPIRED"],
     columns: documentColumns([{ key: "merchant_name", label: "Merchant" }]),
   },
+  RIDER_VERIFICATION: {
+    value: "RIDER_VERIFICATION",
+    label: "Rider licences",
+    decidePath: (id) => `/verification/rider/${id}/review`,
+    approveStatus: "VERIFIED",
+    hasFile: true,
+    filePath: (id) => `/verification/rider/${id}/photo`,
+    fileKeyColumn: "photo_key",
+    reasonField: "reason",
+    reasonRequiredOnApprove: true,
+    // "Pending" here is MANUAL_REVIEW_REQUIRED, which the server supplies as
+    // this type's default -- a session's pending state is not called PENDING.
+    decidedStatuses: ["VERIFIED", "REJECTED", "PHOTO_PENDING", "DOCUMENT_FAILED", "EXPIRED"],
+    columns: riderColumns(),
+  },
   SHOP_LICENCE: {
     value: "SHOP_LICENCE",
     label: "Shop licences",
@@ -127,6 +160,57 @@ export const QUEUE_TYPES: Record<QueueType, QueueTypeDef> = {
   },
 };
 
+function riderColumns(): Column[] {
+  return [
+    {
+      key: "rider_name",
+      label: "Rider",
+      render: (r) => <span className="text-ink font-medium">{String(r.rider_name ?? "")}</span>,
+    },
+    { key: "account_phone", label: "Account" },
+    { key: "licence_number_masked", label: "Licence" },
+    {
+      key: "categories",
+      label: "Entitled to",
+      render: (r) => {
+        const cats = (r.categories ?? []) as { code?: string }[];
+        if (!Array.isArray(cats) || cats.length === 0) {
+          return <span className="text-warning">No category data</span>;
+        }
+        return cats.map((c) => c.code).join(", ");
+      },
+    },
+    { key: "licence_expires_on", label: "Expires", render: (r) => dateLabel(r.licence_expires_on) },
+    {
+      key: "photo_source",
+      label: "Photo",
+      render: (r) =>
+        r.photo_source ? (
+          // SELF_UPLOADED is the case where there is nothing to verify the
+          // photo against, which is the whole reason this row is in a queue.
+          <span className={r.photo_source === "SELF_UPLOADED" ? "text-warning" : undefined}>
+            {enumLabel(r.photo_source)}
+          </span>
+        ) : (
+          <span className="text-warning">None</span>
+        ),
+    },
+    {
+      key: "__why",
+      label: "Why",
+      render: (r) => {
+        const flags = [
+          r.rejection_code ? enumLabel(r.rejection_code) : null,
+          Number(r.other_accounts ?? 0) > 0 ? `Also on ${r.other_accounts} other account(s)` : null,
+          r.policy_version === "legacy" ? "Verified before the current checks" : null,
+        ].filter(Boolean);
+        return flags.length ? flags.join(" · ") : <span className="text-ink-4">Flagged</span>;
+      },
+    },
+    { key: "status", label: "State", render: (r) => <StatusPill value={r.status} /> },
+  ];
+}
+
 export function VerificationQueue({ types }: { types: QueueType[] }) {
   const { session } = usePortalSession("admin");
   const [type, setType] = useState<QueueType>(types[0]!);
@@ -135,7 +219,8 @@ export function VerificationQueue({ types }: { types: QueueType[] }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [rejecting, setRejecting] = useState<string | null>(null);
+  /** The row awaiting a typed reason, and which way it is going. */
+  const [deciding, setDeciding] = useState<{ id: string; status: string } | null>(null);
   const [note, setNote] = useState("");
 
   const active = QUEUE_TYPES[type];
@@ -167,12 +252,13 @@ export function VerificationQueue({ types }: { types: QueueType[] }) {
     if (!session) return;
     setBusyId(id);
     try {
+      const field = active.reasonField ?? "note";
       await portalFetch("admin", active.decidePath(id), {
         method: "POST",
         token: session.accessToken,
-        body: reason ? { status, note: reason } : { status },
+        body: reason ? { status, [field]: reason } : { status },
       });
-      setRejecting(null);
+      setDeciding(null);
       setNote("");
       load();
     } catch (err) {
@@ -191,7 +277,14 @@ export function VerificationQueue({ types }: { types: QueueType[] }) {
           {
             key: "__file",
             label: "Document",
-            render: (r: Row) => <DocumentLink type={type} id={String(r.id)} hasKey={r.storage_key != null} />,
+            render: (r: Row) => (
+              <DocumentLink
+                type={type}
+                id={String(r.id)}
+                path={active.filePath?.(String(r.id))}
+                hasKey={r[active.fileKeyColumn ?? "storage_key"] != null}
+              />
+            ),
           } as Column,
         ]
       : []),
@@ -202,28 +295,33 @@ export function VerificationQueue({ types }: { types: QueueType[] }) {
             label: "",
             render: (r: Row) => {
               const id = String(r.id);
-              if (rejecting === id) {
+              const approving = deciding?.status !== "REJECTED";
+              if (deciding?.id === id) {
                 return (
                   <span className="inline-flex items-center gap-2">
                     <input
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
-                      placeholder="Reason for rejection"
+                      placeholder={approving ? "Why this is being approved" : "Reason for rejection"}
                       autoFocus
                       className="rounded-row border border-line-strong px-2 py-1 text-xs outline-none focus:border-ink"
                     />
                     <button
                       type="button"
-                      disabled={busyId === id || !note.trim()}
-                      onClick={() => decide(id, "REJECTED", note.trim())}
-                      className="text-xs text-danger font-medium hover:underline disabled:opacity-40"
+                      // 10 characters, matching the server's own minimum for a
+                      // rider review, so "ok" fails here rather than at the API.
+                      disabled={busyId === id || note.trim().length < 10}
+                      onClick={() => decide(id, deciding.status, note.trim())}
+                      className={`text-xs font-medium hover:underline disabled:opacity-40 ${
+                        approving ? "text-verified" : "text-danger"
+                      }`}
                     >
                       Confirm
                     </button>
                     <button
                       type="button"
                       onClick={() => {
-                        setRejecting(null);
+                        setDeciding(null);
                         setNote("");
                       }}
                       className="text-xs text-ink-3 hover:text-ink"
@@ -238,7 +336,14 @@ export function VerificationQueue({ types }: { types: QueueType[] }) {
                   <button
                     type="button"
                     disabled={busyId === id}
-                    onClick={() => decide(id, active.approveStatus)}
+                    onClick={() => {
+                      if (active.reasonRequiredOnApprove) {
+                        setDeciding({ id, status: active.approveStatus });
+                        setNote("");
+                      } else {
+                        decide(id, active.approveStatus);
+                      }
+                    }}
                     className="rounded-row bg-verified-soft text-verified text-xs font-medium px-2.5 py-1 disabled:opacity-50"
                   >
                     Approve
@@ -247,7 +352,7 @@ export function VerificationQueue({ types }: { types: QueueType[] }) {
                     type="button"
                     disabled={busyId === id}
                     onClick={() => {
-                      setRejecting(id);
+                      setDeciding({ id, status: "REJECTED" });
                       setNote("");
                     }}
                     className="rounded-row bg-danger-soft text-danger text-xs font-medium px-2.5 py-1 disabled:opacity-50"
@@ -343,7 +448,18 @@ function ReviewChip({ label, active, onClick }: { label: string; active: boolean
  * presigned GET, and pre-signing one per row on every page load would both
  * waste them and expire the ones nobody opened.
  */
-function DocumentLink({ type, id, hasKey }: { type: QueueType; id: string; hasKey: boolean }) {
+function DocumentLink({
+  type,
+  id,
+  hasKey,
+  path,
+}: {
+  type: QueueType;
+  id: string;
+  hasKey: boolean;
+  /** Overrides the shared document route; a rider's evidence is a photo. */
+  path?: string;
+}) {
   const { session } = usePortalSession("admin");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -359,7 +475,7 @@ function DocumentLink({ type, id, hasKey }: { type: QueueType; id: string; hasKe
     try {
       const { downloadUrl } = await portalFetch<{ downloadUrl: string }>(
         "admin",
-        `/verification/${type}/${id}/document`,
+        path ?? `/verification/${type}/${id}/document`,
         { token: session.accessToken },
       );
       window.open(downloadUrl, "_blank", "noopener");

@@ -10,6 +10,17 @@ const valid = {
   PLATFORM_GSTIN: "05ABCDE1234F1Z5",
 };
 
+const productionValid = {
+  ...valid,
+  NODE_ENV: "production",
+  TWILIO_ACCOUNT_SID: "ACxxxx",
+  TWILIO_AUTH_TOKEN: "token",
+  TWILIO_FROM_NUMBER: "+15551234567",
+  CASHFREE_CLIENT_ID: "cf-id",
+  CASHFREE_CLIENT_SECRET: "cf-secret",
+  DL_HASH_PEPPER: "pepper",
+};
+
 describe("assertConfig", () => {
   test("a complete config passes", () => {
     expect(() => assertConfig(valid)).not.toThrow();
@@ -55,19 +66,48 @@ describe("assertConfig", () => {
     expect(() => assertConfig({ ...valid, NODE_ENV: "production" })).toThrow(/TWILIO_ACCOUNT_SID/);
   });
 
-  test("in production, a complete config including Twilio passes", () => {
-    expect(() =>
-      assertConfig({
-        ...valid,
-        NODE_ENV: "production",
-        TWILIO_ACCOUNT_SID: "ACxxxx",
-        TWILIO_AUTH_TOKEN: "token",
-        TWILIO_FROM_NUMBER: "+15551234567",
-      }),
-    ).not.toThrow();
+  test("in production, a complete config including every vendor passes", () => {
+    expect(() => assertConfig(productionValid)).not.toThrow();
   });
 
   test("outside production, a missing Twilio credential is fine -- that's the dev fallback", () => {
     expect(() => assertConfig(valid)).not.toThrow();
+  });
+
+  // kyc.ts used to return a faked VERIFIED licence when these were unset, and
+  // nothing required them in production -- so every rider was approved without
+  // a check. See the header comment in config.ts.
+  test("in production, a missing Cashfree credential refuses to boot", () => {
+    expect(() =>
+      assertConfig({ ...productionValid, CASHFREE_CLIENT_ID: undefined }),
+    ).toThrow(/CASHFREE_CLIENT_ID/);
+  });
+
+  test("outside production, a missing Cashfree credential is fine", () => {
+    expect(() => assertConfig(valid)).not.toThrow();
+  });
+
+  // The hash is the only thing kept of a licence number, so a guessable hash
+  // is the number. See lib/verificationHash.ts.
+  test("in production, a missing licence-hash pepper refuses to boot", () => {
+    expect(() => assertConfig({ ...productionValid, DL_HASH_PEPPER: undefined })).toThrow(
+      /DL_HASH_PEPPER/,
+    );
+  });
+
+  test("in production, the fake-licence escape hatch refuses to boot", () => {
+    expect(() =>
+      assertConfig({ ...productionValid, KYC_DEV_AUTO_VERIFY: "true" }),
+    ).toThrow(/KYC_DEV_AUTO_VERIFY/);
+  });
+
+  test("an explicitly false escape hatch is not a problem in production", () => {
+    expect(() =>
+      assertConfig({ ...productionValid, KYC_DEV_AUTO_VERIFY: "false" }),
+    ).not.toThrow();
+  });
+
+  test("outside production, the escape hatch is allowed -- that is its whole purpose", () => {
+    expect(() => assertConfig({ ...valid, KYC_DEV_AUTO_VERIFY: "true" })).not.toThrow();
   });
 });
