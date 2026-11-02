@@ -73,45 +73,51 @@ export function VehicleCard({ result }: { result: SearchResult }) {
           {maxQty} available · {rupees(offer.securityDeposit)} deposit
         </p>
 
-        <p className="text-sm text-ink mt-1">
-          <span className="tnum font-semibold underline underline-offset-2">{rupees(offer.pricePerDay)}</span>
-          <span className="text-ink-3"> / day</span>
-        </p>
-      </div>
+        {/* The price and the action share a row rather than the action taking
+            a full-width one of its own — the text column never fills the card,
+            so that space was already there. */}
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-ink">
+            <span className="tnum font-semibold underline underline-offset-2">{rupees(offer.pricePerDay)}</span>
+            <span className="text-ink-3"> / day</span>
+          </p>
 
-      {/* Nothing in the cart yet is a one-decision moment, so it gets one amber
-          button. Once a unit is in, the same strip becomes the stepper, and the
-          minus at 1 drops the line and brings the button back. */}
-      {qty === 0 ? (
-        <button
-          type="button"
-          onClick={(e) => changeQty(e, 1)}
-          className="mt-3 h-9 w-full rounded-full bg-amber text-on-amber text-sm font-semibold hover:brightness-95 transition-[filter] flex items-center justify-center"
-        >
-          Add to cart
-        </button>
-      ) : (
-        <div className="mt-3 h-9 w-full flex items-stretch divide-x divide-line rounded-full border border-line-strong overflow-hidden">
-          <button
-            type="button"
-            onClick={(e) => changeQty(e, qty - 1)}
-            aria-label="Decrease quantity"
-            className="px-5 flex items-center justify-center text-ink hover:bg-surface-3 transition-colors"
-          >
-            <Minus className="h-3.5 w-3.5" />
-          </button>
-          <span className="flex-1 flex items-center justify-center text-sm font-semibold tnum">{qty}</span>
-          <button
-            type="button"
-            onClick={(e) => changeQty(e, qty + 1)}
-            disabled={qty >= maxQty}
-            aria-label="Increase quantity"
-            className="px-5 flex items-center justify-center text-ink hover:bg-surface-3 disabled:opacity-30 transition-colors"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
+          {/* Nothing in the cart yet is a one-decision moment, so it gets one
+              amber button. Once a unit is in, the same strip becomes the
+              stepper, and the minus at 1 drops the line and brings the button
+              back. */}
+          {qty === 0 ? (
+            <button
+              type="button"
+              onClick={(e) => changeQty(e, 1)}
+              className="shrink-0 h-9 px-5 rounded-full bg-amber text-on-amber text-sm font-semibold hover:brightness-95 transition-[filter] flex items-center justify-center"
+            >
+              Add to cart
+            </button>
+          ) : (
+            <div className="shrink-0 h-9 flex items-stretch divide-x divide-line rounded-full border border-line-strong overflow-hidden">
+              <button
+                type="button"
+                onClick={(e) => changeQty(e, qty - 1)}
+                aria-label="Decrease quantity"
+                className="px-3.5 flex items-center justify-center text-ink hover:bg-surface-3 transition-colors"
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </button>
+              <span className="w-10 flex items-center justify-center text-sm font-semibold tnum">{qty}</span>
+              <button
+                type="button"
+                onClick={(e) => changeQty(e, qty + 1)}
+                disabled={qty >= maxQty}
+                aria-label="Increase quantity"
+                className="px-3.5 flex items-center justify-center text-ink hover:bg-surface-3 disabled:opacity-30 transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </article>
   );
 }
