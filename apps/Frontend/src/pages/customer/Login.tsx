@@ -121,8 +121,10 @@ export function CustomerLogin() {
       navigate(next);
     });
 
-  /** Exchanges Google's ID token for a prefill ticket and jumps to the name
-   *  step with the name Google gave us already filled in. */
+  /** Exchanges Google's ID token for a prefill ticket. Google already gives us
+   *  a verified email and a name, so there's nothing left to ask — signup
+   *  completes immediately. Falls back to the name step only if Google didn't
+   *  return a name (rare, but possible for some accounts). */
   const useGoogle = (idToken: string) =>
     run(async () => {
       const result = await portalFetch<{ googlePrefillTicket: string; name?: string; email?: string }>(
@@ -130,10 +132,18 @@ export function CustomerLogin() {
         "/auth/google",
         { method: "POST", body: { idToken } },
       );
-      setGooglePrefillTicket(result.googlePrefillTicket);
       if (result.email) setEmail(result.email);
-      if (result.name) setName(result.name);
-      setStep("name");
+      if (!result.name) {
+        setGooglePrefillTicket(result.googlePrefillTicket);
+        setStep("name");
+        return;
+      }
+      const signupResult = await portalFetch<any>("user", "/auth/signup/complete", {
+        method: "POST",
+        body: { signupTicket, deviceId, name: result.name, googlePrefillTicket: result.googlePrefillTicket },
+      });
+      setTokens({ accessToken: signupResult.accessToken, refreshToken: signupResult.refreshToken });
+      navigate(next);
     });
 
   return (

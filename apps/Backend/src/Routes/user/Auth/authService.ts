@@ -47,22 +47,27 @@ async function createOtpChallenge(
   purpose: "LOGIN_OR_SIGNUP" | "EMAIL_VERIFICATION",
   deliver: (target: string, code: string) => Promise<void>,
 ): Promise<OtpChallengeResult> {
-  const { rows: shortRows } = await pool.query(
-    `select count(*)::int as n from otp_challenges
-     where target = $1 and created_at > now() - ($2 || ' minutes')::interval`,
-    [target, SEND_LIMIT_SHORT.windowMinutes],
-  );
-  if (shortRows[0].n >= SEND_LIMIT_SHORT.count) {
-    throw new RateLimitedError("too many OTP requests, try again shortly");
-  }
+  // ponytail: send-rate limiting only matters against real abuse, i.e. production.
+  // Skipping it outside production is what lets you hammer the signup flow
+  // while testing without clearing otp_challenges by hand each time.
+  if (process.env.NODE_ENV === "production") {
+    const { rows: shortRows } = await pool.query(
+      `select count(*)::int as n from otp_challenges
+       where target = $1 and created_at > now() - ($2 || ' minutes')::interval`,
+      [target, SEND_LIMIT_SHORT.windowMinutes],
+    );
+    if (shortRows[0].n >= SEND_LIMIT_SHORT.count) {
+      throw new RateLimitedError("too many OTP requests, try again shortly");
+    }
 
-  const { rows: longRows } = await pool.query(
-    `select count(*)::int as n from otp_challenges
-     where target = $1 and created_at > now() - ($2 || ' minutes')::interval`,
-    [target, SEND_LIMIT_LONG.windowMinutes],
-  );
-  if (longRows[0].n >= SEND_LIMIT_LONG.count) {
-    throw new RateLimitedError("too many OTP requests today");
+    const { rows: longRows } = await pool.query(
+      `select count(*)::int as n from otp_challenges
+       where target = $1 and created_at > now() - ($2 || ' minutes')::interval`,
+      [target, SEND_LIMIT_LONG.windowMinutes],
+    );
+    if (longRows[0].n >= SEND_LIMIT_LONG.count) {
+      throw new RateLimitedError("too many OTP requests today");
+    }
   }
 
   const code = generateOtpCode();

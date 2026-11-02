@@ -8,12 +8,12 @@
  * not offer it, the same way the backend's providers fall back rather than
  * breaking the funnel.
  */
-// `process` is a Bun/Node global, not a browser one. Bun's bundler inlines
-// `process.env.BUN_PUBLIC_*` as a string literal for the production static
-// build, but the dev server's HMR transpile path does not — so this must not
-// assume `process` exists at runtime here.
-export const GOOGLE_CLIENT_ID =
-  (typeof process !== "undefined" ? process.env.BUN_PUBLIC_GOOGLE_CLIENT_ID : undefined) ?? "";
+// Bun's bundler inlines `process.env.BUN_PUBLIC_*` as a string literal at
+// build time, in both dev (HMR) and the production static build — confirmed
+// by inspecting the served bundle. The old `typeof process !== "undefined"`
+// guard around it was wrong: browsers never define `process`, so that check
+// always evaluated false and silently zeroed this out regardless of env.
+export const GOOGLE_CLIENT_ID = process.env.BUN_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
 const SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 
