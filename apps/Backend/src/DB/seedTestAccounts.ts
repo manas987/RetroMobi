@@ -13,6 +13,15 @@ import { confirmInspection, merchantReturn } from "../Routes/user/Pickup/pickupS
 import * as ticketsService from "../Routes/Tickets/ticketsService.ts";
 import { createShop } from "../Routes/merchant/Shops/shopsService.ts";
 
+// This script fabricates paid bookings, so it needs the payment provider's
+// local escape hatch -- without credentials, providers/cashfree.ts now throws
+// instead of faking a paid order (a faked payment is a confirmed booking
+// nobody paid for, so the fake had to become opt-in). Set here rather than
+// asked of whoever runs it: a seed script is not a server, and assertConfig
+// refuses this flag in production anyway. Read lazily inside the provider, so
+// setting it after the imports is fine.
+process.env.PAYMENTS_DEV_AUTO_SUCCEED ??= "true";
+
 const ADMIN_PHONE = "+919812340000";
 const MERCHANT_PHONE = "+919812340001";
 const CUSTOMER_PHONE = "+919812340002";

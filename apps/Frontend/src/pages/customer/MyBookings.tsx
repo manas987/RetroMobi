@@ -78,6 +78,16 @@ function BookingCard({ booking: b, token, onChanged }: { booking: Row; token: st
   const canExtend = !cancelled && status === "CONFIRMED";
   const canReview = !cancelled && Boolean(b.actual_pickup_at);
 
+  // A HOLD whose clock is still running and whose payment never succeeded. The
+  // way back to the payment screen for a customer who closed the tab at the
+  // gateway -- without this the hold is unreachable and quietly expires.
+  const unpaidHold =
+    !cancelled &&
+    status === "HOLD" &&
+    b.payment_status !== "SUCCEEDED" &&
+    typeof b.hold_expires_at === "string" &&
+    new Date(b.hold_expires_at) > new Date();
+
   const cancelBooking = () =>
     run(async () => {
       await portalFetch("user", `/bookings/${b.id}/cancel`, { method: "POST", token });
@@ -99,6 +109,20 @@ function BookingCard({ booking: b, token, onChanged }: { booking: Row; token: st
       </div>
 
       {error && <ErrorBox text={error} />}
+
+      {unpaidHold && (
+        <div className="rounded-row bg-surface-2 px-3 py-3 mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-ink-2">
+            Not paid yet — held until {fmt(b.hold_expires_at)}.
+          </p>
+          <Link
+            href={`/checkout/pay/${String(b.group_id)}`}
+            className="shrink-0 inline-flex h-9 items-center rounded-row bg-amber px-4 text-sm font-semibold text-on-amber hover:brightness-95 transition-[filter]"
+          >
+            Complete payment
+          </Link>
+        </div>
+      )}
 
       {cancelled && (
         <p className="text-xs text-ink-3 bg-surface-2 rounded-row px-3 py-2 mb-3">

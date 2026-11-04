@@ -1,3 +1,5 @@
+name: retromobi
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,3 +20,6 @@ services:
 
 volumes:
   retromobi_pgdata:
+    # pinned: data predates the `name: retromobi` rename, which would otherwise
+    # re-prefix this to retromobi_retromobi_pgdata and start from an empty volume
+    name: backend_retromobi_pgdata

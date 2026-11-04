@@ -19,6 +19,7 @@ const productionValid = {
   CASHFREE_CLIENT_ID: "cf-id",
   CASHFREE_CLIENT_SECRET: "cf-secret",
   DL_HASH_PEPPER: "pepper",
+  PUBLIC_APP_BASE_URL: "https://retromobi.example",
 };
 
 describe("assertConfig", () => {
@@ -109,5 +110,31 @@ describe("assertConfig", () => {
 
   test("outside production, the escape hatch is allowed -- that is its whole purpose", () => {
     expect(() => assertConfig({ ...valid, KYC_DEV_AUTO_VERIFY: "true" })).not.toThrow();
+  });
+
+  // Same shape as the licence hatch, with money instead of a licence: it fakes
+  // a PAID Cashfree order, so a booking confirms without a payment.
+  test("in production, the fake-payment escape hatch refuses to boot", () => {
+    expect(() =>
+      assertConfig({ ...productionValid, PAYMENTS_DEV_AUTO_SUCCEED: "true" }),
+    ).toThrow(/PAYMENTS_DEV_AUTO_SUCCEED/);
+  });
+
+  test("outside production, the fake-payment hatch is allowed", () => {
+    expect(() => assertConfig({ ...valid, PAYMENTS_DEV_AUTO_SUCCEED: "true" })).not.toThrow();
+  });
+
+  // Without it, Cashfree has no return_url: the customer pays and is stranded
+  // on the gateway's page.
+  test("in production, a missing app base URL refuses to boot", () => {
+    expect(() =>
+      assertConfig({ ...productionValid, PUBLIC_APP_BASE_URL: undefined }),
+    ).toThrow(/PUBLIC_APP_BASE_URL/);
+  });
+
+  test("in production, an http app base URL refuses to boot", () => {
+    expect(() =>
+      assertConfig({ ...productionValid, PUBLIC_APP_BASE_URL: "http://retromobi.example" }),
+    ).toThrow(/PUBLIC_APP_BASE_URL/);
   });
 });

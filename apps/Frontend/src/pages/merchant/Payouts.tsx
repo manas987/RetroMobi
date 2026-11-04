@@ -201,11 +201,12 @@ function ScopeChip({
   );
 }
 
-/** A bank or UPI reference is the one piece of the merchant's own data worth
- *  not printing in full on a shared screen. */
-function maskRef(ref: string): string {
-  if (ref.length <= 4) return ref;
-  return `${"•".repeat(Math.min(ref.length - 4, 8))}${ref.slice(-4)}`;
+/** The server only ever stores the last four digits (migration 0017), so this
+ *  is a display shape, not a masking step -- there is nothing to hide. */
+function maskedAccount(account: Row): string {
+  const last4 = String(account.account_last4 ?? "");
+  if (!last4) return String(account.provider_account_ref ?? "—");
+  return `•••• ${last4}${account.ifsc ? ` · ${String(account.ifsc)}` : ""}`;
 }
 
 function PayoutAccountCard({
@@ -218,21 +219,34 @@ function PayoutAccountCard({
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [ref, setRef] = useState("");
+  const [holderName, setHolderName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [ifsc, setIfsc] = useState("");
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const complete = holderName.trim().length >= 3 && accountNumber.trim() && ifsc.trim().length === 11;
 
   async function save() {
     setBusy(true);
     setSaveError(null);
     try {
+      // The account number is sent once, to register the beneficiary with
+      // Cashfree, and is not stored afterwards -- only the last four, the IFSC
+      // and the beneficiary id come back.
       await portalFetch("merchant", "/payout-account", {
         method: "PUT",
         token,
-        body: { providerAccountRef: ref.trim() },
+        body: {
+          holderName: holderName.trim(),
+          accountNumber: accountNumber.trim(),
+          ifsc: ifsc.trim().toUpperCase(),
+        },
       });
       setEditing(false);
-      setRef("");
+      setHolderName("");
+      setAccountNumber("");
+      setIfsc("");
       onChanged();
     } catch (err) {
       setSaveError(err instanceof PortalApiError ? err.message : "Couldn't save that.");
@@ -254,10 +268,20 @@ function PayoutAccountCard({
         ) : state.status === "failed" ? (
           <p className="text-sm text-danger mt-0.5">Couldn't load your payout account: {state.message}</p>
         ) : state.account ? (
-          <p className="text-sm text-ink-3 mt-0.5 flex items-center gap-2">
-            <span className="font-mono">{maskRef(String(state.account.provider_account_ref ?? ""))}</span>
-            <StatusPill value={state.account.status} />
-          </p>
+          <>
+            <p className="text-sm text-ink-3 mt-0.5 flex items-center gap-2">
+              <span className="font-mono">{maskedAccount(state.account)}</span>
+              <StatusPill value={state.account.status} />
+            </p>
+            {state.account.status !== "VERIFIED" && (
+              <p className="text-xs text-warning mt-1">
+                {state.account.status === "PENDING"
+                  ? "Cashfree is still checking this account. Payouts wait until it's verified."
+                  : "Cashfree rejected this account, so payouts can't be paid out. Replace it below."}
+                {state.account.last_error ? ` (${String(state.account.last_error)})` : ""}
+              </p>
+            )}
+          </>
         ) : (
           <p className="text-sm text-danger mt-0.5">
             No payout account on file — payouts will accrue but can't be paid out.
@@ -281,9 +305,15 @@ function PayoutAccountCard({
         title={state.status === "ready" && state.account ? "Replace payout account" : "Add payout account"}
       >
         {saveError && <ErrorBox text={saveError} />}
-        <TextField label="Bank account / UPI reference" value={ref} onChange={setRef} autoFocus />
+        <TextField label="Account holder name" value={holderName} onChange={setHolderName} autoFocus />
+        <TextField label="Bank account number" value={accountNumber} onChange={setAccountNumber} />
+        <TextField label="IFSC" value={ifsc} onChange={setIfsc} />
+        <p className="text-xs text-ink-4 mb-3">
+          We pass these to Cashfree once to register the account, then keep only the last four digits
+          and the IFSC. Payouts start once Cashfree verifies it.
+        </p>
         <div className="flex items-center gap-3">
-          <SubmitButton busy={busy} disabled={!ref.trim()} onClick={save}>
+          <SubmitButton busy={busy} disabled={!complete} onClick={save}>
             Save
           </SubmitButton>
           <button type="button" onClick={() => setEditing(false)} className="text-sm text-ink-3 hover:text-ink">

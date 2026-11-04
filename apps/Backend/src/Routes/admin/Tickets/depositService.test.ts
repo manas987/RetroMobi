@@ -40,7 +40,12 @@ const fakeCashfree = {
     expiresAt: args.expiresAt,
   }),
   refund: async () => ({ refundId: `rf_${Date.now()}_${Math.random()}`, status: "PENDING" as const }),
-  transfer: async () => ({ transferId: `tr_${Date.now()}`, status: "PENDING" as const }),
+  // Cashfree says PAID, because these suites are about what happens AFTER
+  // a payment -- confirmPaidOrder never asks the vendor itself.
+  getOrder: async (orderId: string) => ({
+    orderStatus: "PAID" as const,
+    paymentSessionId: `session_${orderId}`,
+  }),
   verifyWebhookSignature: () => true,
 };
 

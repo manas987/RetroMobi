@@ -2,6 +2,10 @@ import { pool } from "./src/DB/client.ts";
 import { app } from "./src/index.ts";
 import { assertConfig } from "./src/lib/config.ts";
 import { sweepExpiredHolds } from "./src/lib/holds.ts";
+import { reconcilePendingPayments } from "./src/lib/paymentReconcile.ts";
+import { sweepPayouts } from "./src/lib/payoutSweep.ts";
+import { cashfreeClient } from "./src/providers/cashfree.ts";
+import { cashfreePayoutClient } from "./src/providers/cashfreePayout.ts";
 import { sendPendingNotifications, sweepBookingReminders } from "./src/lib/notificationSweep.ts";
 import { sweepVerificationPhotos } from "./src/lib/verificationRetention.ts";
 import { sendEmail } from "./src/providers/emailSender.ts";
@@ -27,12 +31,20 @@ setInterval(async () => {
   if (sweeping) return; // a slow sweep must not overlap itself
   sweeping = true;
   try {
+    // BEFORE sweepExpiredHolds, and that ordering is load-bearing: the hold
+    // sweep DELETES expired HOLD bookings, so a payment confirmed after it has
+    // run has nothing left to confirm. Reconciling first gives a dropped
+    // webhook its last chance.
+    await reconcilePendingPayments(pool, cashfreeClient);
     await sweepExpiredHolds(pool);
     await sweepBookingReminders(pool);
     await sendPendingNotifications(pool, { sms: sendSms, email: sendEmail });
     // Retention is a promise made in the consent text, so something has to
     // keep it. Small batch, same timer -- see lib/verificationRetention.ts.
     await sweepVerificationPhotos(pool);
+    // Merchants actually get paid here. Accrued payout rows have existed since
+    // 0010_payments.sql and nothing ever transferred one.
+    await sweepPayouts(pool, cashfreePayoutClient);
   } catch (e) {
     console.error("sweep failed", e);
   } finally {

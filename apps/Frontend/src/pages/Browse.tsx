@@ -19,7 +19,7 @@ export function Browse() {
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // 660px of capsule plus the logo, two pills and the account cluster needs
+  // 660px of capsule plus the logo and the account cluster needs
   // about 1300px of bar. Under that the controls get their own strip. It is a
   // JS branch rather than `hidden`, so exactly one host exists at a time and
   // the header never renders an empty centre track.
@@ -61,18 +61,11 @@ export function Browse() {
     />
   );
 
-  // One group, centred: the capsule and the one pill that opens everything
-  // else. Sort moved inside that sheet, so there is nothing else out here.
-  const controls = (
-    /* items-stretch, not a height on the pill: the capsule sets the group's
-       height and the pill inherits it, so the two stay flush if its padding
-       ever changes again. */
-    <div className="flex items-stretch gap-3">
-      {capsule}
+  const filterButton = (
       <button
         type="button"
         onClick={() => setFiltersOpen(true)}
-        className="px-5 shrink-0 rounded-full border border-line-strong text-ink text-[15px] font-medium hover:bg-surface-3 transition-colors flex items-center gap-2"
+        className="h-11 px-5 shrink-0 rounded-full border border-line-strong text-ink text-[15px] font-medium hover:bg-surface-3 transition-colors flex items-center gap-2"
       >
         <SlidersHorizontal className="h-4 w-4" />
         Filters
@@ -82,7 +75,6 @@ export function Browse() {
           </span>
         )}
       </button>
-    </div>
   );
 
   return (
@@ -90,9 +82,9 @@ export function Browse() {
        is what lets the footer arrive at the end and lift it with everything
        else. The header holds its own place — it is already sticky. */
     <div className="min-h-screen flex flex-col">
-      <Header center={inHeader ? controls : undefined} />
+      <Header center={inHeader ? capsule : undefined} />
 
-      {!inHeader && <div className="shrink-0 border-b border-line px-5 py-3">{controls}</div>}
+      {!inHeader && <div className="shrink-0 border-b border-line px-5 py-3">{capsule}</div>}
 
       {/* Two numbers, not one: 40px to the window edges and between the two
           columns, 24px between cards. The reference uses that same ratio, and
@@ -117,6 +109,15 @@ export function Browse() {
             mapFullscreen ? "grow-0 basis-0 opacity-0 overflow-hidden" : "grow basis-[55%] opacity-100"
           }`}
         >
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="text-xl font-semibold text-ink" aria-live="polite">
+              {!isLoading && !isError && data && (
+                <span>{data.total} {data.total === 1 ? "vehicle" : "vehicles"}</span>
+              )}
+            </div>
+            {filterButton}
+          </div>
+
           {isError && (
             <p className="text-sm text-danger bg-danger-soft rounded-panel px-4 py-3">
               Couldn't reach the API. Is the backend running?

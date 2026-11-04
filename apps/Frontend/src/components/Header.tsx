@@ -8,8 +8,7 @@ export function Header({ overlay = false, center }: {
   /** Sit transparent on top of whatever is behind — the homepage's full-bleed
    *  hero photo. Default off, so every other page is unaffected. */
   overlay?: boolean;
-  /** Dropped on the bar's centre line — Browse's search capsule and Filters
-   *  pill. Supplying it switches the bar from justify-between to a three-track
+  /** Dropped on the bar's centre line — Browse's search capsule. Supplying it switches the bar from justify-between to a three-track
    *  grid, which is what centres this against the page rather than against
    *  whatever the logo and the account cluster happen to measure. */
   center?: React.ReactNode;

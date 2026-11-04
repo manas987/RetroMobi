@@ -142,6 +142,20 @@ function PayoutsTab() {
               },
               { key: "created_at", label: "Created" },
               { key: "paid_at", label: "Paid" },
+              // Why a payout has not been paid. The sweep retries on its own, so
+              // visibility is the whole requirement here -- a payout stuck
+              // because the merchant's account was never verified used to be
+              // indistinguishable from one Cashfree had simply not settled yet.
+              {
+                key: "last_error",
+                label: "Last error",
+                render: (r) =>
+                  r.last_error ? (
+                    <span className="text-xs text-warning">{String(r.last_error)}</span>
+                  ) : (
+                    <span className="text-ink-4">—</span>
+                  ),
+              },
             ]}
           />
           <Pager page={page} short={rows.length < LIMIT} onPage={setPage} />

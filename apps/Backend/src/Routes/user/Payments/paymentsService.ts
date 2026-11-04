@@ -1,8 +1,20 @@
 import type { Pool, PoolClient } from "pg";
-import type { CashfreeClient } from "../../../providers/cashfree.ts";
+import {
+  appBaseUrl,
+  cashfreeMode,
+  type CashfreeClient,
+  type CashfreeOrderStatus,
+} from "../../../providers/cashfree.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import { notify } from "../../../lib/notify.ts";
 import { composeTotal, extractTax } from "../../../lib/pricing.ts";
+
+/** A group that is not this user's, or does not exist. 404, not 403. */
+export class PaymentGroupNotFoundError extends Error {}
+
+function sum(rows: Array<Record<string, unknown>>, column: string): number {
+  return rows.reduce((total, row) => total + Number(row[column] ?? 0), 0);
+}
 
 function getPayoutUpfrontPct(): number {
   return Number(process.env.PAYOUT_UPFRONT_PCT ?? 10);
@@ -108,23 +120,33 @@ export async function createPaymentIntent(
   pool: Pool,
   input: { groupId: string; userId: string },
   cashfree: CashfreeClient,
-): Promise<{ orderId: string; paymentSessionId: string; expiresAt: Date }> {
+): Promise<{ orderId: string; paymentSessionId: string; expiresAt: Date; mode: "sandbox" | "production" }> {
   const { rows } = await pool.query(
-    `select g.hold_expires_at, g.total_amount, u.phone
+    `select g.hold_expires_at, g.total_amount, u.phone, u.name
        from booking_groups g
        join users u on u.id = g.user_id
       where g.id = $1 and g.user_id = $2 and g.deleted_at is null`,
     [input.groupId, input.userId],
   );
-  if (rows.length === 0) throw new Error("booking group not found");
+  if (rows.length === 0) throw new PaymentGroupNotFoundError(`booking group ${input.groupId} not found`);
   const group = rows[0];
 
   const orderId = `order_${input.groupId}`;
+  const base = appBaseUrl();
   const order = await cashfree.createOrder({
     orderId,
     amount: Number(group.total_amount),
     expiresAt: new Date(group.hold_expires_at),
+    // Cashfree documents customer_id as 3-50 alphanumeric, so a raw UUID's
+    // hyphens are stripped rather than risked. It identifies the customer, not
+    // the order -- which is what it used to be set to.
+    customerId: `cust_${input.userId.replace(/-/g, "")}`,
     customerPhone: group.phone,
+    customerName: group.name ?? undefined,
+    // The browser lands here after checkout, with the group so the page can
+    // ask the server what actually happened. The order id is NOT trusted from
+    // the query string anywhere.
+    returnUrl: base ? `${base}/checkout/return?group=${input.groupId}` : undefined,
   });
 
   // orderId is deterministic (`order_<groupId>`), so a customer who backs out of
@@ -142,7 +164,10 @@ export async function createPaymentIntent(
     [input.groupId, order.orderId, group.total_amount],
   );
 
-  return order;
+  // The mode travels with the session id because the browser SDK needs
+  // load({mode}) to match the environment the session was minted in, and the
+  // server is the only place that knows which that was.
+  return { ...order, mode: cashfreeMode() };
 }
 
 const EXCLUSION_VIOLATION = "23P01";
@@ -311,43 +336,99 @@ export async function handlePaymentWebhook(
     await pool.query(`update webhook_events set processed_at = now() where id = $1`, [webhookEventId]);
     return { processed: true };
   }
-
-  // PAYMENT_SUCCESS
-  const { rows: paymentRows } = await pool.query(
-    `select p.id, p.booking_group_id, p.amount, p.type, g.hold_expires_at, g.user_id
-       from payments p
-       join booking_groups g on g.id = p.booking_group_id
-      where p.provider_order_id = $1`,
+  // PAYMENT_SUCCESS. The actual confirmation lives in confirmPaidOrder, which
+  // the status endpoint and the reconcile sweep also call -- one path, three
+  // triggers, so the invoice/payout/deposit logic cannot drift between them.
+  const { rows: typeRows } = await pool.query(
+    `select type from payments where provider_order_id = $1`,
     [event.orderId],
   );
-  if (paymentRows.length === 0) throw new Error(`no payment found for order ${event.orderId}`);
-  const payment = paymentRows[0];
+  if (typeRows.length === 0) throw new Error(`no payment found for order ${event.orderId}`);
 
-  if (payment.type === "EXTENSION") {
-    await handleExtensionPaymentSuccess(pool, payment, webhookEventId, cashfree);
-    return { processed: true };
-  }
-
-  if (new Date(payment.hold_expires_at).getTime() < Date.now()) {
-    // The hold died before payment landed. Refund in full, confirm nothing.
-    const refund = await cashfree.refund({
-      orderId: event.orderId,
-      refundId: `refund_${payment.id}`,
-      amount: Number(payment.amount),
-    });
-    await pool.query(`update payments set status = 'SUCCEEDED', updated_at = now() where id = $1`, [payment.id]);
-    await pool.query(
-      `insert into refunds (payment_id, amount, reason, provider_ref, status)
-       values ($1, $2, 'HOLD_EXPIRED_BEFORE_PAYMENT', $3, 'PENDING')`,
-      [payment.id, payment.amount, refund.refundId],
+  if (typeRows[0].type === "EXTENSION") {
+    const { rows } = await pool.query(
+      `select p.id, p.booking_group_id, p.amount
+         from payments p where p.provider_order_id = $1`,
+      [event.orderId],
     );
-    await pool.query(`update webhook_events set processed_at = now() where id = $1`, [webhookEventId]);
+    await handleExtensionPaymentSuccess(pool, rows[0], webhookEventId, cashfree);
     return { processed: true };
   }
 
+  await confirmPaidOrder(pool, { orderId: event.orderId, trigger: "WEBHOOK", webhookEventId }, cashfree);
+  return { processed: true };
+}
+
+/**
+ * Turn a paid Cashfree order into a confirmed booking: deposits held, payouts
+ * accrued, invoices numbered, the customer told. Idempotent and safe to race.
+ *
+ * Three callers: the webhook (fastest), GET /payments/status/:groupId when the
+ * customer returns from checkout (so a laptop with no public URL can still
+ * complete the flow), and lib/paymentReconcile.ts (so a dropped webhook costs
+ * minutes). **The caller is responsible for having established that Cashfree
+ * itself says the order is PAID** -- this function moves money-adjacent state
+ * and does not second-guess that, which is why it is not exported to any route
+ * directly.
+ */
+export async function confirmPaidOrder(
+  pool: Pool,
+  args: { orderId: string; trigger: "WEBHOOK" | "POLL" | "SWEEP"; webhookEventId?: string | null },
+  cashfree: CashfreeClient,
+): Promise<{ confirmed: boolean; alreadyApplied: boolean; refunded: boolean }> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // `for update of p`, before anything else: this is the whole concurrency
+    // story. A webhook and the customer's return poll routinely arrive within
+    // the same second, and without the lock both would hold deposits, accrue
+    // payouts and burn two invoice numbers for one payment.
+    const { rows: paymentRows } = await client.query(
+      `select p.id, p.booking_group_id, p.amount, p.status, g.hold_expires_at, g.user_id
+         from payments p
+         join booking_groups g on g.id = p.booking_group_id
+        where p.provider_order_id = $1 and p.type <> 'EXTENSION'
+        for update of p`,
+      [args.orderId],
+    );
+    if (paymentRows.length === 0) throw new Error(`no payment found for order ${args.orderId}`);
+    const payment = paymentRows[0];
+
+    if (payment.status === "SUCCEEDED") {
+      // Already applied by whichever trigger got here first.
+      if (args.webhookEventId) {
+        await client.query(`update webhook_events set processed_at = now() where id = $1`, [
+          args.webhookEventId,
+        ]);
+      }
+      await client.query("COMMIT");
+      return { confirmed: true, alreadyApplied: true, refunded: false };
+    }
+
+    if (new Date(payment.hold_expires_at).getTime() < Date.now()) {
+      // The hold died before payment landed. Refund in full, confirm nothing.
+      const refund = await cashfree.refund({
+        orderId: args.orderId,
+        refundId: `refund_${payment.id}`,
+        amount: Number(payment.amount),
+      });
+      await client.query(`update payments set status = 'SUCCEEDED', updated_at = now() where id = $1`, [
+        payment.id,
+      ]);
+      await client.query(
+        `insert into refunds (payment_id, amount, reason, provider_ref, status)
+         values ($1, $2, 'HOLD_EXPIRED_BEFORE_PAYMENT', $3, 'PENDING')`,
+        [payment.id, payment.amount, refund.refundId],
+      );
+      if (args.webhookEventId) {
+        await client.query(`update webhook_events set processed_at = now() where id = $1`, [
+          args.webhookEventId,
+        ]);
+      }
+      await client.query("COMMIT");
+      return { confirmed: false, alreadyApplied: false, refunded: true };
+    }
 
     await client.query(`update payments set status = 'SUCCEEDED', updated_at = now() where id = $1`, [payment.id]);
     // Only HOLD rows that are still live: a booking cancelled out of the group
@@ -469,9 +550,15 @@ export async function handlePaymentWebhook(
     });
 
     // Inside the transaction, deliberately: processed_at and the confirmation it
-    // describes have to become true at the same instant, or the retry logic above
-    // cannot tell a handled event from a half-handled one.
-    await client.query(`update webhook_events set processed_at = now() where id = $1`, [webhookEventId]);
+    // describes have to become true at the same instant, or the retry logic in
+    // handlePaymentWebhook cannot tell a handled event from a half-handled one.
+    // Absent for the poll and sweep triggers, which have no event row -- their
+    // idempotency is the payment row lock above, not this table.
+    if (args.webhookEventId) {
+      await client.query(`update webhook_events set processed_at = now() where id = $1`, [
+        args.webhookEventId,
+      ]);
+    }
 
     await client.query("COMMIT");
   } catch (err) {
@@ -481,5 +568,150 @@ export async function handlePaymentWebhook(
     client.release();
   }
 
-  return { processed: true };
+  return { confirmed: true, alreadyApplied: false, refunded: false };
+}
+
+export interface PaymentStatus {
+  orderStatus: CashfreeOrderStatus | null;
+  paymentStatus: string | null;
+  bookingStatus: string | null;
+  totalAmount: number | null;
+  holdExpiresAt: string | null;
+  /** Summed over the group's live bookings, so the payment page can show the
+   *  same breakdown the checkout did without being handed it by the browser. */
+  totals: {
+    rentalAmount: number;
+    platformFee: number;
+    taxAmount: number;
+    discountAmount: number;
+    securityDepositAmount: number;
+  };
+  items: Array<{ make: string; model: string; shopName: string; riderName: string | null }>;
+}
+
+/**
+ * What actually happened to this group's payment, according to Cashfree.
+ *
+ * This exists because the webhook was the only thing that could confirm a
+ * booking, and a webhook cannot reach a laptop -- so the flow was untestable
+ * locally and un-survivable in production if one delivery was dropped. The
+ * browser calls this when it returns from checkout.
+ *
+ * The browser cannot influence the outcome: nothing from the request is read
+ * except the group id, which is checked against the caller, and the decision
+ * comes from `getOrder`. Cashfree's own guidance is to verify order_status
+ * server-side before delivering anything, which is the whole point.
+ */
+export async function getPaymentStatus(
+  pool: Pool,
+  input: { groupId: string; userId: string },
+  cashfree: CashfreeClient,
+): Promise<PaymentStatus> {
+  const { rows } = await pool.query(
+    `select g.id, g.total_amount, g.hold_expires_at,
+            p.id as payment_id, p.provider_order_id, p.status as payment_status,
+            (select b.status from bookings b
+              where b.group_id = g.id and b.deleted_at is null
+              order by b.created_at limit 1) as booking_status
+       from booking_groups g
+       left join payments p
+         on p.booking_group_id = g.id and p.type = 'RENTAL'
+        and p.status in ('PENDING', 'AUTHORIZED', 'SUCCEEDED')
+      where g.id = $1 and g.user_id = $2 and g.deleted_at is null`,
+    [input.groupId, input.userId],
+  );
+  // 404, not 403: another account's group must be indistinguishable from one
+  // that does not exist.
+  if (rows.length === 0) {
+    throw new PaymentGroupNotFoundError(`booking group ${input.groupId} not found`);
+  }
+  const row = rows[0];
+
+  // The breakdown and the vehicle list, so /checkout/pay/:groupId can be opened
+  // cold -- a refresh, a back button or a return from Cashfree used to lose the
+  // payment screen entirely, because it lived in React state.
+  const { rows: itemRows } = await pool.query(
+    `select b.rental_amount, b.platform_fee, b.tax_amount, b.discount_amount,
+            b.security_deposit_amount, m.make, m.model, s.name as shop_name,
+            r.name as rider_name
+       from bookings b
+       join vehicles v on v.id = b.vehicle_id
+       join vehicle_models m on m.id = v.model_id
+       join shops s on s.id = v.shop_id
+       left join riders r on r.id = b.rider_id
+      where b.group_id = $1 and b.deleted_at is null
+      order by b.created_at`,
+    [input.groupId],
+  );
+
+  const base = {
+    totalAmount: row.total_amount === null ? null : Number(row.total_amount),
+    holdExpiresAt: row.hold_expires_at ? new Date(row.hold_expires_at).toISOString() : null,
+    totals: {
+      rentalAmount: sum(itemRows, "rental_amount"),
+      platformFee: sum(itemRows, "platform_fee"),
+      taxAmount: sum(itemRows, "tax_amount"),
+      discountAmount: sum(itemRows, "discount_amount"),
+      securityDepositAmount: sum(itemRows, "security_deposit_amount"),
+    },
+    items: itemRows.map((i) => ({
+      make: i.make,
+      model: i.model,
+      shopName: i.shop_name,
+      riderName: i.rider_name ?? null,
+    })),
+  };
+
+  // No order was ever created -- the customer reached the return page without
+  // paying, which is an ordinary thing to do, not an error.
+  if (!row.provider_order_id) {
+    return { orderStatus: null, paymentStatus: null, bookingStatus: row.booking_status ?? null, ...base };
+  }
+
+  if (row.payment_status === "SUCCEEDED") {
+    return {
+      orderStatus: "PAID",
+      paymentStatus: row.payment_status,
+      bookingStatus: row.booking_status ?? null,
+      ...base,
+    };
+  }
+
+  const order = await cashfree.getOrder(row.provider_order_id);
+  if (!order) {
+    return {
+      orderStatus: null,
+      paymentStatus: row.payment_status ?? null,
+      bookingStatus: row.booking_status ?? null,
+      ...base,
+    };
+  }
+
+  if (order.orderStatus === "PAID") {
+    await confirmPaidOrder(pool, { orderId: row.provider_order_id, trigger: "POLL" }, cashfree);
+  } else if (order.orderStatus === "EXPIRED" || order.orderStatus === "TERMINATED") {
+    // Terminal and unpaid. Marking it FAILED frees the customer to start a
+    // fresh order instead of staring at a PENDING row forever.
+    await pool.query(
+      `update payments set status = 'FAILED', updated_at = now()
+        where id = $1 and status = 'PENDING'`,
+      [row.payment_id],
+    );
+  }
+
+  const after = await pool.query(
+    `select p.status as payment_status,
+            (select b.status from bookings b
+              where b.group_id = $1 and b.deleted_at is null
+              order by b.created_at limit 1) as booking_status
+       from payments p where p.id = $2`,
+    [input.groupId, row.payment_id],
+  );
+
+  return {
+    orderStatus: order.orderStatus,
+    paymentStatus: after.rows[0]?.payment_status ?? row.payment_status ?? null,
+    bookingStatus: after.rows[0]?.booking_status ?? null,
+    ...base,
+  };
 }

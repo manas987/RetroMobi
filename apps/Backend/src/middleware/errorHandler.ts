@@ -9,6 +9,8 @@ import {
   RateLimitedError,
 } from "../Routes/user/Auth/authService.ts";
 import { SmsDeliveryError } from "../providers/smsSender.ts";
+import { PaymentsUnavailableError } from "../providers/cashfree.ts";
+import { PaymentGroupNotFoundError } from "../Routes/user/Payments/paymentsService.ts";
 import {
   BookingNotCancellableError,
   CouponInvalidError,
@@ -271,6 +273,18 @@ export function errorHandler(
   }
   if (err instanceof KycUnavailableError) {
     res.status(503).json({ error: "kyc_unavailable", message: err.message });
+    return;
+  }
+  // 503, same reasoning as KYC: the request is fine, we just cannot reach the
+  // payment gateway. Retryable, and never a confirmed booking.
+  if (err instanceof PaymentGroupNotFoundError) {
+    // 404 and not 403: another account's booking group must be
+    // indistinguishable from one that does not exist.
+    res.status(404).json({ error: "booking_group_not_found", message: err.message });
+    return;
+  }
+  if (err instanceof PaymentsUnavailableError) {
+    res.status(503).json({ error: "payments_unavailable", message: err.message });
     return;
   }
   if (err instanceof BookingNotFoundError || err instanceof TicketNotFoundError) {

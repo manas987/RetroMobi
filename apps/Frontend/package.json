@@ -9,6 +9,7 @@
     "build": "bun run build.ts"
   },
   "dependencies": {
+    "@cashfreepayments/cashfree-js": "^1.0.7",
     "@date-fns/tz": "^1.5.0",
     "@radix-ui/react-collapsible": "^1.2.1",
     "@radix-ui/react-dialog": "^1.3.1",

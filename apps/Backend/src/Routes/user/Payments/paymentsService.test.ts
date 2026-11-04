@@ -8,7 +8,12 @@ import {
   futureWindow,
 } from "../../../test/fixtures.ts";
 import { createHold } from "../Bookings/bookingsService.ts";
-import { createPaymentIntent, handlePaymentWebhook } from "./paymentsService.ts";
+import {
+  createPaymentIntent,
+  getPaymentStatus,
+  handlePaymentWebhook,
+  PaymentGroupNotFoundError,
+} from "./paymentsService.ts";
 
 // A PLATFORM tax invoice is only issued when RetroMobi has a GSTIN, so these tests
 // supply one. Without it the platform invoice is correctly skipped.
@@ -41,7 +46,12 @@ const fakeCashfree = {
     expiresAt: args.expiresAt,
   }),
   refund: async () => ({ refundId: `rf_${Date.now()}`, status: "PENDING" as const }),
-  transfer: async () => ({ transferId: `tr_${Date.now()}`, status: "PENDING" as const }),
+  // Cashfree says PAID, because these suites are about what happens AFTER
+  // a payment -- confirmPaidOrder never asks the vendor itself.
+  getOrder: async (orderId: string) => ({
+    orderStatus: "PAID" as const,
+    paymentSessionId: `session_${orderId}`,
+  }),
   verifyWebhookSignature: () => true,
 };
 
@@ -288,5 +298,150 @@ describe("handlePaymentWebhook", () => {
       p.groupId,
     ]);
     expect(rows.every((r) => r.status !== "CONFIRMED")).toBe(true);
+  });
+});
+
+// A client whose order status is whatever the test says it is. The default
+// fakeCashfree always says PAID, which is right for the confirmation suites
+// and useless for the ones below.
+function cashfreeSaying(orderStatus: "ACTIVE" | "PAID" | "EXPIRED" | "TERMINATED" | null) {
+  return {
+    ...fakeCashfree,
+    getOrder: async (orderId: string) =>
+      orderStatus === null ? null : { orderStatus, paymentSessionId: `session_${orderId}` },
+  };
+}
+
+describe("getPaymentStatus", () => {
+  async function pending(dayOffset: number) {
+    const g = await heldGroup(dayOffset);
+    const intent = await createPaymentIntent(
+      pool,
+      { groupId: g.groupId, userId: g.userId },
+      fakeCashfree,
+    );
+    return { ...g, orderId: intent.orderId };
+  }
+
+  // The whole point of this endpoint: the browser says nothing, Cashfree
+  // decides. An ACTIVE order is an unpaid one.
+  test("an ACTIVE order confirms nothing", async () => {
+    const p = await pending(400);
+    const result = await getPaymentStatus(
+      pool,
+      { groupId: p.groupId, userId: p.userId },
+      cashfreeSaying("ACTIVE"),
+    );
+
+    expect(result.orderStatus).toBe("ACTIVE");
+    expect(result.paymentStatus).toBe("PENDING");
+    const { rows } = await pool.query(`select status from bookings where group_id = $1`, [p.groupId]);
+    expect(rows.every((r) => r.status === "HOLD")).toBe(true);
+  });
+
+  test("a PAID order confirms the booking, exactly once across two polls", async () => {
+    const p = await pending(410);
+    const client = cashfreeSaying("PAID");
+
+    const first = await getPaymentStatus(pool, { groupId: p.groupId, userId: p.userId }, client);
+    const second = await getPaymentStatus(pool, { groupId: p.groupId, userId: p.userId }, client);
+
+    expect(first.paymentStatus).toBe("SUCCEEDED");
+    expect(second.paymentStatus).toBe("SUCCEEDED");
+    expect(second.bookingStatus).toBe("CONFIRMED");
+
+    const payouts = await pool.query(
+      `select p.id from payouts p join bookings b on b.id = p.booking_id
+        where b.group_id = $1 and p.stage = 'UPFRONT'`,
+      [p.groupId],
+    );
+    expect(payouts.rows).toHaveLength(1);
+    const deposits = await pool.query(
+      `select d.id from security_deposits d join bookings b on b.id = d.booking_id
+        where b.group_id = $1`,
+      [p.groupId],
+    );
+    expect(deposits.rows).toHaveLength(1);
+  });
+
+  // The two triggers race in production: the webhook and the customer's return
+  // land within the same second. The payment row lock is what makes that safe.
+  test("a webhook arriving after a poll adds no second set of side effects", async () => {
+    const p = await pending(420);
+    await getPaymentStatus(pool, { groupId: p.groupId, userId: p.userId }, cashfreeSaying("PAID"));
+
+    await handlePaymentWebhook(
+      pool,
+      { providerEventId: `evt_${Date.now()}_poll`, type: "PAYMENT_SUCCESS", orderId: p.orderId, payload: {} },
+      fakeCashfree,
+    );
+
+    const payouts = await pool.query(
+      `select p.id from payouts p join bookings b on b.id = p.booking_id
+        where b.group_id = $1 and p.stage = 'UPFRONT'`,
+      [p.groupId],
+    );
+    expect(payouts.rows).toHaveLength(1);
+    const invoices = await pool.query(`select id from invoices where booking_group_id = $1`, [
+      p.groupId,
+    ]);
+    // One MERCHANT plus one PLATFORM, not two of each -- a duplicated invoice
+    // number is an accounting problem, not a bug report.
+    expect(invoices.rows).toHaveLength(2);
+  });
+
+  test("an EXPIRED order marks the payment FAILED and confirms nothing", async () => {
+    const p = await pending(430);
+    const result = await getPaymentStatus(
+      pool,
+      { groupId: p.groupId, userId: p.userId },
+      cashfreeSaying("EXPIRED"),
+    );
+
+    expect(result.paymentStatus).toBe("FAILED");
+    const { rows } = await pool.query(`select status from bookings where group_id = $1`, [p.groupId]);
+    expect(rows.every((r) => r.status === "HOLD")).toBe(true);
+  });
+
+  test("an order Cashfree has never heard of leaves everything alone", async () => {
+    const p = await pending(440);
+    const result = await getPaymentStatus(
+      pool,
+      { groupId: p.groupId, userId: p.userId },
+      cashfreeSaying(null),
+    );
+
+    expect(result.orderStatus).toBeNull();
+    expect(result.paymentStatus).toBe("PENDING");
+  });
+
+  // Reaching the return page without having started a payment is ordinary.
+  test("a group with no payment yet is not an error", async () => {
+    const g = await heldGroup(450);
+    const result = await getPaymentStatus(
+      pool,
+      { groupId: g.groupId, userId: g.userId },
+      cashfreeSaying("ACTIVE"),
+    );
+
+    expect(result.orderStatus).toBeNull();
+    expect(result.paymentStatus).toBeNull();
+    expect(result.bookingStatus).toBe("HOLD");
+    expect(result.totalAmount).toBeGreaterThan(0);
+  });
+
+  test("another account's group is a 404, not a 403 -- no existence leak", async () => {
+    const mine = await pending(460);
+    const stranger = await createUser(pool);
+
+    await expect(
+      getPaymentStatus(pool, { groupId: mine.groupId, userId: stranger.id }, cashfreeSaying("PAID")),
+    ).rejects.toBeInstanceOf(PaymentGroupNotFoundError);
+
+    // And it did not quietly confirm on the way to refusing.
+    const { rows } = await pool.query(`select status from payments where booking_group_id = $1`, [
+      mine.groupId,
+    ]);
+    expect(rows[0].status).toBe("PENDING");
   });
 });

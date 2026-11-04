@@ -4,6 +4,7 @@ import { Browse } from "./pages/Browse";
 import { ShopPage } from "./pages/ShopPage";
 import { VehicleDetail } from "./pages/VehicleDetail";
 import { Checkout } from "./pages/Checkout";
+import { CheckoutPay, CheckoutReturn } from "./pages/CheckoutPay";
 
 import { CustomerLogin } from "./pages/customer/Login";
 import { CustomerProfile, CustomerSupport } from "./pages/customer/Profile";
@@ -43,6 +44,11 @@ export function App() {
       <Route path="/shops/:shopId" component={ShopPage} />
       <Route path="/vehicles/:id" component={VehicleDetail} />
       <Route path="/checkout" component={Checkout} />
+      {/* The payment step is its own URL so a refresh, a back button or a
+          return from the gateway does not lose it. /checkout/return is the
+          return_url Cashfree is given when the order is created. */}
+      <Route path="/checkout/return" component={CheckoutReturn} />
+      <Route path="/checkout/pay/:groupId" component={CheckoutPay} />
 
       <Route path="/login" component={CustomerLogin} />
       <Route path="/account/profile" component={CustomerProfile} />

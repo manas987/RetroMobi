@@ -33,3 +33,22 @@ declare module "*.module.css" {
   const classes: { readonly [key: string]: string };
   export = classes;
 }
+
+/**
+ * @cashfreepayments/cashfree-js ships no type declarations (v1.0.7 is a plain
+ * CDN loader: dist/script.esm.js and nothing else). Declared here against the
+ * documented surface -- see docs/payments.md's "Browser checkout (JS SDK v3)"
+ * for the source. Only the two members we use are typed; adding more means
+ * reading the docs again, not guessing.
+ */
+declare module "@cashfreepayments/cashfree-js" {
+  export interface CashfreeCheckoutOptions {
+    paymentSessionId: string;
+    /** "_self" (default), "_blank", "_top", "_modal", or a DOM element. */
+    redirectTarget?: "_self" | "_blank" | "_top" | "_modal" | HTMLElement;
+  }
+  export interface CashfreeInstance {
+    checkout(options: CashfreeCheckoutOptions): Promise<unknown>;
+  }
+  export function load(options: { mode: "sandbox" | "production" }): Promise<CashfreeInstance>;
+}

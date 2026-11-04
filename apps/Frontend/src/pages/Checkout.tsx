@@ -10,21 +10,10 @@ import { Modal } from "../components/Modal";
 import { useCart } from "../lib/cart";
 import { usePortalSession, usePortalQuery, portalFetch, PortalApiError, type Row } from "../lib/portal";
 import { defaultWindow, toIsoWithOffset } from "../lib/searchParams";
-import { rupees } from "../lib/format";
 
-type HoldResult = {
-  groupId: string;
-  bookings: Array<{ id: string; vehicleId: string }>;
-  holdExpiresAt: string;
-  totals: {
-    rentalAmount: number;
-    platformFee: number;
-    taxAmount: number;
-    discountAmount: number;
-    securityDepositAmount: number;
-    totalAmount: number;
-  };
-};
+// Only the group id is used: everything the payment screen shows is read back
+// from the server by group id, not carried over in React state.
+type HoldResult = { groupId: string };
 
 export function Checkout() {
   const { items, clear } = useCart();
@@ -40,14 +29,14 @@ export function Checkout() {
     if (!session) navigate(`/login?next=${encodeURIComponent("/checkout")}`);
   }, [session, navigate]);
 
-  const [hold, setHold] = useState<HoldResult | null>(null);
+  // Set the instant the hold succeeds, before the cart is cleared. Without it
+  // the empty-cart guard below fires on the way out and bounces the customer to
+  // /browse instead of the payment page they are being sent to.
+  const [leaving, setLeaving] = useState(false);
 
-  // Redirect only when the cart is genuinely empty before checkout — not
-  // after submitHold clears it on success, which would bounce the user away
-  // from the payment step they're meant to land on next.
   useEffect(() => {
-    if (session && items.length === 0 && !hold) navigate("/browse", { replace: true });
-  }, [session, items.length, hold, navigate]);
+    if (session && items.length === 0 && !leaving) navigate("/browse", { replace: true });
+  }, [session, items.length, leaving, navigate]);
 
   const { data: ridersRes, error: ridersError } = usePortalQuery<{ riders: Row[] }>(
     "user",
@@ -72,9 +61,6 @@ export function Checkout() {
   const [riderName, setRiderName] = useState("");
   const [verifyingRiderId, setVerifyingRiderId] = useState<string | null>(null);
 
-  const [paymentIntent, setPaymentIntent] = useState<{ orderId: string; paymentSessionId: string } | null>(
-    null,
-  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -126,18 +112,11 @@ export function Checkout() {
           returnAt: toIsoWithOffset(combine(returnDate, returnTime)),
         },
       });
-      setHold(result);
+      // The payment step lives at its own URL, loaded from the server, so a
+      // refresh or a return from the gateway cannot lose it.
+      setLeaving(true);
       clear();
-    });
-
-  const payNow = () =>
-    run(async () => {
-      const result = await portalFetch<{ orderId: string; paymentSessionId: string }>("user", "/payments/intent", {
-        method: "POST",
-        token: session!.accessToken,
-        body: { groupId: hold!.groupId },
-      });
-      setPaymentIntent(result);
+      navigate(`/checkout/pay/${result.groupId}`);
     });
 
   if (!session) return null;
@@ -150,7 +129,7 @@ export function Checkout() {
           ← Back to browse
         </Link>
 
-        {items.length > 0 && !hold && (
+        {items.length > 0 && (
           <div className="mt-6">
             <h1 className="text-2xl font-semibold text-ink mb-1">
               Checkout — {vehicles.length} scooter{vehicles.length === 1 ? "" : "s"}
@@ -291,54 +270,8 @@ export function Checkout() {
           </div>
         )}
 
-        {hold && (
-          <div className="mt-6">
-            <h1 className="text-2xl font-semibold text-ink mb-1">Complete payment</h1>
-            <p className="text-sm text-ink-3 mb-6">
-              Held for 10 minutes, until {new Date(hold.holdExpiresAt).toLocaleTimeString("en-IN")}.
-            </p>
-
-            {error && <ErrorBox text={error} />}
-
-            <section className="rounded-panel border border-line divide-y divide-line mb-5">
-              <Row label="Rental" value={rupees(hold.totals.rentalAmount)} />
-              <Row label="Platform fee" value={rupees(hold.totals.platformFee)} />
-              <Row label="Refundable deposit" value={rupees(hold.totals.securityDepositAmount)} />
-              <Row label="Total payable now" value={rupees(hold.totals.totalAmount)} bold />
-            </section>
-
-            {!paymentIntent ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={payNow}
-                className="w-full h-11 rounded-row bg-amber text-on-amber font-semibold disabled:opacity-40 hover:brightness-95 transition-[filter]"
-              >
-                {busy ? "Working…" : "Pay now"}
-              </button>
-            ) : (
-              <div className="rounded-panel bg-surface-2 p-5 text-sm text-ink-2">
-                <p className="font-medium text-ink mb-1">Payment order created ({paymentIntent.orderId}).</p>
-                <p>
-                  In production this redirects to Cashfree's hosted checkout. This preview has no real
-                  payment gateway configured, so it can't be completed from here — the hold above is real
-                  and visible to the shop, but needs a genuine payment to confirm.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
       </div>
       <Footer />
-    </div>
-  );
-}
-
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
-  return (
-    <div className="px-5 py-3 flex items-center justify-between gap-4 text-sm">
-      <span className="text-ink-3">{label}</span>
-      <span className={`text-ink text-right tnum ${bold ? "font-semibold text-base" : "font-medium"}`}>{value}</span>
     </div>
   );
 }

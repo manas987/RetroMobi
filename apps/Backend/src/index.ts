@@ -13,6 +13,9 @@ export const app = express();
 // Mounted ahead of the JSON parser so the Cashfree signature check in
 // Payments/controller.ts runs against the exact bytes Cashfree signed.
 app.use("/api/user/payments/webhook", express.raw({ type: "*/*" }));
+// The payouts product's own webhook, same reason: the signature is over the
+// exact bytes, so this route cannot go through the JSON parser either.
+app.use("/api/merchant/payouts/webhook", express.raw({ type: "*/*" }));
 app.use(express.json());
 app.use("/api/user", userRoutes);
 app.use("/api/merchant", merchantRoutes);

@@ -94,6 +94,10 @@ export class PortalApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The server's machine-readable `error` code, e.g. "payments_unavailable".
+     *  The message is written for a developer; the code is what a page keys its
+     *  own copy off, so error text can be rewritten without matching strings. */
+    public code: string = "",
   ) {
     super(message);
   }
@@ -171,7 +175,13 @@ export async function portalFetch<T>(
 
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new PortalApiError(res.status, data.message ?? data.error ?? `request failed (${res.status})`);
+  if (!res.ok) {
+    throw new PortalApiError(
+      res.status,
+      data.message ?? data.error ?? `request failed (${res.status})`,
+      data.error ?? "",
+    );
+  }
   return data as T;
 }
 

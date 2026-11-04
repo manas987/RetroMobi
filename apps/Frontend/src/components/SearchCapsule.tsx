@@ -100,10 +100,14 @@ export function SearchCapsule({
   // looking like it belongs to the newly-picked one. Search right away.
   function changeCity(next: string) {
     setCity(next);
+    // Only search when there is a window to search in. On the homepage the
+    // dates are still blank at this point, so hop to the field that is
+    // actually missing rather than closing on a half-filled search.
+    if (!pickupDate || !returnDate) {
+      setActive("when");
+      return;
+    }
     setActive(null);
-    // Only when there is a window to search in. On the homepage the dates are
-    // still blank at this point, and searching now would mean inventing one.
-    if (!pickupDate || !returnDate) return;
     onSearch({
       city: next,
       pickupAt: toIsoWithOffset(combine(pickupDate, pickupTime)),

@@ -446,7 +446,8 @@ export async function requestExtension(
     await client.query("BEGIN");
 
     const { rows } = await client.query(
-      `select b.id, b.vehicle_id, b.group_id, b.scheduled_pickup_at, b.scheduled_return_at, u.phone
+      `select b.id, b.vehicle_id, b.group_id, b.scheduled_pickup_at, b.scheduled_return_at,
+              u.phone, u.name
          from bookings b
          join booking_groups g on g.id = b.group_id
          join users u on u.id = g.user_id
@@ -500,7 +501,11 @@ export async function requestExtension(
       orderId,
       amount: extraTotals.totalAmount,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      customerId: `cust_${input.userId.replace(/-/g, "")}`,
       customerPhone: booking.phone,
+      customerName: booking.name ?? undefined,
+      // No return_url: an extension is paid from inside the app's own booking
+      // page, not from a fresh checkout, so there is nothing to come back to.
     });
 
     const { rows: paymentRows } = await client.query(
@@ -543,6 +548,13 @@ export async function listMyBookings(pool: Pool, userId: string) {
     `select b.*, m.make, m.model, s.id as shop_id, s.name as shop_name,
             s.address_line1 as shop_address, s.city as shop_city, s.phone as shop_phone,
             r.name as rider_name,
+            -- So the list can offer "Complete payment" on a HOLD whose clock is
+            -- still running. Without it a customer who closed the tab at the
+            -- Cashfree screen has no route back to a hold that is still live.
+            g.hold_expires_at,
+            (select p.status from payments p
+              where p.booking_group_id = g.id and p.type = 'RENTAL'
+              order by p.created_at desc limit 1) as payment_status,
             sd.status as deposit_status, sd.deducted_amount as deposit_deducted_amount,
             sd.deduction_reason as deposit_deduction_reason, sd.refund_amount as deposit_refund_amount,
             c.refund_amount as cancellation_refund_amount, c.penalty_amount as cancellation_penalty_amount,

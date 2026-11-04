@@ -18,6 +18,15 @@
 // nobody finds out until a real signup fails. So it's required, but only when
 // NODE_ENV=production, so dev/test are unaffected.
 //
+// Cashfree PG: the payments half of the same credential pair. createOrder and
+// getOrder used to fake a paid order when it was missing, and
+// verifyWebhookSignature returned true for EVERY request -- so any non-production
+// deploy with a public URL confirmed a booking for whoever POSTed a JSON body.
+// The signature check now fails closed unconditionally, the fakes are behind
+// PAYMENTS_DEV_AUTO_SUCCEED (refused in production below), and
+// PUBLIC_APP_BASE_URL is required because without it a paying customer never
+// gets back to the app.
+//
 // Cashfree Secure ID: the same shape, found later and worse. kyc.ts's
 // dev-fallback returned a faked `VERIFIED` driving licence, so an unset
 // CASHFREE_CLIENT_ID in production approved every rider without a single check
@@ -72,6 +81,15 @@ const REQUIRED_IN_PRODUCTION: Requirement[] = [
   // DL number is a weekend's work. The hash is all we keep of the number
   // (lib/verificationHash.ts), so if it is guessable we have stored the number.
   { key: "DL_HASH_PEPPER", why: "without it the stored licence hashes are reversible by anyone" },
+  // Cashfree's return_url and notify_url are built from this. Without it the
+  // customer pays and is then left on Cashfree's page with no way back, and no
+  // webhook is registered on the order -- so the booking is confirmed only by
+  // the reconcile sweep, minutes later, with the customer already gone.
+  {
+    key: "PUBLIC_APP_BASE_URL",
+    why: "a paying customer is never returned to the app and no webhook is registered on the order",
+    validate: (v) => (v.startsWith("https://") ? null : "must be an https:// origin in production"),
+  },
 ];
 
 // Set in production = a silently wrong decision, so these are refused outright.
@@ -82,6 +100,11 @@ const FORBIDDEN_IN_PRODUCTION: Requirement[] = [
     key: "KYC_DEV_AUTO_VERIFY",
     why: "it fakes a VERIFIED driving licence with no check -- a local-only escape hatch",
     // "false" and "" are the off state and perfectly fine to leave in a .env.
+    validate: (v) => (v === "true" ? "must not be true in production" : null),
+  },
+  {
+    key: "PAYMENTS_DEV_AUTO_SUCCEED",
+    why: "it fakes a paid Cashfree order, so a booking confirms with no money -- a local-only escape hatch",
     validate: (v) => (v === "true" ? "must not be true in production" : null),
   },
 ];
