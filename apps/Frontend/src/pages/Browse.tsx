@@ -7,11 +7,15 @@ import { SearchCapsule, type SearchCapsuleValue } from "../components/SearchCaps
 import { FilterSheet } from "../components/FilterSheet";
 import { MapPanel } from "../components/MapPanel";
 import { VehicleCard } from "../components/VehicleCard";
+import { SearchFailure, VehicleSkeletons } from "../components/SearchFeedback";
+import { searchPresentation } from "../lib/searchPresentation";
 import { useSearch } from "../lib/api";
 import { useGeolocation } from "../lib/useGeolocation";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { DEFAULT_CITY, defaultWindow, parseSearchParams, toSearchParams, activeFilters } from "../lib/searchParams";
 import type { SearchCriteria, SearchResult } from "../lib/types";
+
+const EMPTY_RESULTS: SearchResult[] = [];
 
 export function Browse() {
   const locationSearch = useLocationSearch();
@@ -31,7 +35,7 @@ export function Browse() {
   const inHeader = useMediaQuery("(min-width: 1300px)");
 
   const criteria = parseSearchParams(locationSearch);
-  const geo = useGeolocation();
+  const geo = useGeolocation({ autoRequest: false });
   const coords = geo.status === "granted" ? { lat: geo.lat, lng: geo.lng } : null;
 
   // Reached with no query string (e.g. the header's bare "Browse scooters"
@@ -49,7 +53,16 @@ export function Browse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [criteria.city]);
 
-  const { data, isLoading, isError } = useSearch(criteria, coords);
+  const query = useSearch(criteria, coords);
+  const { data } = query;
+  const { loading, failed, skeletonCount } = searchPresentation(query);
+  const visibleResults = loading || failed ? EMPTY_RESULTS : data?.results ?? EMPTY_RESULTS;
+
+  useEffect(() => {
+    setHoveredCard(null);
+    setFocusedCard(null);
+    setSelectedShop(null);
+  }, [locationSearch, loading, failed]);
 
   function update(patch: Partial<SearchCriteria>) {
     // "Distance" sort needs coordinates — fall back to price if we don't have them yet.
@@ -103,6 +116,7 @@ export function Browse() {
           still in the flow, and a gutter beside nothing would double the map's
           left inset. */}
       <div className={`flex-1 flex items-start p-10 ${mapFullscreen ? "gap-0" : "gap-10"}`}>
+        <p role="status" className="sr-only">{loading ? "Loading vehicles" : ""}</p>
         {/* Kept mounted and collapsed to basis-0 rather than unmounted: a width
             that animates has to have something to animate from, and the map's
             own invalidateSize fires at the tail of this same 300ms.
@@ -110,26 +124,26 @@ export function Browse() {
             grow only while the map is beside it — that is also what fills the
             row below lg, where the map column is display:none. */}
         <div
+          role="region"
+          aria-label="Vehicle results"
+          aria-busy={loading}
           className={`-mt-[18px] min-w-0 transition-[flex-basis,opacity] duration-300 ease-out ${
             mapFullscreen ? "grow-0 basis-0 opacity-0 overflow-hidden" : "grow basis-[55%] opacity-100"
           }`}
         >
           <div className="flex items-center justify-between gap-3 mb-6">
             <div className="text-xl font-semibold text-ink" aria-live="polite">
-              {!isLoading && !isError && data && (
+              {!loading && !failed && data && (
                 <span>{data.total} {data.total === 1 ? "vehicle" : "vehicles"}</span>
               )}
             </div>
             {filterButton}
           </div>
 
-          {isError && (
-            <p className="text-sm text-danger bg-danger-soft rounded-panel px-4 py-3">
-              Couldn't reach the API. Is the backend running?
-            </p>
-          )}
+          {loading && <VehicleSkeletons count={skeletonCount} />}
+          {failed && <SearchFailure onRetry={() => { void query.refetch({ cancelRefetch: false }); }} retrying={query.isFetching} />}
 
-          {!isError && !isLoading && data?.results.length === 0 && (
+          {!loading && !failed && data?.results.length === 0 && (
             <p className="text-sm text-ink-3 py-16 text-center bg-surface-2 rounded-panel">
               No scooters match these filters yet. Try widening the dates, price range or city.
             </p>
@@ -138,9 +152,9 @@ export function Browse() {
           {/* Two up, like the reference: the column is just over half the
               window, and a third card there is narrower than the card was
               ever designed to be. */}
-          {!isLoading && data && data.results.length > 0 && (
+          {visibleResults.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {data.results.map((r) => (
+              {visibleResults.map((r) => (
                 <div
                   key={`${r.model.id}:${r.primaryOffer.shopId}`}
                   onMouseEnter={() => setHoveredCard(r)}
@@ -168,10 +182,10 @@ export function Browse() {
           }`}
         >
           <MapPanel
-            results={data?.results ?? []}
+            results={visibleResults}
             activeShopId={activeShop}
             onShopSelect={setSelectedShop}
-            coords={coords}
+            geo={geo}
             fullscreen={mapFullscreen}
             onToggleFullscreen={() => setMapFullscreen((f) => !f)}
             className="h-full rounded-panel border border-line"

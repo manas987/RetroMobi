@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
-import { Navigation, Plus, Minus } from "lucide-react";
+import { Plus, Minus } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { rupees } from "../lib/format";
 import type { SearchResult } from "../lib/types";
 import { TILE_URL, TILE_ATTRIBUTION, TILE_MAX_ZOOM } from "../lib/mapTiles";
 import { mapShops } from "../lib/mapShops";
+import type { GeolocationController } from "../lib/useGeolocation";
+import { MapLocationControl } from "./MapLocationControl";
 
 /** Uttarakhand — centres the map even before any shop is plotted. */
 const DEFAULT_CENTER: L.LatLngTuple = [30.1, 78.4];
@@ -23,7 +25,7 @@ function priceIcon(price: number, shopName: string): L.DivIcon {
 
 export function MapPanel({
   results,
-  coords = null,
+  geo,
   fullscreen = false,
   onToggleFullscreen,
   className = "",
@@ -31,10 +33,7 @@ export function MapPanel({
   onShopSelect,
 }: {
   results: SearchResult[];
-  /** Already-granted position from the page's own `useGeolocation`. The locate
-   *  button re-centres on it rather than calling `map.locate()`, which would
-   *  put a second permission prompt in front of someone who answered once. */
-  coords?: { lat: number; lng: number } | null;
+  geo: GeolocationController;
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
   /** Size and decoration both come from here — the panel has no dimensions of
@@ -46,6 +45,7 @@ export function MapPanel({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<{ shopId: string; marker: L.Marker }[]>([]);
+  const fittedShops = useRef("");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -67,6 +67,7 @@ export function MapPanel({
       clearTimeout(resizeTimer);
       map.remove();
       mapRef.current = null;
+      fittedShops.current = "";
     };
   }, []);
 
@@ -110,11 +111,15 @@ export function MapPanel({
       markersRef.current.push({ shopId: shop.shopId, marker });
     }
 
-    if (shops.length > 0) {
+    const positions = JSON.stringify(shops
+      .map(({ shopId, latitude, longitude }) => ({ shopId, latitude, longitude }))
+      .sort((a, b) => a.shopId.localeCompare(b.shopId)));
+    if (shops.length > 0 && positions !== fittedShops.current) {
       const bounds = L.latLngBounds(
         shops.map((shop) => [shop.latitude, shop.longitude] as L.LatLngTuple),
       );
       map.fitBounds(bounds, { padding: [88, 64], maxZoom: 14 });
+      fittedShops.current = positions;
     }
   }, [ready, results, onShopSelect]);
 
@@ -160,16 +165,8 @@ export function MapPanel({
         )}
 
         <div className={`rounded-full bg-surface ${CHROME_SHADOW} overflow-hidden flex flex-col divide-y divide-line`}>
-          <button
-            type="button"
-            onClick={() => coords && mapRef.current?.setView([coords.lat, coords.lng], 14)}
-            disabled={!coords}
-            className={`${CHROME} w-11 h-11 disabled:opacity-35 disabled:cursor-not-allowed`}
-            aria-label="Centre on my location"
-            title={coords ? "Centre on my location" : "Location unavailable"}
-          >
-            <Navigation className="h-[18px] w-[18px] -rotate-45" />
-          </button>
+          <MapLocationControl geo={geo} className={`${CHROME} w-11 h-11`}
+            onLocate={({ lat, lng }) => mapRef.current?.setView([lat, lng], 14)} />
           <button
             type="button"
             onClick={() => mapRef.current?.zoomIn()}
