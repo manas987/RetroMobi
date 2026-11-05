@@ -11,13 +11,18 @@ import { useSearch } from "../lib/api";
 import { useGeolocation } from "../lib/useGeolocation";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { DEFAULT_CITY, defaultWindow, parseSearchParams, toSearchParams, activeFilters } from "../lib/searchParams";
-import type { SearchCriteria } from "../lib/types";
+import type { SearchCriteria, SearchResult } from "../lib/types";
 
 export function Browse() {
   const locationSearch = useLocationSearch();
   const [, navigate] = useLocation();
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [hoveredCard, setHoveredCard] = useState<SearchResult | null>(null);
+  const [focusedCard, setFocusedCard] = useState<SearchResult | null>(null);
+  const [selectedShop, setSelectedShop] = useState<string | null>(null);
+  const activeCard = hoveredCard ?? focusedCard;
+  const activeShop = activeCard?.primaryOffer.shopId ?? selectedShop;
 
   // 660px of capsule plus the logo and the account cluster needs
   // about 1300px of bar. Under that the controls get their own strip. It is a
@@ -82,9 +87,9 @@ export function Browse() {
        is what lets the footer arrive at the end and lift it with everything
        else. The header holds its own place — it is already sticky. */
     <div className="min-h-screen flex flex-col">
-      <Header center={inHeader ? capsule : undefined} />
+      <Header browse center={inHeader ? capsule : undefined} />
 
-      {!inHeader && <div className="shrink-0 border-b border-line px-5 py-3">{capsule}</div>}
+      {!inHeader && <div className="shrink-0 px-5 pt-3">{capsule}</div>}
 
       {/* Two numbers, not one: 40px to the window edges and between the two
           columns, 24px between cards. The reference uses that same ratio, and
@@ -136,7 +141,17 @@ export function Browse() {
           {!isLoading && data && data.results.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {data.results.map((r) => (
-                <VehicleCard key={`${r.model.id}:${r.primaryOffer.shopId}`} result={r} />
+                <div
+                  key={`${r.model.id}:${r.primaryOffer.shopId}`}
+                  onMouseEnter={() => setHoveredCard(r)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  onFocusCapture={() => setFocusedCard(r)}
+                  onBlurCapture={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocusedCard(null);
+                  }}
+                >
+                  <VehicleCard result={r} highlighted={activeCard ? activeCard === r : selectedShop === r.primaryOffer.shopId} />
+                </div>
               ))}
             </div>
           )}
@@ -147,15 +162,16 @@ export function Browse() {
              it and then lifts with the page when the footer arrives — which is
              the whole reason the page scrolls rather than the cards column.
 
-             144px is the 104px header plus this row's own 40px of padding, and
-             the height leaves the same 40px under it, so the map spans the
-             window and comes out slightly taller than its 45% width. */
-          className={`shrink-0 sticky top-[144px] h-[calc(100dvh-184px)] transition-[flex-basis] duration-300 ease-out ${
+             The inline header is 84px plus this row's 40px of padding;
+             leave another 40px beneath the map. */
+          className={`shrink-0 sticky top-[144px] h-[calc(100dvh-184px)] min-[1300px]:top-[124px] min-[1300px]:h-[calc(100dvh-164px)] transition-[flex-basis] duration-300 ease-out ${
             mapFullscreen ? "grow basis-full" : "hidden lg:block basis-[48%]"
           }`}
         >
           <MapPanel
             results={data?.results ?? []}
+            activeShopId={activeShop}
+            onShopSelect={setSelectedShop}
             coords={coords}
             fullscreen={mapFullscreen}
             onToggleFullscreen={() => setMapFullscreen((f) => !f)}

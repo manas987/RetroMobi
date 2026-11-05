@@ -7,7 +7,7 @@ import { useModelImage } from "../lib/useModelImage";
 import { stockPhotos } from "../lib/stockPhoto";
 import type { SearchResult } from "../lib/types";
 
-export function VehicleCard({ result }: { result: SearchResult }) {
+export function VehicleCard({ result, highlighted = false }: { result: SearchResult; highlighted?: boolean }) {
   const { model, primaryOffer: offer, offerVehicleIds } = result;
   const { qtyFor, setQty, openDrawer } = useCart();
   const qty = qtyFor(model.id, offer.shopId);
@@ -32,12 +32,20 @@ export function VehicleCard({ result }: { result: SearchResult }) {
   return (
     <article
       onClick={() => navigate(`/vehicles/${offer.vehicleId}`)}
-      className="group flex flex-col cursor-pointer"
+      tabIndex={0}
+      aria-label={`${model.make} ${model.model} at ${offer.shopName}`}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          navigate(`/vehicles/${offer.vehicleId}`);
+        }
+      }}
+      className="group flex flex-col cursor-pointer rounded-[18px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
     >
       {/* The photo is the card. No panel, no border, no padding box — the only
           edge on the page is the image's own rounding, and the text sits loose
           underneath it. */}
-      <div className="relative aspect-[4/3] rounded-[18px] overflow-hidden bg-surface-3">
+      <div className={`relative aspect-[4/3] rounded-[18px] overflow-hidden bg-surface-3 transition-shadow ${highlighted ? "ring-2 ring-amber ring-offset-4 ring-offset-surface" : ""}`}>
         <VehiclePhoto
           modelId={model.id}
           hasImageKey={Boolean(model.imageKey)}
@@ -104,7 +112,7 @@ export function VehicleCard({ result }: { result: SearchResult }) {
             <button
               type="button"
               onClick={(e) => changeQty(e, 1)}
-              className="shrink-0 -translate-y-[10px] h-9 px-5 rounded-full bg-amber text-on-amber text-sm font-semibold hover:brightness-95 transition-[filter] flex items-center justify-center"
+              className="shrink-0 -translate-y-[10px] h-9 px-5 rounded-full glass-yellow text-on-amber text-sm font-semibold transition-[scale] duration-200 flex items-center justify-center"
             >
               Add to cart
             </button>

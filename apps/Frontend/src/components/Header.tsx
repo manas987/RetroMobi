@@ -2,18 +2,21 @@ import { Link } from "wouter";
 import { ShoppingCart } from "lucide-react";
 import { ProfileMenu } from "./ProfileMenu";
 import { CartDrawer } from "./CartDrawer";
+import { PopoverTrigger } from "./ui/popover";
 import { useCart } from "../lib/cart";
 
-export function Header({ overlay = false, center }: {
+export function Header({ overlay = false, browse = false, center }: {
   /** Sit transparent on top of whatever is behind — the homepage's full-bleed
    *  hero photo. Default off, so every other page is unaffected. */
   overlay?: boolean;
+  /** Browse joins the search bar directly to the results without a divider. */
+  browse?: boolean;
   /** Dropped on the bar's centre line — Browse's search capsule. Supplying it switches the bar from justify-between to a three-track
    *  grid, which is what centres this against the page rather than against
    *  whatever the logo and the account cluster happen to measure. */
   center?: React.ReactNode;
 }) {
-  const { totalUnits, openDrawer } = useCart();
+  const { totalUnits } = useCart();
 
   const brand = overlay ? "text-white" : "text-ink";
   const link = overlay ? "text-white/85 hover:text-white" : "text-ink-2 hover:text-ink";
@@ -25,14 +28,14 @@ export function Header({ overlay = false, center }: {
            element 65px tall against the hero's -mt-16, showing a 1px strip of
            page background above the photo, and would shift the page by 1px
            every time this swapped. A shadow draws the same line, no layout. */
-        overlay ? "bg-transparent" : "bg-surface/95 backdrop-blur-sm shadow-[0_1px_0_var(--color-line)]"
+        overlay ? "bg-transparent" : `bg-surface/95 backdrop-blur-sm ${browse ? "" : "shadow-[0_1px_0_var(--color-line)]"}`
       }`}
     >
       <div
         /* Taller only when it carries the capsule: 64px leaves it about 5px of
            air a side, which reads as clipped. Home's hero still offsets against
            a 64px bar (-mt-16 / pt-16) and has no `center`, so it is untouched. */
-        className={`max-w-[1619px] mx-auto px-5 gap-6 ${center ? "h-[104px]" : "h-16"} ${
+        className={`max-w-[1619px] mx-auto px-5 gap-6 ${overlay ? "relative top-[10px]" : ""} ${center ? (browse ? "h-[84px] pt-5" : "h-[104px]") : "h-16"} ${
           /* minmax(0,1fr), not 1fr: a bare 1fr floors at its own min-content,
              so the account cluster's width was being mirrored into the empty
              left track and the centre got squeezed to a sliver. Tailwind's own
@@ -59,6 +62,7 @@ export function Header({ overlay = false, center }: {
 
         {center}
 
+        <CartDrawer>
         <div className="flex items-center justify-end gap-3 shrink-0">
           <Link
             href="/merchant/login"
@@ -66,9 +70,9 @@ export function Header({ overlay = false, center }: {
           >
             List your fleet
           </Link>
+          <PopoverTrigger asChild>
           <button
             type="button"
-            onClick={openDrawer}
             aria-label={`Cart, ${totalUnits} item${totalUnits === 1 ? "" : "s"}`}
             className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-colors ${overlay ? "text-white/85 hover:text-white hover:bg-white/15" : "text-ink-2 hover:text-ink hover:bg-surface-3"}`}
           >
@@ -79,10 +83,11 @@ export function Header({ overlay = false, center }: {
               </span>
             )}
           </button>
+          </PopoverTrigger>
           <ProfileMenu overlay={overlay} />
         </div>
+        </CartDrawer>
       </div>
-      <CartDrawer />
     </header>
   );
 }

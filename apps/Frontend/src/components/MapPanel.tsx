@@ -5,12 +5,16 @@ import "leaflet/dist/leaflet.css";
 import { rupees } from "../lib/format";
 import type { SearchResult } from "../lib/types";
 import { TILE_URL, TILE_ATTRIBUTION, TILE_MAX_ZOOM } from "../lib/mapTiles";
+import { mapShops } from "../lib/mapShops";
 
 /** Uttarakhand — centres the map even before any shop is plotted. */
 const DEFAULT_CENTER: L.LatLngTuple = [30.1, 78.4];
 
-function pinIcon(): L.DivIcon {
-  return L.divIcon({ className: "map-pin", iconSize: [22, 22], iconAnchor: [11, 22] });
+function priceIcon(price: number): L.DivIcon {
+  const label = document.createElement("span");
+  label.className = "map-price-label";
+  label.textContent = `From ${rupees(price)}/day`;
+  return L.divIcon({ className: "map-price-pin", html: label, iconSize: [0, 32], iconAnchor: [0, 16] });
 }
 
 export function MapPanel({
@@ -19,6 +23,8 @@ export function MapPanel({
   fullscreen = false,
   onToggleFullscreen,
   className = "",
+  activeShopId = null,
+  onShopSelect,
 }: {
   results: SearchResult[];
   /** Already-granted position from the page's own `useGeolocation`. The locate
@@ -30,10 +36,12 @@ export function MapPanel({
   /** Size and decoration both come from here — the panel has no dimensions of
    *  its own, so it fills whatever column Browse gives it. */
   className?: string;
+  activeShopId?: string | null;
+  onShopSelect?: (shopId: string | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<L.Marker[]>([]);
+  const markersRef = useRef<{ shopId: string; marker: L.Marker }[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -69,32 +77,49 @@ export function MapPanel({
   useEffect(() => {
     if (!ready || !mapRef.current) return;
     const map = mapRef.current;
-    for (const m of markersRef.current) m.remove();
+    for (const { marker } of markersRef.current) marker.remove();
     markersRef.current = [];
 
-    const pins = results.filter(
-      (r) => r.primaryOffer.shopLatitude != null && r.primaryOffer.shopLongitude != null,
-    );
-    for (const r of pins) {
-      const marker = L.marker([r.primaryOffer.shopLatitude!, r.primaryOffer.shopLongitude!], {
-        icon: pinIcon(),
+    const shops = mapShops(results);
+    for (const shop of shops) {
+      const popup = document.createElement("div");
+      const heading = document.createElement("strong");
+      heading.textContent = shop.name;
+      popup.append(heading);
+      for (const r of shop.results) {
+        const link = document.createElement("a");
+        link.className = "map-popup-link";
+        link.href = `/vehicles/${encodeURIComponent(r.primaryOffer.vehicleId)}`;
+        link.textContent = `${r.model.make} ${r.model.model} · ${rupees(r.primaryOffer.pricePerDay)}/day`;
+        popup.append(link);
+      }
+      const marker = L.marker([shop.latitude, shop.longitude], {
+        icon: priceIcon(shop.pricePerDay),
+        title: `${shop.name} — from ${rupees(shop.pricePerDay)} per day`,
+        alt: `${shop.name}, show matching vehicles`,
       })
-        .bindPopup(
-          `<a class="map-popup-link" href="/vehicles/${r.primaryOffer.vehicleId}">` +
-            `<strong>${r.model.make} ${r.model.model}</strong><br/>${r.primaryOffer.shopName} · ${rupees(r.primaryOffer.pricePerDay)}/day` +
-            `</a>`,
-        )
+        .bindPopup(popup)
+        .on("popupopen", () => onShopSelect?.(shop.shopId))
+        .on("popupclose", () => onShopSelect?.(null))
         .addTo(map);
-      markersRef.current.push(marker);
+      markersRef.current.push({ shopId: shop.shopId, marker });
     }
 
-    if (pins.length > 0) {
+    if (shops.length > 0) {
       const bounds = L.latLngBounds(
-        pins.map((r) => [r.primaryOffer.shopLatitude!, r.primaryOffer.shopLongitude!] as L.LatLngTuple),
+        shops.map((shop) => [shop.latitude, shop.longitude] as L.LatLngTuple),
       );
-      map.fitBounds(bounds, { padding: [48, 48], maxZoom: 14 });
+      map.fitBounds(bounds, { padding: [88, 64], maxZoom: 14 });
     }
-  }, [ready, results]);
+  }, [ready, results, onShopSelect]);
+
+  useEffect(() => {
+    for (const { shopId, marker } of markersRef.current) {
+      const active = shopId === activeShopId;
+      marker.getElement()?.classList.toggle("is-active", active);
+      marker.setZIndexOffset(active ? 1000 : 0);
+    }
+  }, [activeShopId, ready, results, onShopSelect]);
 
   return (
     /* isolate, because Leaflet numbers its own layers from the root: panes sit

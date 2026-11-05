@@ -10,7 +10,7 @@ function cityHref(city: string): string {
   return `/browse?${toSearchParams({ city, pickupAt: WINDOW.pickupAt, returnAt: WINDOW.returnAt, sort: "price", page: 1 })}`;
 }
 
-export function Footer() {
+export function Footer({ onBrowse }: { onBrowse?: () => void }) {
   const [path, navigate] = useLocation();
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
 
@@ -44,12 +44,13 @@ export function Footer() {
           <p className="text-sm text-ink-3 max-w-xs">
             Licensed scooter and motorcycle rentals across Dehradun, Haridwar and Rishikesh.
           </p>
-          <Link
-            href={cityHref(DEFAULT_CITY)}
-            className="self-start mt-1 inline-flex items-center gap-2 px-5 py-3 rounded-row bg-amber text-on-amber font-semibold text-sm hover:brightness-95 transition-[filter]"
+          {path === "/" && <button
+            type="button"
+            onClick={onBrowse}
+            className="self-start mt-1 inline-flex items-center gap-2 px-5 py-3 rounded-row glass-yellow text-on-amber font-semibold text-sm transition-[scale] duration-200"
           >
             Browse scooters <span aria-hidden="true">→</span>
-          </Link>
+          </button>}
         </div>
 
         <nav className="flex-[2] min-w-[300px] grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-8 text-sm">

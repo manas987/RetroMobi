@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useImperativeHandle, useRef, useState } from "react";
 import { combine, formatTime, splitIso } from "./DateTimeField";
 import { RangeCalendar } from "./RangeCalendar";
 import { Modal } from "./Modal";
@@ -34,12 +34,18 @@ function splitOrBlank(iso: string, fallbackTime: string): { date: Date | null; t
   return iso ? splitIso(iso) : { date: null, time: fallbackTime };
 }
 
+export interface SearchCapsuleHandle {
+  openMissingField: () => void;
+}
+
 export function SearchCapsule({
+  ref,
   initial,
   onSearch,
   compact = false,
   className = "",
 }: {
+  ref?: React.Ref<SearchCapsuleHandle>;
   initial: SearchCapsuleValue;
   onSearch: (v: SearchCapsuleValue) => void;
   compact?: boolean;
@@ -69,6 +75,13 @@ export function SearchCapsule({
 
   const isDesktop = useMediaQuery("(min-width: 900px)");
   const [active, setActive] = useState<Field | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    openMissingField() {
+      const field = missingSearchField(city, pickupDate, returnDate);
+      if (field) setActive(field);
+    },
+  }), [city, pickupDate, returnDate]);
 
   // The panel stays mounted while it fades out, so it has to keep rendering
   // the field that was open rather than falling back to the other one.
@@ -170,7 +183,7 @@ export function SearchCapsule({
     <form
       ref={formRef}
       onSubmit={submit}
-      className={`group relative border border-line shadow-[0_1px_2px_rgba(18,22,26,0.06),0_12px_32px_rgba(18,22,26,0.1)] p-2 flex flex-col gap-1 rounded-panel transition-colors min-[900px]:p-0 min-[900px]:flex-row min-[900px]:items-stretch min-[900px]:gap-0 min-[900px]:rounded-full ${
+      className={`group relative border border-line p-2 flex flex-col gap-1 rounded-panel transition-colors min-[900px]:p-0 min-[900px]:flex-row min-[900px]:items-stretch min-[900px]:gap-0 min-[900px]:rounded-full ${
         /* The bar recedes so the open field is the only white thing on it.
            Sampling the reference: its bar greys to #e6e6e6, exactly the tint a
            hovered segment gets — the two states are the same grey by design.
@@ -233,7 +246,8 @@ export function SearchCapsule({
       <button
         type="submit"
         aria-label="Search"
-        className={`relative z-10 shrink-0 flex items-center justify-center gap-2 ${compact ? "bg-amber" : "bg-amber/65 bg-[linear-gradient(135deg,rgba(255,255,255,0.45),rgba(255,217,1,0.12)_55%,rgba(255,244,153,0.45))] backdrop-blur-[12px] backdrop-saturate-150 shadow-[inset_0_1px_1px_rgba(255,255,255,0.85),inset_0_0_0_1px_rgba(255,244,153,0.75),inset_0_-1px_2px_rgba(217,184,0,0.25),0_4px_14px_rgba(145,116,0,0.12)]"} text-on-amber font-semibold text-sm hover:brightness-95 transition-all w-full py-3 rounded-row min-[900px]:absolute min-[900px]:right-3 min-[900px]:top-1/2 min-[900px]:-translate-y-1/2 min-[900px]:h-12 min-[900px]:py-0 min-[900px]:rounded-full ${
+        data-search-submit=""
+        className={`relative z-10 shrink-0 flex items-center justify-center gap-2 glass-yellow text-on-amber font-semibold text-sm transition-all w-full py-3 rounded-row min-[900px]:absolute min-[900px]:right-3 min-[900px]:top-1/2 min-[900px]:-translate-y-1/2 min-[900px]:h-12 min-[900px]:py-0 min-[900px]:rounded-full ${
           active ? "min-[900px]:w-auto min-[900px]:px-6" : "min-[900px]:w-12"
         }`}
       >
@@ -391,7 +405,7 @@ function Segment({
       // that grey — matching its #e6e6e6 / #d7d7d7 pair. The open field skips
       // it; it already has the pill.
       className={`relative z-10 ${grow} min-w-0 rounded-panel transition-colors min-[900px]:rounded-full ${
-        active ? "" : "hover:bg-ink/10"
+        active ? "" : "hover:bg-ink/10 group-has-[[data-search-submit]:hover]:bg-transparent"
       }`}
     >
       {children}

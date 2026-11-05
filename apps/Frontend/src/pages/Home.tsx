@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
-import { SearchCapsule, type SearchCapsuleValue } from "../components/SearchCapsule";
+import { SearchCapsule, type SearchCapsuleValue, type SearchCapsuleHandle } from "../components/SearchCapsule";
 import heroHimalaya from "../assets/hero-himalaya.jpg";
 import howSearch from "../assets/how-search.jpg";
 import howCompare from "../assets/how-compare.jpg";
@@ -12,6 +12,26 @@ import { toSearchParams } from "../lib/searchParams";
 
 export function Home() {
   const [, navigate] = useLocation();
+  const searchRef = useRef<SearchCapsuleHandle>(null);
+  const [returningToSearch, setReturningToSearch] = useState(false);
+
+  useEffect(() => {
+    if (!returningToSearch) return;
+    function atTop() {
+      if (window.scrollY > 1) return;
+      searchRef.current?.openMissingField();
+      setReturningToSearch(false);
+    }
+    window.addEventListener("scroll", atTop, { passive: true });
+    // Abandon guidance if the visitor interrupts the smooth scroll.
+    const timeout = window.setTimeout(() => setReturningToSearch(false), 2500);
+    window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    atTop();
+    return () => {
+      window.removeEventListener("scroll", atTop);
+      window.clearTimeout(timeout);
+    };
+  }, [returningToSearch]);
 
   // Arriving here from another page via Header's "How it works" link.
   useEffect(() => {
@@ -83,7 +103,7 @@ export function Home() {
 
           <div className="w-full mt-4">
             {/* Start blank; Search guides visitors to the first missing field. */}
-            <SearchCapsule initial={{ city: "", pickupAt: "", returnAt: "" }} onSearch={goSearch} />
+            <SearchCapsule ref={searchRef} initial={{ city: "", pickupAt: "", returnAt: "" }} onSearch={goSearch} />
             <p className="mt-4 text-[13px] sm:text-sm leading-relaxed text-white/85 text-balance">
               Compare prices · See deposit details · Choose your shop
             </p>
@@ -191,7 +211,7 @@ export function Home() {
         </div>
       </section>
 
-      <Footer />
+      <Footer onBrowse={() => setReturningToSearch(true)} />
     </div>
   );
 }

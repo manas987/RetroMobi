@@ -24,7 +24,7 @@ export function ProfileMenu({ overlay = false }: {
     return (
       <Link
         href="/login"
-        className={`h-9 px-4 rounded-full border text-sm font-medium transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300 flex items-center ${overlay ? "border-white/65 bg-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.24),rgba(255,255,255,0.02)_55%,rgba(255,255,255,0.14))] backdrop-blur-[12px] backdrop-saturate-150 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.65),inset_0_-1px_1px_rgba(255,255,255,0.2),0_4px_16px_rgba(0,0,0,0.12)] hover:bg-white/20 hover:border-white/85" : "border-line-strong text-ink hover:bg-surface-3"}`}
+        className={`signin-zoom h-9 px-4 rounded-full border text-sm font-medium transition-[scale,background-color,border-color,box-shadow,backdrop-filter] duration-300 flex items-center ${overlay ? "border-white/65 bg-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.24),rgba(255,255,255,0.02)_55%,rgba(255,255,255,0.14))] backdrop-blur-[12px] backdrop-saturate-150 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.65),inset_0_-1px_1px_rgba(255,255,255,0.2),0_4px_16px_rgba(0,0,0,0.12)] hover:bg-white/20 hover:border-white/85" : "border-line-strong text-ink hover:bg-surface-3"}`}
       >
         Sign in
       </Link>
@@ -32,7 +32,7 @@ export function ProfileMenu({ overlay = false }: {
   }
 
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
