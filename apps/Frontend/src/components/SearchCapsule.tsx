@@ -24,6 +24,11 @@ export interface SearchCapsuleValue {
 
 type Field = "where" | "when";
 
+export function missingSearchField(city: string, pickupDate: Date | null, returnDate: Date | null): Field | null {
+  if (!city) return "where";
+  return !pickupDate || !returnDate ? "when" : null;
+}
+
 /** "" means the person has not picked yet. Anything else is a real ISO stamp. */
 function splitOrBlank(iso: string, fallbackTime: string): { date: Date | null; time: string } {
   return iso ? splitIso(iso) : { date: null, time: fallbackTime };
@@ -62,8 +67,6 @@ export function SearchCapsule({
   const [returnDate, setReturnDate] = useState<Date | null>(initReturn.date);
   const [returnTime, setReturnTime] = useState(initReturn.time);
 
-  const ready = Boolean(city && pickupDate && returnDate);
-
   const isDesktop = useMediaQuery("(min-width: 900px)");
   const [active, setActive] = useState<Field | null>(null);
 
@@ -74,12 +77,8 @@ export function SearchCapsule({
   const shown = active ?? lastField.current;
 
   function runSearch() {
-    if (!pickupDate || !returnDate) return;
-    // Enter in the calendar can reach here with the dates done and Where still
-    // blank — the state the homepage opens in. Move to the field that is
-    // actually missing rather than inventing a destination.
-    if (!city) {
-      setActive("where");
+    if (!city || !pickupDate || !returnDate) {
+      setActive(missingSearchField(city, pickupDate, returnDate));
       return;
     }
     setActive(null);
@@ -195,7 +194,7 @@ export function SearchCapsule({
         style={{ left: pill.left, width: pill.width, opacity: active ? 1 : 0 }}
       />
 
-      <Segment ref={whereRef} active={active === "where"} grow="flex-1">
+      <Segment ref={whereRef} active={active === "where"} grow={compact ? "flex-1" : "flex-1 min-[900px]:min-w-[228px]"}>
         <button type="button" onClick={() => setActive("where")} className={`w-full h-full flex flex-col justify-center gap-1.5 text-left outline-none ${pad}`}>
           <span className="text-[13px] font-semibold text-ink leading-none">Where</span>
           <span className={`text-[15px] truncate ${city ? "font-medium text-ink" : "text-ink-3"}`}>
@@ -211,11 +210,9 @@ export function SearchCapsule({
         className={`hidden min-[900px]:block w-px h-8 shrink-0 self-center bg-line transition-opacity group-has-[[data-seg]:hover]:opacity-0 ${active ? "opacity-0" : ""}`}
       />
 
-      {/* flex-none so this segment is exactly as wide as the date text plus the
-          button's reserved strip; the bar's leftover width goes to Where, the
-          way the reference gives its widest segment to the destination. */}
-      <Segment ref={whenRef} active={active === "when"} grow="min-[900px]:flex-none">
-        <button type="button" onClick={() => setActive("when")} className={`w-full h-full flex flex-col justify-center gap-1.5 text-left outline-none ${pad} ${compact ? "min-[900px]:pr-34" : "min-[900px]:pr-[151px]"}`}>
+      {/* Grow with dates, but reserve 228px for Where and 1px for the divider. */}
+      <Segment ref={whenRef} active={active === "when"} grow={compact ? "min-[900px]:flex-none" : "min-[900px]:flex-none min-[900px]:w-max min-[900px]:min-w-[266px] min-[900px]:max-w-[calc(100%-229px)]"}>
+        <button type="button" onClick={() => setActive("when")} className={`w-full h-full flex flex-col justify-center gap-1.5 text-left outline-none ${pad} ${compact ? "min-[900px]:pr-34" : !whenValue ? "min-[900px]:pr-[166px]" : "min-[900px]:pl-[18px] min-[900px]:pr-[146px]"}`}>
           <span className="flex items-center gap-2 text-[13px] font-semibold text-ink leading-none">
             When
             {pickupDate && returnDate && (
@@ -224,7 +221,7 @@ export function SearchCapsule({
               </span>
             )}
           </span>
-          <span className={`text-[15px] truncate ${whenValue ? "font-medium text-ink" : "text-ink-3"}`}>
+          <span title={whenValue ?? undefined} className={`max-w-full text-[15px] truncate ${whenValue ? "font-medium text-ink" : "text-ink-3"}`}>
             {whenValue ?? "Add dates"}
           </span>
         </button>
@@ -236,8 +233,7 @@ export function SearchCapsule({
       <button
         type="submit"
         aria-label="Search"
-        disabled={!ready}
-        className={`relative z-10 shrink-0 disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:brightness-100 flex items-center justify-center gap-2 bg-amber text-on-amber font-semibold text-sm hover:brightness-95 transition-all w-full py-3 rounded-row min-[900px]:absolute min-[900px]:right-3 min-[900px]:top-1/2 min-[900px]:-translate-y-1/2 min-[900px]:h-12 min-[900px]:py-0 min-[900px]:rounded-full ${
+        className={`relative z-10 shrink-0 flex items-center justify-center gap-2 ${compact ? "bg-amber" : "bg-amber/65 bg-[linear-gradient(135deg,rgba(255,255,255,0.45),rgba(255,217,1,0.12)_55%,rgba(255,244,153,0.45))] backdrop-blur-[12px] backdrop-saturate-150 shadow-[inset_0_1px_1px_rgba(255,255,255,0.85),inset_0_0_0_1px_rgba(255,244,153,0.75),inset_0_-1px_2px_rgba(217,184,0,0.25),0_4px_14px_rgba(145,116,0,0.12)]"} text-on-amber font-semibold text-sm hover:brightness-95 transition-all w-full py-3 rounded-row min-[900px]:absolute min-[900px]:right-3 min-[900px]:top-1/2 min-[900px]:-translate-y-1/2 min-[900px]:h-12 min-[900px]:py-0 min-[900px]:rounded-full ${
           active ? "min-[900px]:w-auto min-[900px]:px-6" : "min-[900px]:w-12"
         }`}
       >

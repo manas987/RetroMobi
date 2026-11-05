@@ -82,9 +82,7 @@ export function Home() {
           </h1>
 
           <div className="w-full mt-4">
-            {/* Blank, not pre-filled: landing on a city and a window nobody
-                chose is exactly what the copy above promises not to do. Search
-                stays disabled until both are set. */}
+            {/* Start blank; Search guides visitors to the first missing field. */}
             <SearchCapsule initial={{ city: "", pickupAt: "", returnAt: "" }} onSearch={goSearch} />
           </div>
         </div>
