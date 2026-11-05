@@ -1,18 +1,20 @@
 import { Close as PopoverClose } from "@radix-ui/react-popover";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import { Minus, Plus, Trash2, X } from "lucide-react";
-import { useCart } from "../lib/cart";
+import { MAX_CART_ITEMS, useCart } from "../lib/cart";
 import { rupees } from "../lib/format";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 
 export function CartDrawer({ children }: { children: ReactNode }) {
-  const { items, totalUnits, setQty, drawerOpen, openDrawer, closeDrawer } = useCart();
+  const { items, totalUnits, setQty, drawerOpen, openDrawer, closeDrawer, limitReached, dismissLimit } = useCart();
   const [, navigate] = useLocation();
 
   const subtotal = items.reduce((sum, i) => sum + i.pricePerDay * i.vehicleIds.length, 0);
 
   return (
+    <>
     <Popover open={drawerOpen} onOpenChange={(open) => open ? openDrawer() : closeDrawer()}>
       <PopoverAnchor asChild>{children}</PopoverAnchor>
       <PopoverContent
@@ -120,5 +122,23 @@ export function CartDrawer({ children }: { children: ReactNode }) {
           )}
       </PopoverContent>
     </Popover>
+    {limitReached && typeof document !== "undefined" && createPortal(
+      <CartLimitNotice onOpen={openDrawer} onDismiss={dismissLimit} />, document.body,
+    )}
+    </>
+  );
+}
+
+export function CartLimitNotice({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: () => void }) {
+  return (
+    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[1200] w-[min(28rem,calc(100vw-2rem))] rounded-panel border border-line bg-surface px-4 py-3 shadow-lg flex items-start gap-3 text-ink">
+      <div className="flex-1 min-w-0">
+        <p role="status" className="text-sm">Your cart can hold up to {MAX_CART_ITEMS} vehicles. Remove one to add another.</p>
+        <button type="button" onClick={onOpen} className="mt-2 text-sm font-semibold underline underline-offset-2">Open cart</button>
+      </div>
+      <button type="button" onClick={onDismiss} aria-label="Dismiss cart limit message" className="w-8 h-8 shrink-0 flex items-center justify-center rounded-full">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
   );
 }

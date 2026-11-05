@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import L from "leaflet";
 import { Plus, Minus } from "lucide-react";
 import "leaflet/dist/leaflet.css";
@@ -8,18 +9,15 @@ import { TILE_URL, TILE_ATTRIBUTION, TILE_MAX_ZOOM } from "../lib/mapTiles";
 import { mapShops } from "../lib/mapShops";
 import type { GeolocationController } from "../lib/useGeolocation";
 import { MapLocationControl } from "./MapLocationControl";
+import { MapShopPreview } from "./MapShopPreview";
 
 /** Uttarakhand — centres the map even before any shop is plotted. */
 const DEFAULT_CENTER: L.LatLngTuple = [30.1, 78.4];
 
-function priceIcon(price: number, shopName: string): L.DivIcon {
+function priceIcon(price: number): L.DivIcon {
   const label = document.createElement("span");
   label.className = "map-price-label";
-  label.textContent = `From ${rupees(price)}/day`;
-  const name = document.createElement("span");
-  name.className = "map-shop-name";
-  name.textContent = shopName;
-  label.append(name);
+  label.textContent = rupees(price);
   return L.divIcon({ className: "map-price-pin", html: label, iconSize: [0, 32], iconAnchor: [0, 16] });
 }
 
@@ -47,6 +45,8 @@ export function MapPanel({
   const markersRef = useRef<{ shopId: string; marker: L.Marker }[]>([]);
   const fittedShops = useRef("");
   const [ready, setReady] = useState(false);
+  const selectedMarker = useRef<L.Marker | null>(null);
+  const [preview, setPreview] = useState<{ shopId: string; marker: L.Marker; container: HTMLDivElement } | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -87,27 +87,29 @@ export function MapPanel({
 
     const shops = mapShops(results);
     for (const shop of shops) {
-      const popup = document.createElement("div");
-      const heading = document.createElement("strong");
-      heading.textContent = shop.name;
-      popup.append(heading);
-      for (const r of shop.results) {
-        const link = document.createElement("a");
-        link.className = "map-popup-link";
-        link.href = `/vehicles/${encodeURIComponent(r.primaryOffer.vehicleId)}`;
-        link.textContent = `${r.model.make} ${r.model.model} · ${rupees(r.primaryOffer.pricePerDay)}/day`;
-        popup.append(link);
-      }
+      const container = document.createElement("div");
       const marker = L.marker([shop.latitude, shop.longitude], {
-        icon: priceIcon(shop.pricePerDay, shop.name),
+        icon: priceIcon(shop.pricePerDay),
         riseOnHover: true,
-        title: `${shop.name} — from ${rupees(shop.pricePerDay)} per day`,
         alt: `${shop.name}, show matching vehicles`,
       })
-        .bindPopup(popup)
-        .on("popupopen", () => onShopSelect?.(shop.shopId))
-        .on("popupclose", () => onShopSelect?.(null))
+        .bindPopup(container, {
+          className: "map-vehicle-popup", closeButton: false, minWidth: 280, maxWidth: 300,
+          autoPanPaddingTopLeft: [16, 16], autoPanPaddingBottomRight: [72, 16],
+        })
+        .on("popupopen", () => {
+          selectedMarker.current = marker;
+          setPreview({ shopId: shop.shopId, marker, container });
+          onShopSelect?.(shop.shopId);
+        })
+        .on("popupclose", () => {
+          if (selectedMarker.current !== marker) return;
+          selectedMarker.current = null;
+          setPreview(null);
+          onShopSelect?.(null);
+        })
         .addTo(map);
+      marker.getElement()?.setAttribute("aria-label", `${shop.name}, starting at ${rupees(shop.pricePerDay)} per day. Show vehicles.`);
       markersRef.current.push({ shopId: shop.shopId, marker });
     }
 
@@ -123,12 +125,22 @@ export function MapPanel({
     }
   }, [ready, results, onShopSelect]);
 
+  useLayoutEffect(() => {
+    if (!preview) return;
+    const popup = preview.marker.getPopup();
+    const observer = new ResizeObserver(() => popup?.update());
+    observer.observe(preview.container);
+    popup?.update();
+    preview.container.querySelector<HTMLButtonElement>("button[aria-label='Close shop preview']")?.focus({ preventScroll: true });
+    return () => observer.disconnect();
+  }, [preview]);
+
   useEffect(() => {
     for (const { shopId, marker } of markersRef.current) {
-      const active = shopId === activeShopId;
+      const active = shopId === activeShopId || shopId === preview?.shopId;
       marker.getElement()?.classList.toggle("is-active", active);
       marker.setZIndexOffset(active ? 1000 : 0);
-      if (active) {
+      if (shopId === activeShopId) {
         // panInside moves only when needed; padding keeps the whole label clear of edges and controls.
         mapRef.current?.panInside(marker.getLatLng(), {
           paddingTopLeft: [120, 72],
@@ -138,7 +150,7 @@ export function MapPanel({
         });
       }
     }
-  }, [activeShopId, ready, results, onShopSelect]);
+  }, [activeShopId, ready, results, onShopSelect, preview]);
 
   return (
     /* isolate, because Leaflet numbers its own layers from the root: panes sit
@@ -148,6 +160,11 @@ export function MapPanel({
        context keeps every Leaflet number local, for every overlay at once. */
     <div className={`relative isolate overflow-hidden ${className}`}>
       <div ref={containerRef} className="absolute inset-0" />
+      {preview && createPortal(
+        <MapShopPreview key={preview.shopId} results={results.filter((r) => r.primaryOffer.shopId === preview.shopId)}
+          onClose={() => { mapRef.current?.closePopup(); preview.marker.getElement()?.focus({ preventScroll: true }); }} />,
+        preview.container,
+      )}
 
       {/* One stack, two groups: expand stands alone because it changes the
           page, while locate and zoom only move the map. */}

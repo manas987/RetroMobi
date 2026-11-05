@@ -166,7 +166,7 @@ export function VehicleDetail() {
                 <button
                   type="button"
                   onClick={() => {
-                    setQty(
+                    const outcome = setQty(
                       {
                         modelId: v.modelId,
                         shopId: v.shopId,
@@ -178,7 +178,7 @@ export function VehicleDetail() {
                       1,
                       [v.vehicleId],
                     );
-                    openDrawer();
+                    if (outcome === "ok") openDrawer();
                   }}
                   className="mt-5 w-full h-11 rounded-row bg-amber text-on-amber font-semibold hover:brightness-95 transition-[filter] flex items-center justify-center"
                 >

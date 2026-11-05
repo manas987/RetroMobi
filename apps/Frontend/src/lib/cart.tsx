@@ -55,6 +55,8 @@ interface CartContextValue {
   drawerOpen: boolean;
   openDrawer: () => void;
   closeDrawer: () => void;
+  limitReached: boolean;
+  dismissLimit: () => void;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -62,6 +64,7 @@ const CartContext = createContext<CartContextValue | null>(null);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(readStoredCart);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
 
   useEffect(() => {
     try {
@@ -84,7 +87,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
           .filter((i) => !(i.modelId === line.modelId && i.shopId === line.shopId))
           .reduce((sum, i) => sum + i.vehicleIds.length, 0);
         const clamped = Math.max(0, Math.min(qty, availableVehicleIds.length));
-        if (unitsInOtherLines + clamped > MAX_CART_ITEMS) return "full";
+        if (unitsInOtherLines + clamped > MAX_CART_ITEMS) {
+          setLimitReached(true);
+          return "full";
+        }
+        setLimitReached(false);
 
         setItems((prev) => {
           const rest = prev.filter((i) => !(i.modelId === line.modelId && i.shopId === line.shopId));
@@ -93,12 +100,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
         });
         return "ok";
       },
-      clear: () => setItems([]),
+      clear: () => { setItems([]); setLimitReached(false); },
       drawerOpen,
-      openDrawer: () => setDrawerOpen(true),
+      openDrawer: () => { setDrawerOpen(true); setLimitReached(false); },
       closeDrawer: () => setDrawerOpen(false),
+      limitReached,
+      dismissLimit: () => setLimitReached(false),
     }),
-    [items, totalUnits, drawerOpen],
+    [items, totalUnits, drawerOpen, limitReached],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
