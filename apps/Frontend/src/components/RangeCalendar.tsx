@@ -102,6 +102,7 @@ export function RangeCalendar({
         }}
       >
         <Calendar
+          className="calendar-black-glass"
           mode="range"
           numberOfMonths={months}
           selected={range}
@@ -131,7 +132,7 @@ export function RangeCalendar({
             // gets the same dark circle as the check-in. The explicit hover:
             // is needed — day_button's own hover:bg-surface-3 outranks a bare
             // bg-ink in the cascade.
-            preview_end: "bg-surface-3 rounded-r-full! [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
+            preview_end: "calendar-preview-end bg-surface-3 rounded-r-full! [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
           }}
           autoFocus
         />

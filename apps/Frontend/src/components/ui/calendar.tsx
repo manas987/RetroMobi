@@ -98,11 +98,11 @@ export function Calendar({
         // background with range_start/range_end (not just the circles) so it
         // flows seamlessly under them, Airbnb-style, instead of looking like
         // a separate block butted up against a solid square.
-        selected: "[&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
+        selected: "calendar-selected [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
         range_start:
           "bg-surface-3 rounded-l-full! [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
         range_end: "bg-surface-3 rounded-r-full! [&>button]:bg-ink [&>button]:text-surface [&>button]:hover:bg-ink",
-        range_middle: "bg-surface-3 [&>button]:bg-surface-3! [&>button]:text-ink! [&>button]:hover:bg-surface-3!",
+        range_middle: "calendar-range-middle bg-surface-3 [&>button]:bg-surface-3! [&>button]:text-ink! [&>button]:hover:bg-surface-3!",
         outside: "text-ink-4",
         disabled: "text-ink-4 opacity-40 pointer-events-none",
         hidden: "invisible",
