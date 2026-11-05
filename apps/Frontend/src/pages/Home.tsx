@@ -74,15 +74,12 @@ export function Home() {
 
         <div className="relative z-10 w-full px-5 flex flex-col items-center text-center gap-5">
           <h1
-            className="text-[clamp(2.1rem,5vw,3.9rem)] font-normal text-white leading-[1.04] tracking-[-0.035em] text-balance max-w-[16ch]"
-            style={{ fontFamily: '"Lakovies Caleste", var(--font-sans)' }}
+            className="text-[clamp(2rem,5vw,3.9rem)] font-normal text-white leading-[1.12] tracking-[-0.025em] text-balance"
           >
-            RetroMobi
+            Rent your next ride
+            <br />
+            with RetroMobi
           </h1>
-          <p className="text-[clamp(0.95rem,1.2vw,1.1rem)] leading-[1.6] text-white/85 max-w-[48ch] text-pretty">
-            Compare licensed scooters across Dehradun, Haridwar and Rishikesh. Clear prices and
-            vehicle details before you book.
-          </p>
 
           <div className="w-full mt-4">
             {/* Blank, not pre-filled: landing on a city and a window nobody

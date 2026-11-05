@@ -215,7 +215,7 @@ export function SearchCapsule({
           button's reserved strip; the bar's leftover width goes to Where, the
           way the reference gives its widest segment to the destination. */}
       <Segment ref={whenRef} active={active === "when"} grow="min-[900px]:flex-none">
-        <button type="button" onClick={() => setActive("when")} className={`w-full h-full flex flex-col justify-center gap-1.5 text-left outline-none ${pad} min-[900px]:pr-34`}>
+        <button type="button" onClick={() => setActive("when")} className={`w-full h-full flex flex-col justify-center gap-1.5 text-left outline-none ${pad} ${compact ? "min-[900px]:pr-34" : "min-[900px]:pr-[151px]"}`}>
           <span className="flex items-center gap-2 text-[13px] font-semibold text-ink leading-none">
             When
             {pickupDate && returnDate && (
