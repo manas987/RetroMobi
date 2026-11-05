@@ -25,32 +25,43 @@ function render(results: SearchResult[]) {
   </Router>);
 }
 
-test("shop preview lists every matching model with its own price and availability", () => {
+test("shop summary shows its lowest daily price and option count without vehicle rows", () => {
   const results = [vehicle("expensive", 90000), vehicle("affordable", 50000)];
   results[0]!.offerVehicleIds = ["unit-1", "unit-2", "unit-3"];
   const html = render(results);
   expect(html).toContain('role="dialog"');
-  expect(html).toContain('aria-label="Vehicles at Test shop"');
-  expect(html).toContain('aria-label="Available vehicles"');
-  expect(html).toContain("2");
-  expect(html).toContain("vehicle options");
-  expect(html).toContain("3");
-  expect(html).toContain("available");
+  expect(html).toContain('aria-label="Shop details for Test shop"');
+  expect(html.replace(/<[^>]*>/g, "")).toContain("2 vehicle options");
+  expect(html).toContain("From");
+  expect(html).toContain("/ day");
   expect(html).toContain("₹500");
-  expect(html).toContain("₹900");
-  expect(html.indexOf("/vehicles/affordable")).toBeLessThan(html.indexOf("/vehicles/expensive"));
+  expect(html).not.toContain("₹900");
+  expect(html).not.toContain("/vehicles/");
   expect(results[0]?.primaryOffer.vehicleId).toBe("expensive");
   expect(html).not.toContain("<img");
-  expect(html).not.toContain("Next vehicle");
-  expect(html).not.toContain("Previous vehicle");
+  expect(html).not.toContain("<ul");
+  expect(html).not.toContain("shop-preview-row");
+});
+
+test("larger fleets remain a summary with one understated shop action", () => {
+  const html = render([
+    vehicle("expensive", 90000), vehicle("lowest", 40000), vehicle("middle", 60000),
+    vehicle("second", 50000), vehicle("fourth", 80000),
+  ]);
+  expect(html.replace(/<[^>]*>/g, "")).toContain("5 vehicle options");
+  expect(html).toContain("₹400");
+  expect(html).toContain("View shop");
+  expect(html.match(/<a /g)).toHaveLength(1);
+  expect(html).not.toContain("glass-yellow");
+  expect(html).not.toContain("/vehicles/");
 });
 
 test("shop preview includes its rating, close control and shop link preserving search", () => {
   const html = render([vehicle("only", 60000)]);
   expect(html).toContain("4.3");
-  expect(html).toContain("vehicle option");
+  expect(html.replace(/<[^>]*>/g, "")).toContain("1 vehicle option");
   expect(html).toContain('aria-label="Close shop preview"');
-  expect(html).toContain("View vehicle");
+  expect(html).toContain("₹600");
   expect(html).toContain('href="/shops/shop?city=Dehradun&amp;pickupAt=selected"');
 });
 

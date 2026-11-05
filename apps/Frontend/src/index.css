@@ -118,6 +118,14 @@
 }
 
 @layer utilities {
+  .cart-limit-toast {
+    animation: cart-limit-feedback 3200ms ease both;
+  }
+  @keyframes cart-limit-feedback {
+    0% { opacity: 0; }
+    5%, 93.75% { opacity: 1; }
+    100% { opacity: 0; }
+  }
   .calendar-black-glass .calendar-selected:not(.calendar-range-middle) > button,
   .calendar-black-glass .calendar-preview-end > button,
   .calendar-black-glass .calendar-preview-end > button:hover {
@@ -296,11 +304,15 @@
 .map-vehicle-popup .leaflet-popup-tip-container {
   display: none;
 }
-.map-vehicle-popup a {
-  color: var(--color-ink);
+.leaflet-container .map-vehicle-popup a {
+  color: var(--color-ink) !important;
+  text-decoration: none;
 }
-.map-vehicle-popup a:hover,
-.map-vehicle-popup a:focus-visible {
+.map-vehicle-popup .shop-preview-shop-link:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: -2px;
+}
+.map-vehicle-popup .shop-preview-shop-link:hover {
   text-decoration: underline;
 }
 
@@ -313,6 +325,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .cart-limit-toast {
+    animation: none;
+    opacity: 1;
+  }
   *,
   *::before,
   *::after {

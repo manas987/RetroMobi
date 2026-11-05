@@ -3,13 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { CartLimitNotice } from "./CartDrawer";
 import { CartProvider, MAX_CART_ITEMS, useCart, type CartItem } from "../lib/cart";
 
-test("cart limit message explains the limit and offers cart and dismissal actions", () => {
+test("cart limit message is a compact timed notice with a cart action and no close button", () => {
   const html = renderToStaticMarkup(<CartLimitNotice onOpen={() => {}} onDismiss={() => {}} />);
   expect(html).toContain('role="status"');
   expect(html).toContain(String(MAX_CART_ITEMS));
   expect(html).toContain("Remove one to add another.");
   expect(html).toContain("Open cart");
-  expect(html).toContain('aria-label="Dismiss cart limit message"');
+  expect(html).toContain("cart-limit-toast");
+  expect(html).toContain("Cart full");
+  expect(html).not.toContain("Dismiss cart limit message");
+  expect(html.match(/<button/g)).toHaveLength(1);
 });
 
 test("cart limit validation counts units across shops and still permits reductions", () => {

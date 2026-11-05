@@ -159,7 +159,8 @@ export function Browse() {
                   key={`${r.model.id}:${r.primaryOffer.shopId}`}
                   onMouseEnter={() => setHoveredCard(r)}
                   onMouseLeave={() => setHoveredCard(null)}
-                  onFocusCapture={() => setFocusedCard(r)}
+                  onPointerDownCapture={() => setFocusedCard(null)}
+                  onFocusCapture={(e) => setFocusedCard(e.target.matches(":focus-visible") ? r : null)}
                   onBlurCapture={(e) => {
                     if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocusedCard(null);
                   }}

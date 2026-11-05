@@ -55,7 +55,7 @@ interface CartContextValue {
   drawerOpen: boolean;
   openDrawer: () => void;
   closeDrawer: () => void;
-  limitReached: boolean;
+  limitNoticeId: number;
   dismissLimit: () => void;
 }
 
@@ -64,7 +64,7 @@ const CartContext = createContext<CartContextValue | null>(null);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(readStoredCart);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [limitReached, setLimitReached] = useState(false);
+  const [limitNoticeId, setLimitNoticeId] = useState(0);
 
   useEffect(() => {
     try {
@@ -88,10 +88,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
           .reduce((sum, i) => sum + i.vehicleIds.length, 0);
         const clamped = Math.max(0, Math.min(qty, availableVehicleIds.length));
         if (unitsInOtherLines + clamped > MAX_CART_ITEMS) {
-          setLimitReached(true);
+          setLimitNoticeId((id) => id + 1);
           return "full";
         }
-        setLimitReached(false);
+        setLimitNoticeId(0);
 
         setItems((prev) => {
           const rest = prev.filter((i) => !(i.modelId === line.modelId && i.shopId === line.shopId));
@@ -100,14 +100,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
         });
         return "ok";
       },
-      clear: () => { setItems([]); setLimitReached(false); },
+      clear: () => { setItems([]); setLimitNoticeId(0); },
       drawerOpen,
-      openDrawer: () => { setDrawerOpen(true); setLimitReached(false); },
+      openDrawer: () => { setDrawerOpen(true); setLimitNoticeId(0); },
       closeDrawer: () => setDrawerOpen(false),
-      limitReached,
-      dismissLimit: () => setLimitReached(false),
+      limitNoticeId,
+      dismissLimit: () => setLimitNoticeId(0),
     }),
-    [items, totalUnits, drawerOpen, limitReached],
+    [items, totalUnits, drawerOpen, limitNoticeId],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

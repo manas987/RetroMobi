@@ -1,5 +1,5 @@
 import { Close as PopoverClose } from "@radix-ui/react-popover";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "wouter";
 import { Minus, Plus, Trash2, X } from "lucide-react";
@@ -8,7 +8,7 @@ import { rupees } from "../lib/format";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 
 export function CartDrawer({ children }: { children: ReactNode }) {
-  const { items, totalUnits, setQty, drawerOpen, openDrawer, closeDrawer, limitReached, dismissLimit } = useCart();
+  const { items, totalUnits, setQty, drawerOpen, openDrawer, closeDrawer, limitNoticeId, dismissLimit } = useCart();
   const [, navigate] = useLocation();
 
   const subtotal = items.reduce((sum, i) => sum + i.pricePerDay * i.vehicleIds.length, 0);
@@ -122,23 +122,23 @@ export function CartDrawer({ children }: { children: ReactNode }) {
           )}
       </PopoverContent>
     </Popover>
-    {limitReached && typeof document !== "undefined" && createPortal(
-      <CartLimitNotice onOpen={openDrawer} onDismiss={dismissLimit} />, document.body,
+    {limitNoticeId > 0 && typeof document !== "undefined" && createPortal(
+      <CartLimitNotice key={limitNoticeId} onOpen={openDrawer} onDismiss={dismissLimit} />, document.body,
     )}
     </>
   );
 }
 
 export function CartLimitNotice({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, 3200);
+    return () => clearTimeout(timer);
+  }, [onDismiss]);
+
   return (
-    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[1200] w-[min(28rem,calc(100vw-2rem))] rounded-panel border border-line bg-surface px-4 py-3 shadow-lg flex items-start gap-3 text-ink">
-      <div className="flex-1 min-w-0">
-        <p role="status" className="text-sm">Your cart can hold up to {MAX_CART_ITEMS} vehicles. Remove one to add another.</p>
-        <button type="button" onClick={onOpen} className="mt-2 text-sm font-semibold underline underline-offset-2">Open cart</button>
-      </div>
-      <button type="button" onClick={onDismiss} aria-label="Dismiss cart limit message" className="w-8 h-8 shrink-0 flex items-center justify-center rounded-full">
-        <X className="w-4 h-4" />
-      </button>
+    <div className="cart-limit-toast fixed bottom-5 left-1/2 -translate-x-1/2 z-[1200] w-max max-w-[calc(100vw-2rem)] rounded-full border border-line bg-surface/95 px-4 py-2.5 shadow-sm backdrop-blur-sm flex items-center gap-3 text-ink">
+      <span role="status" className="text-[13px]">Cart full · {MAX_CART_ITEMS} vehicles max<span className="sr-only">. Remove one to add another.</span></span>
+      <button type="button" onClick={onOpen} className="shrink-0 text-xs font-semibold underline underline-offset-2">Open cart</button>
     </div>
   );
 }
