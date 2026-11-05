@@ -72,7 +72,7 @@ export function Home() {
         <div className="absolute inset-0 bg-ink/25" />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(18,16,14,0.5)_0%,rgba(18,16,14,0.18)_38%,rgba(18,16,14,0.45)_100%)]" />
 
-        <div className="relative z-10 w-full px-5 flex flex-col items-center text-center gap-5">
+        <div className="relative top-[10px] z-10 w-full px-5 flex flex-col items-center text-center gap-5">
           <h1
             className="text-[clamp(2rem,5vw,3.9rem)] font-normal text-white leading-[1.12] tracking-[-0.025em] text-balance"
           >
@@ -96,7 +96,7 @@ export function Home() {
       {/* Everything around this is a grid of things to scan; this is the only
           place that just talks, so it gets a single narrow centred column and
           nothing else competing for the eye. */}
-      <section className="px-5 py-20 sm:py-28">
+      <section className="px-5 py-20 sm:pt-[max(1rem,calc(12svh-13px))] sm:pb-28">
         <div className="max-w-[46rem] mx-auto flex flex-col items-center text-center gap-9">
           <SparkIcon />
 
