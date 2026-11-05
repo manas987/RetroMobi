@@ -1,5 +1,8 @@
 import { serve } from "bun";
 import index from "./index.html";
+import { requirePublicMapboxToken } from "./lib/mapboxConfig";
+
+requirePublicMapboxToken(process.env.BUN_PUBLIC_MAPBOX_TOKEN);
 
 const PORT = Number(process.env.PORT ?? 5173);
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:3000";

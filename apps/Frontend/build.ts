@@ -3,6 +3,7 @@ import plugin from "bun-plugin-tailwind";
 import { existsSync } from "fs";
 import { rm } from "fs/promises";
 import path from "path";
+import { requirePublicMapboxToken } from "./src/lib/mapboxConfig";
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`
@@ -116,6 +117,7 @@ const formatFileSize = (bytes: number): string => {
   return `${size.toFixed(2)} ${units[unitIndex]}`;
 };
 
+requirePublicMapboxToken(process.env.BUN_PUBLIC_MAPBOX_TOKEN);
 console.log("\n🚀 Starting build process...\n");
 
 const cliConfig = parseArgs();
@@ -139,6 +141,7 @@ const result = await Bun.build({
   plugins: [plugin],
   minify: true,
   target: "browser",
+  env: "BUN_PUBLIC_*",
   sourcemap: "linked",
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
