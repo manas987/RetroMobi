@@ -84,6 +84,9 @@ export function Home() {
           <div className="w-full mt-4">
             {/* Start blank; Search guides visitors to the first missing field. */}
             <SearchCapsule initial={{ city: "", pickupAt: "", returnAt: "" }} onSearch={goSearch} />
+            <p className="mt-4 text-[13px] sm:text-sm leading-relaxed text-white/85 text-balance">
+              Compare prices · See deposit details · Choose your shop
+            </p>
           </div>
         </div>
 
