@@ -28,14 +28,14 @@ export function Header({ overlay = false, browse = false, center }: {
            element 65px tall against the hero's -mt-16, showing a 1px strip of
            page background above the photo, and would shift the page by 1px
            every time this swapped. A shadow draws the same line, no layout. */
-        overlay ? "bg-transparent" : `bg-surface/95 backdrop-blur-sm ${browse ? "" : "shadow-[0_1px_0_var(--color-line)]"}`
+        overlay ? "bg-transparent" : browse ? "bg-[#f7f7f7] shadow-[0_1px_0_#dddddd]" : "bg-surface/95 backdrop-blur-sm shadow-[0_1px_0_var(--color-line)]"
       }`}
     >
       <div
         /* Taller only when it carries the capsule: 64px leaves it about 5px of
            air a side, which reads as clipped. Home's hero still offsets against
            a 64px bar (-mt-16 / pt-16) and has no `center`, so it is untouched. */
-        className={`max-w-[1619px] mx-auto px-5 gap-6 ${overlay ? "relative top-[10px]" : ""} ${center ? (browse ? "h-[84px] pt-5" : "h-[104px]") : "h-16"} ${
+        className={`max-w-[1619px] mx-auto px-5 gap-6 ${overlay ? "relative top-[10px]" : ""} ${center ? (browse ? "min-h-[98px] py-4" : "h-[104px]") : "h-16"} ${
           /* minmax(0,1fr), not 1fr: a bare 1fr floors at its own min-content,
              so the account cluster's width was being mirrored into the empty
              left track and the centre got squeezed to a sliver. Tailwind's own

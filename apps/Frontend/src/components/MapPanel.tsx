@@ -10,10 +10,14 @@ import { mapShops } from "../lib/mapShops";
 /** Uttarakhand — centres the map even before any shop is plotted. */
 const DEFAULT_CENTER: L.LatLngTuple = [30.1, 78.4];
 
-function priceIcon(price: number): L.DivIcon {
+function priceIcon(price: number, shopName: string): L.DivIcon {
   const label = document.createElement("span");
   label.className = "map-price-label";
   label.textContent = `From ${rupees(price)}/day`;
+  const name = document.createElement("span");
+  name.className = "map-shop-name";
+  name.textContent = shopName;
+  label.append(name);
   return L.divIcon({ className: "map-price-pin", html: label, iconSize: [0, 32], iconAnchor: [0, 16] });
 }
 
@@ -94,7 +98,8 @@ export function MapPanel({
         popup.append(link);
       }
       const marker = L.marker([shop.latitude, shop.longitude], {
-        icon: priceIcon(shop.pricePerDay),
+        icon: priceIcon(shop.pricePerDay, shop.name),
+        riseOnHover: true,
         title: `${shop.name} — from ${rupees(shop.pricePerDay)} per day`,
         alt: `${shop.name}, show matching vehicles`,
       })
@@ -118,6 +123,15 @@ export function MapPanel({
       const active = shopId === activeShopId;
       marker.getElement()?.classList.toggle("is-active", active);
       marker.setZIndexOffset(active ? 1000 : 0);
+      if (active) {
+        // panInside moves only when needed; padding keeps the whole label clear of edges and controls.
+        mapRef.current?.panInside(marker.getLatLng(), {
+          paddingTopLeft: [120, 72],
+          paddingBottomRight: [160, 40],
+          animate: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+          duration: 0.25,
+        });
+      }
     }
   }, [activeShopId, ready, results, onShopSelect]);
 

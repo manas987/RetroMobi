@@ -110,7 +110,7 @@ export function Browse() {
             grow only while the map is beside it — that is also what fills the
             row below lg, where the map column is display:none. */}
         <div
-          className={`min-w-0 transition-[flex-basis,opacity] duration-300 ease-out ${
+          className={`-mt-[18px] min-w-0 transition-[flex-basis,opacity] duration-300 ease-out ${
             mapFullscreen ? "grow-0 basis-0 opacity-0 overflow-hidden" : "grow basis-[55%] opacity-100"
           }`}
         >
@@ -162,9 +162,8 @@ export function Browse() {
              it and then lifts with the page when the footer arrives — which is
              the whole reason the page scrolls rather than the cards column.
 
-             The inline header is 84px plus this row's 40px of padding;
-             leave another 40px beneath the map. */
-          className={`shrink-0 sticky top-[144px] h-[calc(100dvh-184px)] min-[1300px]:top-[124px] min-[1300px]:h-[calc(100dvh-164px)] transition-[flex-basis] duration-300 ease-out ${
+             Raise only the map 8px within this row, including its sticky offset. */
+          className={`-mt-2 shrink-0 sticky top-[136px] h-[calc(100dvh-184px)] min-[1300px]:top-[130px] min-[1300px]:h-[calc(100dvh-178px)] transition-[flex-basis] duration-300 ease-out ${
             mapFullscreen ? "grow basis-full" : "hidden lg:block basis-[48%]"
           }`}
         >
