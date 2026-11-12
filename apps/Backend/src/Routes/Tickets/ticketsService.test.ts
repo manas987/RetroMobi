@@ -5,8 +5,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pg from "pg";
 import { applyMigrations } from "../../DB/migrate.ts";
-import { createBookableVehicle, createRider, createUser, futureWindow, insertBooking } from "../../test/fixtures.ts";
-import { getMessages, listCustomerConversations, openTicket, postMessage, TicketNotAboutBookingError } from "./ticketsService.ts";
+import { createBookableVehicle, createMerchant, createRider, createUser, futureWindow, insertBooking } from "../../test/fixtures.ts";
+import { getMessages, listCustomerConversations, listMerchantConversations, openTicket, postMessage, TicketNotAboutBookingError } from "./ticketsService.ts";
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -91,4 +91,17 @@ test("the customer inbox includes owned booking context and human message previe
     booking_id: null, first_message: "The app keeps closing", latest_message: "The app keeps closing", latest_is_mine: true,
   });
   expect(await listCustomerConversations(pool, other.id)).toEqual([]);
+});
+
+test("the merchant inbox says whether the latest message is the merchant's own", async () => {
+  const merchantId = (await createMerchant(pool)).id;
+  await makeAdmin("SUPPORT");
+  const ticket = await openTicket(pool, { openedByType: "MERCHANT", openedById: merchantId, firstMessage: "Payout missing" });
+  const find = async () => (await listMerchantConversations(pool, merchantId)).find((x) => x.id === ticket.id)!;
+  expect(await find()).toMatchObject({ latest_message: "Payout missing", latest_is_mine: true });
+  const assigned = await pool.query("select party_id from ticket_participants where ticket_id = $1 and party_type = 'ADMIN'", [ticket.id]);
+  await postMessage(pool, ticket.id, { partyType: "ADMIN", partyId: assigned.rows[0].party_id }, "On it");
+  expect(await find()).toMatchObject({ latest_message: "On it", latest_is_mine: false });
+  await postMessage(pool, ticket.id, { partyType: "MERCHANT", partyId: merchantId }, "Thanks");
+  expect((await find()).latest_is_mine).toBe(true);
 });

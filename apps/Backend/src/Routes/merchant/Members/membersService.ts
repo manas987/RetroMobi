@@ -5,6 +5,8 @@ import type { ShopRole } from "../../../lib/permissions.ts";
 export class MemberNotFoundError extends Error {}
 export class InviteNotFoundError extends Error {}
 export class LastOwnerError extends Error {}
+export class AlreadyMemberError extends Error {}
+export class InviteAlreadyPendingError extends Error {}
 
 export async function listMembers(pool: Pool, shopId: string) {
   const { rows } = await pool.query(
@@ -35,6 +37,17 @@ export async function inviteMember(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const { rows: members } = await client.query(
+      `select 1 from shop_members m join merchant_users u on u.id = m.merchant_user_id
+        where m.shop_id = $1 and u.phone = $2 and m.status = 'ACTIVE' and m.deleted_at is null`,
+      [shopId, input.phone],
+    );
+    if (members.length > 0) throw new AlreadyMemberError(`${input.phone} is already a member`);
+    const { rows: pending } = await client.query(
+      `select 1 from shop_join_requests where shop_id = $1 and requested_to = $2 and status = 'PENDING'`,
+      [shopId, input.phone],
+    );
+    if (pending.length > 0) throw new InviteAlreadyPendingError(`${input.phone} already has a pending invite`);
     const { rows } = await client.query(
       `insert into shop_join_requests (shop_id, requested_by, requested_to, role)
        values ($1, $2, $3, $4) returning *`,
@@ -50,6 +63,33 @@ export async function inviteMember(
     });
     await client.query("COMMIT");
     return rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function cancelInvite(pool: Pool, merchantUserId: string, shopId: string, inviteId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `update shop_join_requests set status = 'REJECTED', responded_at = now()
+        where id = $1 and shop_id = $2 and status = 'PENDING' returning *`,
+      [inviteId, shopId],
+    );
+    if (rows.length === 0) throw new InviteNotFoundError(`invite ${inviteId} not found`);
+    await writeAudit(client, {
+      actorType: "MERCHANT",
+      actorId: merchantUserId,
+      action: "shop.invite_cancelled",
+      entityType: "shop",
+      entityId: shopId,
+      after: { phone: rows[0].requested_to, role: rows[0].role },
+    });
+    await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -165,6 +205,7 @@ export async function updateMemberRole(
       action: "shop.member_role_updated",
       entityType: "shop_member",
       entityId: memberId,
+      shopId,
       before: { role: member.role },
       after: { role },
     });
@@ -204,6 +245,7 @@ export async function removeMember(pool: Pool, merchantUserId: string, shopId: s
       action: "shop.member_removed",
       entityType: "shop_member",
       entityId: memberId,
+      shopId,
     });
 
     await client.query("COMMIT");

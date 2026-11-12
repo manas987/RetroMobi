@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { CheckCircle2, ShieldAlert, ShieldCheck, ThumbsUp, TriangleAlert } from "lucide-react";
 import { portalFetch, type Row } from "../../lib/portal";
-import { rupees } from "../../lib/format";
+import { istDay, rupees } from "../../lib/format";
 import { combine, splitIso } from "../../components/DateTimeField";
 import { DateRangeField } from "../../components/DateRangeField";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { useT } from "../../i18n";
 import { useMerchantShop } from "./Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "./query";
-import { Button, ErrorNote, LoadingRows, Sheet } from "./ui/ui";
+import { Button, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "./ui/ui";
 
 /**
  * The three things that happen at the counter: hand a vehicle over, take it
@@ -25,18 +25,6 @@ export function renterName(b: Row): string {
 export function vehicleLabel(b: Row): string {
   return `${String(b.make ?? "")} ${String(b.model ?? "")} · ${String(b.registration_number ?? "")}`.trim();
 }
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1.5 mb-4">
-      <span className="text-sm font-medium text-ink">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-const inputCls =
-  "min-h-12 rounded-2xl border border-line-strong bg-surface px-4 text-base text-ink outline-none focus:border-ink";
 
 function Summary({ booking }: { booking: Row }) {
   const { t, date, time } = useT();
@@ -215,7 +203,7 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
             inputMode="text"
             autoComplete="off"
             aria-label={t("actions.idStepLast4")}
-            className={`${inputCls} w-40 tnum text-xl tracking-[0.4em]`}
+            className={`${INPUT} w-40 tnum text-xl tracking-[0.4em]`}
           />
         </li>
       </ol>
@@ -363,7 +351,7 @@ function ReturnFlow({ booking, onClose }: { booking: Row; onClose: () => void })
               onChange={(e) => setReason(e.target.value)}
               placeholder={t("actions.claimReasonHint")}
               rows={3}
-              className={`${inputCls} py-3`}
+              className={`${INPUT} py-3`}
             />
           </Field>
           <Field label={t("actions.claimAmount")}>
@@ -371,7 +359,7 @@ function ReturnFlow({ booking, onClose }: { booking: Row; onClose: () => void })
               value={rupeeAmount}
               onChange={(e) => setRupeeAmount(e.target.value.replace(/[^0-9]/g, ""))}
               inputMode="numeric"
-              className={`${inputCls} tnum text-lg`}
+              className={`${INPUT} tnum text-lg`}
             />
             {deposit > 0 && (
               <span className={`text-sm ${tooMuch ? "text-danger" : "text-ink-3"}`}>
@@ -401,18 +389,33 @@ function ReturnFlow({ booking, onClose }: { booking: Row; onClose: () => void })
 
 // ---------------------------------------------------------------- walk-in
 
-/** `vehicleId` pre-selects a vehicle, e.g. from a "Book" button on a free one. */
-export function WalkinSheet({ open, onClose, vehicleId }: { open: boolean; onClose: () => void; vehicleId?: string }) {
+/** `vehicleId` pre-selects a vehicle, e.g. from a "Book" button on a free one;
+ *  `startDay` ("YYYY-MM-DD", IST) starts the booking on a calendar day. */
+export function WalkinSheet({
+  open,
+  onClose,
+  vehicleId,
+  startDay,
+}: {
+  open: boolean;
+  onClose: () => void;
+  vehicleId?: string;
+  startDay?: string;
+}) {
   const { t } = useT();
   return (
     <Sheet open={open} onClose={onClose} title={t("actions.walkinTitle")}>
-      {open && <WalkinForm onClose={onClose} initialVehicleId={vehicleId} />}
+      {open && <WalkinForm onClose={onClose} initialVehicleId={vehicleId} startDay={startDay} />}
     </Sheet>
   );
 }
 
-/** Now, rounded up to the next quarter hour, for eight hours. */
-function walkinWindow() {
+/** Now, rounded up to the next quarter hour, for eight hours -- or, for a
+ *  later day picked on a calendar, 10:00 to 18:00 that day. */
+function walkinWindow(startDay?: string) {
+  if (startDay && startDay > istDay(new Date())) {
+    return { pickupAt: `${startDay}T10:00:00+05:30`, returnAt: `${startDay}T18:00:00+05:30` };
+  }
   const quarter = 15 * 60_000;
   const pickup = new Date(Math.ceil(Date.now() / quarter) * quarter);
   return { pickupAt: pickup.toISOString(), returnAt: new Date(pickup.getTime() + 8 * 3_600_000).toISOString() };
@@ -422,7 +425,7 @@ interface WalkinResult {
   totals: { rentalAmount: number; securityDepositAmount: number };
 }
 
-function WalkinForm({ onClose, initialVehicleId }: { onClose: () => void; initialVehicleId?: string }) {
+function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => void; initialVehicleId?: string; startDay?: string }) {
   const { t, lang } = useT();
   const { token, shopId } = useMerchantShop();
   const invalidate = useInvalidateMerchant();
@@ -433,7 +436,7 @@ function WalkinForm({ onClose, initialVehicleId }: { onClose: () => void; initia
   const [dl, setDl] = useState("");
   // The customer is at the counter: start now, not at the customer site's
   // "tomorrow 10am" default. Eight hours is a starting point to adjust.
-  const win = walkinWindow();
+  const win = walkinWindow(startDay);
   const [pickupDate, setPickupDate] = useState(splitIso(win.pickupAt).date);
   const [pickupTime, setPickupTime] = useState(splitIso(win.pickupAt).time);
   const [returnDate, setReturnDate] = useState(splitIso(win.returnAt).date);
@@ -518,13 +521,13 @@ function WalkinForm({ onClose, initialVehicleId }: { onClose: () => void; initia
         </Select>
       </Field>
       <Field label={t("actions.walkinName")}>
-        <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" className={inputCls} />
+        <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" className={INPUT} />
       </Field>
       <Field label={t("actions.walkinPhone")}>
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={`${inputCls} tnum`} />
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={`${INPUT} tnum`} />
       </Field>
       <Field label={t("actions.licenceNumber")}>
-        <input value={dl} onChange={(e) => setDl(e.target.value.toUpperCase())} autoComplete="off" className={`${inputCls} tnum`} />
+        <input value={dl} onChange={(e) => setDl(e.target.value.toUpperCase())} autoComplete="off" className={`${INPUT} tnum`} />
       </Field>
       <div className="mb-4 flex rounded-2xl border border-line-strong px-4 py-3">
         <DateRangeField

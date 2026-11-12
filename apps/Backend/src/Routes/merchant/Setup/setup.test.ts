@@ -71,12 +71,12 @@ describe("shop setup checklist", () => {
     expect(v.missing).toEqual([]);
     expect(v.canSubmit).toBe(true);
 
-    await submitVehicleForVerification(pool, id);
+    await submitVehicleForVerification(pool, merchant.id, id);
     v = (await getShopSetup(pool, shop.id)).vehicles.find((x) => x.id === id)!;
     expect(v.stage).toBe("CHECKING");
     expect(v.canSubmit).toBe(false);
     // Submitting twice is refused rather than silently re-queued.
-    await expect(submitVehicleForVerification(pool, id)).rejects.toThrow();
+    await expect(submitVehicleForVerification(pool, merchant.id, id)).rejects.toThrow();
   });
 
   test("a rejected or expired document puts the vehicle in NEEDS_FIXING with the admin's note", async () => {

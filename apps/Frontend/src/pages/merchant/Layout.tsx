@@ -5,8 +5,9 @@ import {
   CalendarCheck,
   ChevronsLeft,
   ChevronsRight,
+  BarChart3,
   ExternalLink,
-  FileText,
+  History,
   Home,
   IndianRupee,
   Languages,
@@ -24,6 +25,7 @@ import { can as hasPermission, type Permission } from "../../lib/permissions";
 import { setLang, useT, type TKey } from "../../i18n";
 import { useMerchantQuery } from "./query";
 import { Sheet } from "./ui/ui";
+import { GetListedChip } from "./setup/GetListedChip";
 
 interface MerchantCtx {
   token: string;
@@ -71,14 +73,17 @@ const NAV: { group: TKey; items: NavItem[] }[] = [
   },
   {
     group: "nav.groupMoney",
-    items: [{ href: "/merchant/payouts", label: "nav.earnings", icon: IndianRupee, needs: "payouts:read" }],
+    items: [
+      { href: "/merchant/earnings", label: "nav.earnings", icon: IndianRupee, needs: "payouts:read" },
+      { href: "/merchant/reports", label: "nav.reports", icon: BarChart3, needs: "payouts:read" },
+    ],
   },
   {
     group: "nav.groupShop",
     items: [
-      { href: "/merchant/branches", label: "nav.branches", icon: Store },
-      { href: "/merchant/compliance", label: "nav.documents", icon: FileText },
-      { href: "/merchant/team", label: "nav.staff", icon: Users, needs: "members:read" },
+      { href: "/merchant/shop", label: "nav.shopAndPapers", icon: Store },
+      { href: "/merchant/staff", label: "nav.staff", icon: Users, needs: "members:read" },
+      { href: "/merchant/activity", label: "nav.activity", icon: History, needs: "members:read" },
     ],
   },
 ];
@@ -205,6 +210,7 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
           <ShopSwitcher shops={shops} shopId={shopId} onChange={setShopId} />
         )}
 
+        {shopId && can("fleet:read") && <GetListedChip collapsed={collapsed} token={token} shopId={shopId} />}
         <NavList groups={groups} path={path} collapsed={collapsed} />
 
         <div className="border-t border-line p-3 flex flex-col gap-3">
@@ -290,6 +296,7 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
 
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title={t("common.menu")}>
         {loaded && shops.length > 0 && <ShopSwitcher shops={shops} shopId={shopId} onChange={setShopId} />}
+        {shopId && can("fleet:read") && <GetListedChip collapsed={false} token={token} shopId={shopId} />}
         <NavList groups={groups} path={path} collapsed={false} />
         <div className="mt-4 border-t border-line pt-4 flex flex-col gap-3">
           {currentShop && <ShopPageLink shopId={String(currentShop.id)} compact={false} />}

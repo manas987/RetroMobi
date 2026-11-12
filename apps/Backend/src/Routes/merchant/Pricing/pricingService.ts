@@ -52,8 +52,8 @@ export async function upsertPricing(
       actorType: "MERCHANT",
       actorId: merchantUserId,
       action: "pricing.updated",
-      entityType: "vehicle_pricing",
-      entityId: rows[0].id,
+      entityType: "vehicle",
+      entityId: vehicleId,
       before: beforeRows[0] ?? null,
       after: rows[0],
     });
@@ -106,8 +106,8 @@ export async function addSpecial(
       actorType: "MERCHANT",
       actorId: merchantUserId,
       action: "pricing.special_added",
-      entityType: "special_pricing",
-      entityId: rows[0].id,
+      entityType: "vehicle",
+      entityId: vehicleId,
       after: rows[0],
     });
     await client.query("COMMIT");

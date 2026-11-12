@@ -26,7 +26,7 @@ export async function get(req: Request, res: Response) {
 }
 
 export async function submitVerification(req: Request, res: Response) {
-  res.status(200).json(await fleetService.submitVehicleForVerification(pool, pathParam(req, "vehicleId")));
+  res.status(200).json(await fleetService.submitVehicleForVerification(pool, req.merchantUserId!, pathParam(req, "vehicleId")));
 }
 
 export async function update(req: Request, res: Response) {
@@ -162,6 +162,7 @@ export async function publishMedia(req: Request, res: Response) {
     pathParam(req, "vehicleId").toLowerCase(),
     pathParam(req, "mediaId"),
     req.body.published,
+    req.merchantUserId!,
   );
   if (!updated) {
     res.status(400).json({ error: "invalid_photo", message: "Upload a JPEG, PNG, WebP, AVIF, or GIF to publish this photo." });

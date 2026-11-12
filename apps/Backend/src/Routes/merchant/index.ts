@@ -2,6 +2,7 @@ import { Router } from "express";
 import authRoutes from "./Auth/routes.ts";
 import { me } from "./Auth/controller.ts";
 import { requireMerchantAuth } from "../../middleware/requireMerchantAuth.ts";
+import activityRoutes from "./Activity/routes.ts";
 import fleetRoutes from "./Fleet/routes.ts";
 import licencesRoutes from "./Licences/routes.ts";
 import membersRoutes from "./Members/routes.ts";
@@ -30,6 +31,7 @@ router.use(operationsRoutes);
 router.use(payoutsRoutes);
 router.use(reportsRoutes);
 router.use(setupRoutes);
+router.use(activityRoutes);
 router.use("/tickets", ticketsRoutes);
 
 export default router;

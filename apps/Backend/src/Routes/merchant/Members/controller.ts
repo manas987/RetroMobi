@@ -58,3 +58,13 @@ export async function remove(req: Request, res: Response) {
   );
   res.status(204).send();
 }
+
+export async function cancelInvite(req: Request, res: Response) {
+  await membersService.cancelInvite(
+    pool,
+    req.merchantUserId!,
+    pathParam(req, "shopId"),
+    pathParam(req, "inviteId"),
+  );
+  res.status(204).send();
+}

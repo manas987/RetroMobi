@@ -251,6 +251,13 @@ export async function submitForVerification(pool: Pool, merchantUserId: string, 
     [shopId],
   );
   if (rows.length === 0) throw new ShopNotFoundError(`shop ${shopId} not found or not eligible`);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "shop.submitted_for_checking",
+    entityType: "shop",
+    entityId: shopId,
+  });
   return rows[0];
 }
 
@@ -270,6 +277,13 @@ export async function setShopHours(
         [shopId, h.dayOfWeek, h.opensAt, h.closesAt],
       );
     }
+    await writeAudit(client, {
+      actorType: "MERCHANT",
+      actorId: merchantUserId,
+      action: "shop.hours_updated",
+      entityType: "shop",
+      entityId: shopId,
+    });
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");

@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { X, type LucideIcon } from "lucide-react";
 import type { Tone } from "../../../lib/bookingStage";
 import { useT } from "../../../i18n";
+import { istDay } from "../../../lib/format";
 
 /**
  * The merchant console's building blocks. Built for people new to software:
@@ -407,4 +408,80 @@ export function BarChart({
       </details>
     </div>
   );
+}
+
+/** The one text-input look for merchant forms (inputs, selects, textareas). */
+export const INPUT =
+  "min-h-12 w-full rounded-2xl border border-line-strong bg-surface px-4 text-base text-ink outline-none focus:border-ink";
+
+export function Field({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: ReactNode;
+  hint?: ReactNode;
+  error?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5 mb-4">
+      <span className="text-sm font-medium text-ink">{label}</span>
+      {children}
+      {hint && !error && <span className="text-xs text-ink-3">{hint}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
+    </label>
+  );
+}
+
+/** "Are you sure?" for anything that removes or publishes. */
+export function ConfirmSheet({
+  open,
+  onClose,
+  title,
+  body,
+  confirmLabel,
+  danger = false,
+  busy = false,
+  error,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: ReactNode;
+  body: ReactNode;
+  confirmLabel: ReactNode;
+  danger?: boolean;
+  busy?: boolean;
+  error?: string | null;
+  onConfirm: () => void;
+}) {
+  const { t } = useT();
+  return (
+    <Sheet open={open} onClose={onClose} title={title}>
+      <p className="text-base text-ink-2 mb-6">{body}</p>
+      {error && <div className="mb-4"><ErrorNote text={error} /></div>}
+      <div className="flex flex-col gap-2">
+        <Button variant={danger ? "danger" : "primary"} size="lg" disabled={busy} onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+        <Button variant="ghost" size="lg" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+      </div>
+    </Sheet>
+  );
+}
+
+/** "Today" / "Tomorrow" / "Yesterday" / "Saturday, 15 Nov" for an IST day ("YYYY-MM-DD"). */
+export function DayHeading({ day }: { day: string }) {
+  const { t, date } = useT();
+  const offset = Math.round((Date.parse(`${day}T00:00:00+05:30`) - Date.parse(`${istDay(new Date())}T00:00:00+05:30`)) / 86_400_000);
+  const label =
+    offset === 0 ? t("common.today")
+    : offset === 1 ? t("common.tomorrow")
+    : offset === -1 ? t("common.yesterday")
+    : date(`${day}T12:00:00+05:30`, { weekday: "long", day: "numeric", month: "short" });
+  return <h3 className="mt-5 mb-2 text-xs font-semibold uppercase tracking-wider text-ink-3 first:mt-0">{label}</h3>;
 }

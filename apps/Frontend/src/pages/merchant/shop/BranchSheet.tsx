@@ -1,0 +1,63 @@
+import { useState } from "react";
+import { portalFetch, type Row } from "../../../lib/portal";
+import { LocationPicker } from "../../../components/LocationPicker";
+import { useT } from "../../../i18n";
+import { errorText, useInvalidateMerchant } from "../query";
+import { Button, ErrorNote, Field, INPUT, Sheet } from "../ui/ui";
+
+/** Edit a shop's details, or (no `shop`) add another branch. */
+export function BranchSheet({ open, onClose, shop, token, reloadShops }: { open: boolean; onClose: () => void; shop?: Row; token: string; reloadShops: () => void }) {
+  const { t } = useT();
+  return (
+    <Sheet open={open} onClose={onClose} title={shop ? t("shop.editTitle") : t("shop.addTitle")}>
+      <BranchForm shop={shop} token={token} reloadShops={reloadShops} onClose={onClose} />
+    </Sheet>
+  );
+}
+
+function BranchForm({ shop, token, reloadShops, onClose }: { shop?: Row; token: string; reloadShops: () => void; onClose: () => void }) {
+  const { t, lang } = useT();
+  const invalidate = useInvalidateMerchant();
+  const [name, setName] = useState(String(shop?.name ?? ""));
+  const [phone, setPhone] = useState(String(shop?.phone ?? ""));
+  const [address, setAddress] = useState(String(shop?.address_line1 ?? ""));
+  const [city, setCity] = useState(String(shop?.city ?? ""));
+  const [state, setState] = useState(String(shop?.state ?? "Uttarakhand"));
+  const [pincode, setPincode] = useState(String(shop?.pincode ?? ""));
+  const [lat, setLat] = useState<number | null>(shop?.latitude != null ? Number(shop.latitude) : null);
+  const [lng, setLng] = useState<number | null>(shop?.longitude != null ? Number(shop.longitude) : null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const valid = name.trim() && address.trim() && city.trim() && state.trim() && /^\d{6}$/.test(pincode);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const body = { name: name.trim(), phone: phone.trim() || undefined, addressLine1: address.trim(), city: city.trim(), state: state.trim(), pincode, latitude: lat ?? undefined, longitude: lng ?? undefined };
+    try {
+      await portalFetch("merchant", shop ? `/shops/${shop.id}` : "/shops", { method: shop ? "PATCH" : "POST", token, body });
+      reloadShops();
+      await invalidate();
+      onClose();
+    } catch (err) {
+      setError(errorText(lang, err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Field label={t("common.shopName")}><input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label={t("setup.shopPhone")}><input className={INPUT} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+      <Field label={t("common.address")}><input className={INPUT} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
+      <Field label={t("common.city")}><input className={INPUT} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
+      <Field label={t("common.state")}><input className={INPUT} value={state} onChange={(e) => setState(e.target.value)} /></Field>
+      <Field label={t("common.pincode")}><input className={INPUT} inputMode="numeric" maxLength={6} value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))} /></Field>
+      <p className="mb-2 text-sm font-medium text-ink">{t("setup.pinLabel")}</p>
+      <div className="mb-4"><LocationPicker latitude={lat} longitude={lng} onChange={(a, b) => { setLat(a); setLng(b); }} /></div>
+      {error && <div className="mb-4"><ErrorNote text={error} /></div>}
+      <Button variant="primary" size="lg" className="w-full" disabled={busy || !valid} onClick={save}>{busy ? t("common.saving") : shop ? t("common.save") : t("common.createShop")}</Button>
+    </>
+  );
+}

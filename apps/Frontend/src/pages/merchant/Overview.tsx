@@ -21,6 +21,7 @@ import { useT } from "../../i18n";
 import { MerchantLayout, useMerchantShop } from "./Layout";
 import { useMerchantQuery } from "./query";
 import { HandoverSheet, renterName, ReturnSheet, WalkinSheet } from "./bookingActions";
+import { AVAIL_ORDER, AVAIL_TONE, vehicleNow, type Staged } from "./fleet/vehicleNow";
 import { BarChart, Button, Card, Chip, EmptyState, ErrorNote, LoadingRows, SERIES, StatCard, TONE } from "./ui/ui";
 
 interface Summary {
@@ -76,10 +77,10 @@ function OverviewBody() {
   const needs: NeedItem[] = [];
   for (const { b, stage } of staged) {
     if (stage === "PICKUP_LATE")
-      needs.push({ key: `late-${b.id}`, icon: CalendarClock, tone: "bad", href: "/merchant/bookings",
+      needs.push({ key: `late-${b.id}`, icon: CalendarClock, tone: "bad", href: `/merchant/bookings?tab=late&booking=${b.id}`,
         text: t("overview.needLatePickup", { name: renterName(b), vehicle: String(b.registration_number ?? "") }) });
     if (stage === "OVERDUE")
-      needs.push({ key: `over-${b.id}`, icon: RotateCcw, tone: "bad", href: "/merchant/bookings",
+      needs.push({ key: `over-${b.id}`, icon: RotateCcw, tone: "bad", href: `/merchant/bookings?tab=late&booking=${b.id}`,
         text: t("overview.needOverdue", { name: renterName(b), vehicle: String(b.registration_number ?? "") }) });
   }
   for (const v of vehicles.data?.vehicles ?? []) {
@@ -91,18 +92,18 @@ function OverviewBody() {
   for (const l of licences.data?.licences ?? []) {
     const number = String(l.licence_number ?? "");
     if (l.status !== "ACTIVE") {
-      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/compliance",
+      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/shop?tab=documents",
         text: t("overview.needLicence", { number, status: tMaybe(`overview.licence_${String(l.status)}`) ?? String(l.status) }) });
     } else if (l.expires_at && String(l.expires_at).slice(0, 10) <= soon) {
-      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/compliance",
+      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/shop?tab=documents",
         text: t("overview.needLicenceExpiring", { number, date: date(`${String(l.expires_at).slice(0, 10)}T12:00:00`) }) });
     }
   }
   if (isOwner && payoutAccount.isSuccess) {
     if (payoutAccount.data == null)
-      needs.push({ key: "bank", icon: Landmark, tone: "attention", href: "/merchant/payouts", text: t("overview.needPayoutAccount") });
+      needs.push({ key: "bank", icon: Landmark, tone: "attention", href: "/merchant/earnings", text: t("overview.needPayoutAccount") });
     else if (payoutAccount.data.status !== "VERIFIED")
-      needs.push({ key: "bank", icon: Landmark, tone: "attention", href: "/merchant/payouts", text: t("overview.needPayoutUnverified") });
+      needs.push({ key: "bank", icon: Landmark, tone: "attention", href: "/merchant/earnings", text: t("overview.needPayoutUnverified") });
   }
   for (const tk of openTickets) {
     needs.push({ key: `tk-${tk.id}`, icon: MessageCircle, tone: "info", href: "/merchant/support",
@@ -152,13 +153,13 @@ function OverviewBody() {
       </header>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
-        <StatCard icon={CalendarClock} tone="attention" label={t("overview.statPickups")} href="/merchant/bookings"
+        <StatCard icon={CalendarClock} tone="attention" label={t("overview.statPickups")} href="/merchant/bookings?tab=today"
           value={active.isSuccess ? count("PICKUP_TODAY") : null} failed={active.isError}
           caption={t("overview.statPickupsCaption")} />
-        <StatCard icon={Bike} tone="info" label={t("overview.statOnRide")} href="/merchant/bookings"
+        <StatCard icon={Bike} tone="info" label={t("overview.statOnRide")} href="/merchant/bookings?tab=onride"
           value={active.isSuccess ? count("ON_RIDE", "RETURN_TODAY", "OVERDUE") : null} failed={active.isError}
           caption={t("overview.statOnRideCaption")} />
-        <StatCard icon={RotateCcw} tone={late > 0 ? "bad" : "good"} label={t("overview.statDueBack")} href="/merchant/bookings"
+        <StatCard icon={RotateCcw} tone={late > 0 ? "bad" : "good"} label={t("overview.statDueBack")} href="/merchant/bookings?tab=onride"
           value={active.isSuccess ? count("RETURN_TODAY", "OVERDUE") : null} failed={active.isError}
           caption={late > 0 ? <span className="font-semibold text-danger">{t("overview.statDueBackLate", { count: late })}</span> : t("overview.statDueBackCaption")} />
         <StatCard icon={AlertTriangle} tone={needs.length > 0 ? "attention" : "good"} label={t("overview.statNeedsYou")}
@@ -169,7 +170,7 @@ function OverviewBody() {
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 xl:grid-rows-[minmax(0,1fr)] gap-4 xl:min-h-0 xl:flex-1">
         {/* ---- column 1: today, then what's coming ---- */}
         <Card scroll title={t("overview.todayTitle")} icon={CalendarClock} className="xl:h-full"
-          action={<Link href="/merchant/bookings" className="text-sm font-medium text-ink-2 hover:text-ink">{t("common.seeAll")}</Link>}>
+          action={<Link href="/merchant/bookings?tab=today" className="text-sm font-medium text-ink-2 hover:text-ink">{t("common.seeAll")}</Link>}>
           {active.isPending ? <LoadingRows /> : active.isError ? (
             <ErrorNote onRetry={() => active.refetch()} />
           ) : todayRows.length === 0 && upcoming.length === 0 ? (
@@ -299,7 +300,7 @@ function MoneyOrRidesCard({ summary, isOwner }: { summary: ReturnType<typeof use
     const cash = s.days.reduce((n, d) => n + (d.walkinCash ?? 0), 0);
     return (
       <Card title={t("overview.earningsTitle")} className="shrink-0"
-        action={<Link href="/merchant/payouts" aria-label={t("overview.seeEarnings")} className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-ink-2 hover:text-ink">{t("common.seeAll")} <ArrowRight className="h-4 w-4" /></Link>}>
+        action={<Link href="/merchant/earnings" aria-label={t("overview.seeEarnings")} className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-ink-2 hover:text-ink">{t("common.seeAll")} <ArrowRight className="h-4 w-4" /></Link>}>
         <p className="tnum text-3xl font-semibold text-ink">{rupees(online + cash)}</p>
         <dl className="mt-1 mb-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
           <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SERIES[0] }} aria-hidden /><dt className="text-ink-3">{t("overview.earningsOnline")}</dt><dd className="tnum font-medium text-ink">{rupees(online)}</dd></div>
@@ -330,9 +331,6 @@ function MoneyOrRidesCard({ summary, isOwner }: { summary: ReturnType<typeof use
   );
 }
 
-type Avail = "FREE" | "TODAY" | "OUT";
-const AVAIL_TONE = { FREE: "good", TODAY: "attention", OUT: "info" } as const;
-const AVAIL_ORDER: Record<Avail, number> = { FREE: 0, TODAY: 1, OUT: 2 };
 
 /**
  * The fleet as the counter needs it when a walk-in arrives: which scooter can
@@ -346,7 +344,7 @@ function FleetNowCard({
   onBook,
 }: {
   vehicles: ReturnType<typeof useMerchantQuery<{ vehicles: Row[] }>>;
-  staged: { b: Row; stage: BookingStage }[];
+  staged: Staged[];
   onBook?: (vehicleId: string) => void;
 }) {
   const { t, date, time } = useT();
@@ -370,13 +368,7 @@ function FleetNowCard({
 
     const rows = list
       .map((v) => {
-        const mine = staged.filter((x) => x.b.vehicle_id === v.id);
-        const out = mine.find((x) => ["ON_RIDE", "RETURN_TODAY", "OVERDUE"].includes(x.stage));
-        const goes = mine.find((x) => ["PICKUP_TODAY", "PICKUP_LATE"].includes(x.stage));
-        const next = mine
-          .filter((x) => x.stage === "UPCOMING")
-          .sort((p, q) => String(p.b.scheduled_pickup_at).localeCompare(String(q.b.scheduled_pickup_at)))[0];
-        const a: Avail = out ? "OUT" : goes ? "TODAY" : "FREE";
+        const { avail: a, out, goes, next } = vehicleNow(v.id, staged);
         const price = v.amount == null ? t("overview.noPrice") : t("common.perDay", { amount: rupees(Number(v.amount)) });
         const detail =
           a === "OUT" ? t("overview.backAt", { when: when(out!.b.scheduled_return_at) })

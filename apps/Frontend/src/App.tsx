@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import { Route, Switch, useLocation } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import { Home } from "./pages/Home";
 import { Browse } from "./pages/Browse";
 import { ShopPage } from "./pages/ShopPage";
@@ -16,11 +16,14 @@ import { MerchantLogin } from "./pages/merchant/Login";
 import { MerchantOverview } from "./pages/merchant/Overview";
 import { MerchantBookings } from "./pages/merchant/Bookings";
 import { MerchantFleet } from "./pages/merchant/Fleet";
-import { MerchantBranches } from "./pages/merchant/Branches";
-import { MerchantTeam } from "./pages/merchant/Team";
-import { MerchantCompliance } from "./pages/merchant/Compliance";
+import { MerchantVehicle } from "./pages/merchant/fleet/VehiclePage";
+import { MerchantSetup } from "./pages/merchant/Setup";
+import { MerchantShop } from "./pages/merchant/Shop";
+import { MerchantStaff } from "./pages/merchant/Staff";
+import { MerchantActivity } from "./pages/merchant/Activity";
 import { MerchantSupport } from "./pages/merchant/Support";
-import { MerchantPayouts } from "./pages/merchant/Payouts";
+import { MerchantEarnings } from "./pages/merchant/Earnings";
+import { MerchantReports } from "./pages/merchant/Reports";
 
 import { AdminLogin } from "./pages/admin/Login";
 import { AdminOverview } from "./pages/admin/Overview";
@@ -71,11 +74,19 @@ export function App() {
       <Route path="/merchant" component={MerchantOverview} />
       <Route path="/merchant/bookings" component={MerchantBookings} />
       <Route path="/merchant/fleet" component={MerchantFleet} />
-      <Route path="/merchant/branches" component={MerchantBranches} />
-      <Route path="/merchant/team" component={MerchantTeam} />
-      <Route path="/merchant/compliance" component={MerchantCompliance} />
+      <Route path="/merchant/fleet/:vehicleId" component={MerchantVehicle} />
+      <Route path="/merchant/setup" component={MerchantSetup} />
+      <Route path="/merchant/shop" component={MerchantShop} />
+      <Route path="/merchant/staff" component={MerchantStaff} />
+      <Route path="/merchant/activity" component={MerchantActivity} />
       <Route path="/merchant/support" component={MerchantSupport} />
-      <Route path="/merchant/payouts" component={MerchantPayouts} />
+      <Route path="/merchant/earnings" component={MerchantEarnings} />
+      <Route path="/merchant/reports" component={MerchantReports} />
+      {/* Old URLs, kept so bookmarks and links in old messages still land. */}
+      <Route path="/merchant/branches"><Redirect to="/merchant/shop" replace /></Route>
+      <Route path="/merchant/compliance"><Redirect to="/merchant/shop?tab=documents" replace /></Route>
+      <Route path="/merchant/team"><Redirect to="/merchant/staff" replace /></Route>
+      <Route path="/merchant/payouts"><Redirect to="/merchant/earnings" replace /></Route>
 
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminOverview} />

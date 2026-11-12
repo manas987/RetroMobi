@@ -5,12 +5,26 @@ import enStatus from "./en/status";
 import enOverview from "./en/overview";
 import enActions from "./en/actions";
 import enErrors from "./en/errors";
+import enBookings from "./en/bookings";
+import enFleet from "./en/fleet";
+import enSetup from "./en/setup";
+import enShop from "./en/shop";
+import enStaff from "./en/staff";
+import enMoney from "./en/money";
+import enSupport from "./en/support";
 import hiCommon from "./hi/common";
 import hiNav from "./hi/nav";
 import hiStatus from "./hi/status";
 import hiOverview from "./hi/overview";
 import hiActions from "./hi/actions";
 import hiErrors from "./hi/errors";
+import hiBookings from "./hi/bookings";
+import hiFleet from "./hi/fleet";
+import hiSetup from "./hi/setup";
+import hiShop from "./hi/shop";
+import hiStaff from "./hi/staff";
+import hiMoney from "./hi/money";
+import hiSupport from "./hi/support";
 
 /**
  * Merchant-console strings. English is the source; every Hindi file is typed
@@ -28,6 +42,13 @@ const en = {
   overview: enOverview,
   actions: enActions,
   errors: enErrors,
+  bookings: enBookings,
+  fleet: enFleet,
+  setup: enSetup,
+  shop: enShop,
+  staff: enStaff,
+  money: enMoney,
+  support: enSupport,
 };
 
 type Dict = typeof en;
@@ -38,6 +59,13 @@ const hi: { [N in keyof Dict]: Record<keyof Dict[N], string> } = {
   overview: hiOverview,
   actions: hiActions,
   errors: hiErrors,
+  bookings: hiBookings,
+  fleet: hiFleet,
+  setup: hiSetup,
+  shop: hiShop,
+  staff: hiStaff,
+  money: hiMoney,
+  support: hiSupport,
 };
 
 export type Lang = "en" | "hi";

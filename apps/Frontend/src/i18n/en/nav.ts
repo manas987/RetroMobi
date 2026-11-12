@@ -11,6 +11,7 @@ export default {
   reports: "Reports",
   branches: "Shop details",
   documents: "Licence & papers",
+  shopAndPapers: "Shop & papers",
   staff: "Staff",
   activity: "Activity log",
   collapse: "Make menu smaller",

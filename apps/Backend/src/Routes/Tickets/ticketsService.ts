@@ -145,6 +145,29 @@ export async function listTickets(
   return rows;
 }
 
+export async function listMerchantConversations(pool: Pool, merchantUserId: string) {
+  const { rows } = await pool.query(
+    `select t.*, latest.body as latest_message, latest.sender_type as latest_sender_type,
+            (latest.sender_type = 'MERCHANT' and latest.sender_id = $1) as latest_is_mine,
+            latest.created_at as latest_message_at,
+            v.registration_number, m.make, m.model
+       from ticket_participants p
+       join tickets t on t.id = p.ticket_id
+       left join bookings b on b.id = t.booking_id
+       left join vehicles v on v.id = b.vehicle_id
+       left join vehicle_models m on m.id = v.model_id
+       left join lateral (
+         select left(body, 240) as body, sender_type, sender_id, created_at from ticket_messages
+          where ticket_id = t.id and sender_type <> 'SYSTEM' and nullif(btrim(body), '') is not null
+          order by created_at desc, id desc limit 1
+       ) latest on true
+      where p.party_type = 'MERCHANT' and p.party_id = $1
+      order by coalesce(latest.created_at, t.created_at) desc, t.id`,
+    [merchantUserId],
+  );
+  return rows;
+}
+
 export async function listCustomerConversations(pool: Pool, userId: string) {
   const { rows } = await pool.query(
     `select t.id, t.subject, t.status, t.category, t.created_at, t.resolution,

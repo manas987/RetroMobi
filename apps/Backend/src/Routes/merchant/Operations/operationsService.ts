@@ -44,7 +44,7 @@ export interface ListBookingsFilters {
   to?: Date;
   source?: "ONLINE" | "OFFLINE";
   vehicleId?: string;
-  /** Name, phone, plate, or the start of a booking id. */
+  /** Name, phone, plate, or part of a booking id. */
   q?: string;
 }
 
@@ -68,7 +68,7 @@ export async function listBookings(pool: Pool, shopId: string, filters: ListBook
       (n) => `(b.walkin_name ilike ${n} or b.walkin_phone ilike ${n} or r.name ilike ${n}
                or u.name ilike ${n} or u.phone ilike ${n}
                or replace(v.registration_number, ' ', '') ilike replace(${n}, ' ', '')
-               or b.id::text ilike ${n}::text || '%')`,
+               or b.id::text ilike ${n})`,
       `%${filters.q.replace(/[\\%_]/g, "\\$&")}%`,
     );
   }

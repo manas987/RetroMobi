@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
-import { createBookableVehicle, uniquePhone, futureWindow } from "../../../test/fixtures.ts";
-import { WalkinUnavailableError, createWalkinRental } from "./operationsService.ts";
+import { createBookableVehicle, insertBooking, uniquePhone, futureWindow } from "../../../test/fixtures.ts";
+import { WalkinUnavailableError, createWalkinRental, listBookings } from "./operationsService.ts";
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -87,5 +87,32 @@ describe("merchant walk-in rentals", () => {
         returnAt,
       }),
     ).rejects.toBeInstanceOf(WalkinUnavailableError);
+  });
+});
+
+describe("merchant bookings list filters", () => {
+  test("a date range returns bookings that overlap it, not only those starting inside it", async () => {
+    const v = await createBookableVehicle(pool);
+    const before = await insertBooking(pool, { vehicleId: v.id, pickupAt: "2032-01-28T10:00:00+05:30", returnAt: "2032-02-02T10:00:00+05:30" });
+    const inside = await insertBooking(pool, { vehicleId: v.id, pickupAt: "2032-02-10T10:00:00+05:30", returnAt: "2032-02-11T10:00:00+05:30" });
+    await insertBooking(pool, { vehicleId: v.id, pickupAt: "2032-01-10T10:00:00+05:30", returnAt: "2032-01-11T10:00:00+05:30" });
+
+    const rows = await listBookings(pool, v.shopId, {
+      from: new Date("2032-02-01T00:00:00+05:30"),
+      to: new Date("2032-02-29T23:59:59+05:30"),
+    });
+    expect(rows.map((r) => r.id).sort()).toEqual([before.id, inside.id].sort());
+  });
+
+  test("search matches a plate typed without spaces, and source narrows to walk-ins", async () => {
+    const v = await createBookableVehicle(pool);
+    const iso = (w: { pickupAt: Date; returnAt: Date }) => ({ pickupAt: w.pickupAt.toISOString(), returnAt: w.returnAt.toISOString() });
+    const walkin = await insertBooking(pool, { vehicleId: v.id, ...iso(futureWindow(200, 1)), source: "OFFLINE" });
+    await insertBooking(pool, { vehicleId: v.id, ...iso(futureWindow(210, 1)) });
+    const { rows } = await pool.query(`select registration_number from vehicles where id = $1`, [v.id]);
+
+    expect((await listBookings(pool, v.shopId, { q: rows[0].registration_number })).length).toBe(2);
+    expect((await listBookings(pool, v.shopId, { source: "OFFLINE" })).map((r) => r.id)).toEqual([walkin.id]);
+    expect((await listBookings(pool, v.shopId, { q: "100%_" })).length).toBe(0);
   });
 });

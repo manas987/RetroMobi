@@ -122,6 +122,13 @@ export async function merchantPickup(pool: Pool, input: { merchantUserId: string
       `update bookings set actual_pickup_at = now(), updated_at = now() where id = $1`,
       [input.bookingId],
     );
+    await writeAudit(client, {
+      actorType: "MERCHANT",
+      actorId: input.merchantUserId,
+      action: "booking.handed_over",
+      entityType: "booking",
+      entityId: input.bookingId,
+    });
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -204,6 +211,15 @@ export async function merchantReturn(
       `select id, amount from security_deposits where booking_id = $1`,
       [input.bookingId],
     );
+
+    await writeAudit(client, {
+      actorType: "MERCHANT",
+      actorId: input.merchantUserId,
+      action: "booking.returned",
+      entityType: "booking",
+      entityId: input.bookingId,
+      after: { claim: input.claim, ...(input.claim ? { amount: input.amount, reason: input.reason } : {}) },
+    });
 
     if (!input.claim) {
       if (depositRows.length > 0) {

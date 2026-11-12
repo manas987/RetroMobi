@@ -77,6 +77,8 @@ import {
   ShopNotFoundError,
 } from "../Routes/merchant/Shops/shopsService.ts";
 import {
+  AlreadyMemberError,
+  InviteAlreadyPendingError,
   InviteNotFoundError,
   LastOwnerError,
   MemberNotFoundError,
@@ -378,6 +380,14 @@ export function errorHandler(
   }
   if (err instanceof MemberNotFoundError || err instanceof InviteNotFoundError) {
     res.status(404).json({ error: "not_found", message: err.message });
+    return;
+  }
+  if (err instanceof AlreadyMemberError) {
+    res.status(409).json({ error: "already_member", message: err.message });
+    return;
+  }
+  if (err instanceof InviteAlreadyPendingError) {
+    res.status(409).json({ error: "invite_already_pending", message: err.message });
     return;
   }
   if (err instanceof LastOwnerError) {

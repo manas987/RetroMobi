@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "wouter";
 import { handleSessionExpiry, portalFetch, PortalApiError } from "../../lib/portal";
 import { translate, hasKey, type Lang } from "../../i18n";
 
@@ -42,4 +43,31 @@ export function errorText(lang: Lang, err: unknown): string {
     return translate(lang, `errors.${err.code}`);
   }
   return translate(lang, "errors.generic");
+}
+
+/**
+ * One URL query param as page state (tab, view, open sheet), so links from
+ * other pages land exactly and a refresh keeps the place. Writes replace the
+ * history entry; `null` removes the key.
+ */
+export function useUrlParam<K extends string>(key: string, allowed: readonly K[], fallback: K): [K, (v: K | null) => void] {
+  const [raw, set] = useUrlString(key);
+  const value = raw && (allowed as readonly string[]).includes(raw) ? (raw as K) : fallback;
+  return [value, set];
+}
+
+/** Free-form variant for ids (`?booking=<id>`). */
+export function useUrlString(key: string): [string | null, (v: string | null) => void] {
+  const [params, setParams] = useSearchParams();
+  const set = (v: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (v == null || v === "") next.delete(key);
+        else next.set(key, v);
+        return next;
+      },
+      { replace: true },
+    );
+  return [params.get(key), set];
 }

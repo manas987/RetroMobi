@@ -16,10 +16,7 @@ export async function create(req: Request, res: Response) {
 }
 
 export async function list(req: Request, res: Response) {
-  const tickets = await ticketsService.listTickets(pool, {
-    partyType: "MERCHANT",
-    partyId: req.merchantUserId!,
-  });
+  const tickets = await ticketsService.listMerchantConversations(pool, req.merchantUserId!);
   res.status(200).json({ tickets });
 }
 

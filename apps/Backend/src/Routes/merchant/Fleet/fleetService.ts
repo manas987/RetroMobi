@@ -88,7 +88,7 @@ export async function createVehicle(
 }
 
 /** UNVERIFIED/REJECTED -> PENDING, mirroring the shop's own submit. */
-export async function submitVehicleForVerification(pool: Pool, vehicleId: string) {
+export async function submitVehicleForVerification(pool: Pool, merchantUserId: string, vehicleId: string) {
   const { rows } = await pool.query(
     `update vehicles set verification_status = 'PENDING', updated_at = now()
       where id = $1 and deleted_at is null and verification_status in ('UNVERIFIED', 'REJECTED')
@@ -96,6 +96,13 @@ export async function submitVehicleForVerification(pool: Pool, vehicleId: string
     [vehicleId],
   );
   if (rows.length === 0) throw new VehicleNotFoundError(`vehicle ${vehicleId} not found or not eligible`);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.submitted_for_checking",
+    entityType: "vehicle",
+    entityId: vehicleId,
+  });
   return rows[0];
 }
 
@@ -129,6 +136,18 @@ export async function updateVehicle(
     values,
   );
   if (rows.length === 0) throw new VehicleNotFoundError(`vehicle ${vehicleId} not found`);
+  const changed: Record<string, unknown> = {};
+  if (input.color !== undefined) changed.color = input.color;
+  if (input.manufacturingDate !== undefined) changed.manufacturingDate = input.manufacturingDate;
+  if (input.status !== undefined) changed.status = input.status;
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: input.status !== undefined ? "vehicle.listing_changed" : "vehicle.updated",
+    entityType: "vehicle",
+    entityId: vehicleId,
+    after: input.status !== undefined ? { status: input.status } : changed,
+  });
   return rows[0];
 }
 
@@ -148,6 +167,13 @@ export async function softDeleteVehicle(pool: Pool, merchantUserId: string, vehi
     [vehicleId],
   );
   if (!rowCount) throw new VehicleNotFoundError(`vehicle ${vehicleId} not found`);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.deleted",
+    entityType: "vehicle",
+    entityId: vehicleId,
+  });
 }
 
 export interface RegistrationRecordInput {
@@ -209,6 +235,13 @@ export async function upsertRegistrationRecord(
       input.statusDate ?? null,
     ],
   );
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.registration_updated",
+    entityType: "vehicle",
+    entityId: vehicleId,
+  });
 }
 
 export async function listDocuments(pool: Pool, vehicleId: string) {
@@ -232,6 +265,14 @@ export async function createDocument(
      values ($1, $2, $3, $4, $5, 'PENDING') returning *`,
     [vehicleId, input.type, input.documentNumber ?? null, input.issuedAt ?? null, input.expiresAt ?? null],
   );
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.document_added",
+    entityType: "vehicle",
+    entityId: vehicleId,
+      after: { type: input.type },
+  });
   return rows[0];
 }
 
@@ -266,6 +307,14 @@ export async function attachDocumentFile(pool: Pool, merchantUserId: string, doc
     [storageKey, documentId],
   );
   if (rows.length === 0) throw new VehicleNotFoundError(`document ${documentId} not found`);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.document_uploaded",
+    entityType: "vehicle_document",
+    entityId: documentId,
+    after: { type: rows[0].type },
+  });
   return rows[0];
 }
 
@@ -281,8 +330,16 @@ export async function getDocumentStorageKey(pool: Pool, vehicleId: string, docum
 }
 
 export async function softDeleteDocument(pool: Pool, merchantUserId: string, vehicleId: string, documentId: string) {
-  await requireDocument(pool, vehicleId, documentId);
+  const doc = await requireDocument(pool, vehicleId, documentId);
   await pool.query(`update vehicle_documents set deleted_at = now(), updated_at = now() where id = $1`, [documentId]);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.document_removed",
+    entityType: "vehicle",
+    entityId: vehicleId,
+      after: { type: doc.type },
+  });
 }
 
 export async function listMedia(pool: Pool, vehicleId: string) {
@@ -304,6 +361,13 @@ export async function addMedia(
      values ($1, $2, $3, $4) returning *`,
     [vehicleId, input.storageKey, input.type, input.displayOrder ?? 0],
   );
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.photo_added",
+    entityType: "vehicle",
+    entityId: vehicleId,
+  });
   return rows[0];
 }
 
@@ -337,6 +401,13 @@ export async function softDeleteMedia(pool: Pool, merchantUserId: string, vehicl
     [mediaId, vehicleId],
   );
   if (!rowCount) throw new VehicleNotFoundError(`media ${mediaId} not found on this vehicle`);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.photo_removed",
+    entityType: "vehicle",
+    entityId: vehicleId,
+  });
 }
 
 export async function getMediaStorageKey(pool: Pool, vehicleId: string, mediaId: string): Promise<string> {
@@ -348,7 +419,14 @@ export async function getMediaStorageKey(pool: Pool, vehicleId: string, mediaId:
   return rows[0].storage_key;
 }
 
-export async function setMediaPublication(pool: Pool, vehicleId: string, mediaId: string, published: boolean) {
+// merchantUserId is last and optional so the audit row is written only when a merchant did it.
+export async function setMediaPublication(
+  pool: Pool,
+  vehicleId: string,
+  mediaId: string,
+  published: boolean,
+  merchantUserId?: string,
+) {
   if (published) {
     const key = await getMediaStorageKey(pool, vehicleId, mediaId);
     const prefix = `vehicles/${vehicleId}/media/`;
@@ -363,6 +441,16 @@ export async function setMediaPublication(pool: Pool, vehicleId: string, mediaId
     [mediaId, vehicleId, published],
   );
   if (!rowCount) throw new VehicleNotFoundError(`media ${mediaId} not found on this vehicle`);
+  if (merchantUserId) {
+    await writeAudit(pool, {
+      actorType: "MERCHANT",
+      actorId: merchantUserId,
+      action: "vehicle.photo_visibility",
+      entityType: "vehicle",
+      entityId: vehicleId,
+      after: { published },
+    });
+  }
   return true;
 }
 
@@ -410,6 +498,14 @@ export async function addUnavailability(
     `insert into vehicle_unavailability (vehicle_id, start_at, end_at, reason) values ($1, $2, $3, $4) returning *`,
     [vehicleId, input.startAt, input.endAt, input.reason ?? null],
   );
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.blocked",
+    entityType: "vehicle",
+    entityId: vehicleId,
+      after: { startAt: input.startAt, endAt: input.endAt, reason: input.reason ?? null },
+  });
   return rows[0];
 }
 
@@ -419,6 +515,13 @@ export async function deleteUnavailability(pool: Pool, merchantUserId: string, v
     [blockId, vehicleId],
   );
   if (!rowCount) throw new VehicleNotFoundError(`unavailability block ${blockId} not found on this vehicle`);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "vehicle.unblocked",
+    entityType: "vehicle",
+    entityId: vehicleId,
+  });
 }
 
 export async function assignTracker(

@@ -13,6 +13,7 @@ export default {
   reports: "रिपोर्ट",
   branches: "दुकान की जानकारी",
   documents: "लाइसेंस और कागज़ात",
+  shopAndPapers: "दुकान और कागज़",
   staff: "स्टाफ",
   activity: "गतिविधि",
   collapse: "मेन्यू छोटा करें",

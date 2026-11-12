@@ -34,5 +34,10 @@ router.post(
   validate(InviteMemberSchema),
   controller.invite,
 );
+router.delete(
+  "/shops/:shopId/invites/:inviteId",
+  requirePermission("members:write"),
+  controller.cancelInvite,
+);
 
 export default router;
