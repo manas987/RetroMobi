@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { priceRental } from "../../../lib/pricing.ts";
+import { CONFIRMED_RENTAL_LICENCE, PUBLIC_LISTING_ELIGIBLE, VEHICLE_LICENCE_JOIN } from "../../../lib/vehicleBookingRules.ts";
 
 export class DistanceSortUnavailableError extends Error {}
 export class VehicleNotFoundError extends Error {}
@@ -55,19 +56,27 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
-const VEHICLE_ROW_SELECT = `
+const DATES_AVAILABLE = `not exists (
+  select 1 from bookings b where b.vehicle_id = v.id and b.deleted_at is null
+    and tstzrange(b.scheduled_pickup_at, b.scheduled_return_at) && tstzrange($2::timestamptz, $3::timestamptz)
+) and not exists (
+  select 1 from vehicle_unavailability u where u.vehicle_id = v.id
+    and tstzrange(u.start_at, u.end_at) && tstzrange($2::timestamptz, $3::timestamptz)
+)`;
+
+const vehicleRowSelect = (extra = "") => `
   select v.id as vehicle_id, v.shop_id, v.model_id,
          s.name as shop_name, s.phone as shop_phone, s.address_line1, s.city as shop_city,
          s.rating, s.review_count, s.latitude, s.longitude,
          vp.id as pricing_id, vp.amount, vp.weekend_amount, vp.security_deposit_amount, vp.late_fee_amount,
          m.make, m.model, m.image_key, m.fuel_type, m.engine_cc, m.body_type, m.seating_capacity,
-         sl.licence_number, sl.issuing_authority, sl.expires_at as licence_expires_at
+         case when ${CONFIRMED_RENTAL_LICENCE} then sl.licence_number end as licence_number,
+         sl.issuing_authority, sl.expires_at::text as licence_expires_at ${extra}
     from vehicles v
     join vehicle_pricing vp on vp.vehicle_id = v.id
     join shops s on s.id = v.shop_id
     join vehicle_models m on m.id = v.model_id
-    left join license_vehicles lv on lv.vehicle_id = v.id and lv.removed_at is null
-    left join shop_licenses sl on sl.id = lv.license_id and sl.status = 'ACTIVE' and sl.deleted_at is null
+    ${VEHICLE_LICENCE_JOIN}
 `;
 
 function toLicence(row: any): Licence | null {
@@ -75,7 +84,7 @@ function toLicence(row: any): Licence | null {
   return {
     licenceNumber: row.licence_number,
     issuingAuthority: row.issuing_authority,
-    validUntil: row.licence_expires_at ? row.licence_expires_at.toISOString().slice(0, 10) : null,
+    validUntil: row.licence_expires_at ?? null,
   };
 }
 
@@ -104,7 +113,6 @@ export async function searchVehicles(
     minEngineCc?: number;
     maxEngineCc?: number;
     seatingCapacity?: number;
-    fullyVerified?: boolean;
     sort?: "price" | "rating" | "distance";
     page?: number;
     limit?: number;
@@ -144,23 +152,12 @@ export async function searchVehicles(
   const shopValues = params.shopId ? [params.shopId] : [];
 
   const { rows } = await pool.query(
-    `${VEHICLE_ROW_SELECT}
-      where s.deleted_at is null
-        and v.status = 'ACTIVE'
-        and v.deleted_at is null
+    `${vehicleRowSelect()}
+      where ${PUBLIC_LISTING_ELIGIBLE}
         ${cityClause}
         ${boxClause}
         ${shopClause}
-        and not exists (
-          select 1 from bookings b
-           where b.vehicle_id = v.id and b.deleted_at is null
-             and tstzrange(b.scheduled_pickup_at, b.scheduled_return_at) && tstzrange($2, $3)
-        )
-        and not exists (
-          select 1 from vehicle_unavailability u
-           where u.vehicle_id = v.id
-             and tstzrange(u.start_at, u.end_at) && tstzrange($2, $3)
-        )`,
+        and ${DATES_AVAILABLE}`,
     [params.city ?? null, params.pickupAt, params.returnAt, ...boxValues, ...shopValues],
   );
 
@@ -168,9 +165,9 @@ export async function searchVehicles(
 
   const pricingIds: string[] = rows.map((r) => r.pricing_id);
   const { rows: specialRows } = await pool.query(
-    `select vehicle_pricing_id, amount, weekend_amount, effective_from, effective_until
+    `select vehicle_pricing_id, amount, weekend_amount, effective_from::text, effective_until::text
        from special_pricings
-      where vehicle_pricing_id = any($1) and deleted_at is null`,
+      where vehicle_pricing_id = any($1) and deleted_at is null order by created_at, id`,
     [pricingIds],
   );
   const specialsByPricing = new Map<string, typeof specialRows>();
@@ -198,8 +195,8 @@ export async function searchVehicles(
     const specials = (specialsByPricing.get(row.pricing_id) ?? []).map((s) => ({
       amount: Number(s.amount),
       weekendAmount: Number(s.weekend_amount),
-      effectiveFrom: s.effective_from.toISOString().slice(0, 10),
-      effectiveUntil: s.effective_until.toISOString().slice(0, 10),
+      effectiveFrom: s.effective_from,
+      effectiveUntil: s.effective_until,
     }));
 
     const { days, rentalAmount } = priceRental({
@@ -232,7 +229,6 @@ export async function searchVehicles(
     if (params.minEngineCc != null && (row.engine_cc == null || row.engine_cc < params.minEngineCc)) continue;
     if (params.maxEngineCc != null && (row.engine_cc == null || row.engine_cc > params.maxEngineCc)) continue;
     if (params.seatingCapacity != null && row.seating_capacity !== params.seatingCapacity) continue;
-    if (params.fullyVerified && licence == null) continue;
 
     priceHistogram.push(days[0]!.amount);
 
@@ -330,6 +326,8 @@ export async function searchVehicles(
 
 export interface VehicleDetail {
   vehicleId: string;
+  photoKeys: string[];
+  accessories: { type: string; quantity: number }[];
   modelId: string;
   make: string;
   model: string;
@@ -351,20 +349,51 @@ export interface VehicleDetail {
   securityDeposit: number;
   lateFeeAmount: number;
   licence: Licence | null;
+  listingEligible: boolean;
+  datesAvailable: boolean | null;
+  quote: { pricePerDay: number; rentalAmount: number } | null;
 }
 
 /** A single vehicle's full listing detail, independent of any search window. */
-export async function getVehicleDetail(pool: Pool, vehicleId: string): Promise<VehicleDetail> {
+export async function getVehicleDetail(pool: Pool, vehicleId: string, window?: { pickupAt: Date; returnAt: Date }): Promise<VehicleDetail> {
   const { rows } = await pool.query(
-    `${VEHICLE_ROW_SELECT}
+    `${vehicleRowSelect(`, (${PUBLIC_LISTING_ELIGIBLE}) as listing_eligible,
+      case when $2::timestamptz is not null and $3::timestamptz is not null
+        then ${DATES_AVAILABLE} end as dates_available,
+      array(select vm.storage_key from vehicle_media vm
+        where vm.vehicle_id = v.id and vm.published and vm.deleted_at is null
+        order by vm.display_order, vm.created_at, vm.id) as photo_keys,
+      coalesce((select json_agg(json_build_object('type', a.type, 'quantity', a.quantity) order by a.type)
+        from vehicle_accessories a where a.vehicle_id = v.id and a.status = 'AVAILABLE' and a.quantity > 0),
+        '[]'::json) as accessories`)}
       where v.id = $1 and v.deleted_at is null and s.deleted_at is null`,
-    [vehicleId],
+    [vehicleId, window?.pickupAt ?? null, window?.returnAt ?? null],
   );
   const row = rows[0];
   if (!row) throw new VehicleNotFoundError();
 
+  let quote: VehicleDetail["quote"] = null;
+  if (window && row.listing_eligible) {
+    const { rows: specials } = await pool.query(
+      `select amount, weekend_amount, effective_from::text, effective_until::text
+         from special_pricings where vehicle_pricing_id = $1 and deleted_at is null order by created_at, id`,
+      [row.pricing_id],
+    );
+    const { days, rentalAmount } = priceRental({
+      ...window,
+      pricing: { amount: Number(row.amount), weekendAmount: Number(row.weekend_amount), securityDepositAmount: Number(row.security_deposit_amount) },
+      specialPricings: specials.map((special) => ({
+        amount: Number(special.amount), weekendAmount: Number(special.weekend_amount),
+        effectiveFrom: special.effective_from, effectiveUntil: special.effective_until,
+      })),
+    });
+    quote = { pricePerDay: days[0]!.amount, rentalAmount };
+  }
+
   return {
     vehicleId: row.vehicle_id,
+    photoKeys: row.listing_eligible ? row.photo_keys : [],
+    accessories: row.accessories,
     modelId: row.model_id,
     make: row.make,
     model: row.model,
@@ -386,5 +415,8 @@ export async function getVehicleDetail(pool: Pool, vehicleId: string): Promise<V
     securityDeposit: Number(row.security_deposit_amount),
     lateFeeAmount: Number(row.late_fee_amount),
     licence: toLicence(row),
+    listingEligible: row.listing_eligible,
+    datesAvailable: row.dates_available,
+    quote,
   };
 }

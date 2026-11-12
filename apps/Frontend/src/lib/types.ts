@@ -47,6 +47,8 @@ export interface SearchResult {
 
 export interface VehicleDetail {
   vehicleId: string;
+  photoUrls: string[];
+  accessories: { type: string; quantity: number }[];
   modelId: string;
   make: string;
   model: string;
@@ -72,6 +74,9 @@ export interface VehicleDetail {
   /** paise */
   lateFeeAmount: number;
   licence: Licence | null;
+  listingEligible: boolean;
+  datesAvailable: boolean | null;
+  quote: { pricePerDay: number; rentalAmount: number } | null;
 }
 
 /** Mirrors apps/Backend/src/Routes/user/Shops/shopProfileService.ts exactly. */
@@ -128,7 +133,6 @@ export interface SearchCriteria {
   minEngineCc?: number;
   maxEngineCc?: number;
   seatingCapacity?: number;
-  fullyVerified?: boolean;
   sort: SortKey;
   page: number;
 }

@@ -14,13 +14,21 @@ export const CLEAR_SEARCH_FILTERS: Partial<SearchCriteria> = {
   maxEngineCc: undefined,
   maxDistanceKm: undefined,
   minRating: undefined,
-  fullyVerified: undefined,
   seatingCapacity: undefined,
 };
 
 /** Launch city shown when a page is reached with no city in the URL (e.g. the
  *  header's bare "Browse scooters" link). */
 export const DEFAULT_CITY = "Dehradun";
+
+export function rentalWindowFromSearch(search: string) {
+  const params = new URLSearchParams(search);
+  const pickupAt = params.get("pickupAt");
+  const returnAt = params.get("returnAt");
+  if (!pickupAt || !returnAt) return null;
+  const duration = Date.parse(returnAt) - Date.parse(pickupAt);
+  return duration > 0 && duration <= 365 * 86_400_000 ? { pickupAt, returnAt } : null;
+}
 
 /** Default window: Rishikesh demand is same-day, so today 10am -> today 10pm. */
 export function defaultWindow(): { pickupAt: string; returnAt: string } {
@@ -73,8 +81,6 @@ export function parseSearchParams(search: string): SearchCriteria {
     minEngineCc: num(p.get("minEngineCc")),
     maxEngineCc: num(p.get("maxEngineCc")),
     seatingCapacity: num(p.get("seatingCapacity")),
-    // Only ever written as "true" — "false" would be parsed as truthy upstream.
-    fullyVerified: p.get("fullyVerified") === "true" ? true : undefined,
     sort: sort && SORTS.includes(sort) ? sort : "price",
     page: num(p.get("page")) ?? 1,
   };
@@ -101,7 +107,6 @@ export function toSearchParams(c: Partial<SearchCriteria>): string {
   put("minEngineCc", c.minEngineCc);
   put("maxEngineCc", c.maxEngineCc);
   put("seatingCapacity", c.seatingCapacity);
-  put("fullyVerified", c.fullyVerified);
   if (c.sort && c.sort !== "price") p.set("sort", c.sort);
   if (c.page && c.page > 1) p.set("page", String(c.page));
   return p.toString();
@@ -157,7 +162,5 @@ export function activeFilters(c: SearchCriteria): { key: string; label: string; 
       label: `${c.minEngineCc ?? 0}–${c.maxEngineCc ?? "∞"} cc`,
       clear: { minEngineCc: undefined, maxEngineCc: undefined },
     });
-  if (c.fullyVerified)
-    out.push({ key: "fullyVerified", label: "Fully verified only", clear: { fullyVerified: undefined } });
   return out;
 }

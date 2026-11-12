@@ -10,6 +10,8 @@ import {
   ConfirmUploadSchema,
   CreateDocumentSchema,
   CreateVehicleSchema,
+  MediaParamsSchema,
+  PublishMediaSchema,
   RegistrationRecordSchema,
   ReorderMediaSchema,
   SetAccessorySchema,
@@ -99,6 +101,13 @@ router.patch(
   requirePermission("fleet:write"),
   validate(ReorderMediaSchema),
   controller.reorderMedia,
+);
+router.patch(
+  "/vehicles/:vehicleId/media/:mediaId",
+  validate(MediaParamsSchema, "params"),
+  requirePermission("fleet:write"),
+  validate(PublishMediaSchema),
+  controller.publishMedia,
 );
 router.delete(
   "/vehicles/:vehicleId/media/:mediaId",

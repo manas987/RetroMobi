@@ -166,16 +166,6 @@ export function FilterSheet({
         )}
       </Section>
 
-      <Section title="Verification">
-        <ChipRow>
-          <Chip
-            label="Verified vehicles only"
-            selected={!!criteria.fullyVerified}
-            onClick={() => onChange({ fullyVerified: criteria.fullyVerified ? undefined : true })}
-          />
-        </ChipRow>
-      </Section>
-
       {showBodyTypeGroup && (
         <Section title="Vehicle type">
           <ChipRow>

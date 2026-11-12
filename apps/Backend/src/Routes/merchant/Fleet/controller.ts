@@ -122,7 +122,7 @@ export async function listMedia(req: Request, res: Response) {
 }
 
 export async function uploadMedia(req: Request, res: Response) {
-  const key = `vehicles/${pathParam(req, "vehicleId")}/media/${Date.now()}`;
+  const key = `vehicles/${pathParam(req, "vehicleId").toLowerCase()}/media/${crypto.randomUUID()}`;
   const result = await presignUpload(key, req.body.contentType);
   res.status(200).json(result);
 }
@@ -149,6 +149,20 @@ export async function removeMedia(req: Request, res: Response) {
     pathParam(req, "vehicleId"),
     pathParam(req, "mediaId"),
   );
+  res.status(204).send();
+}
+
+export async function publishMedia(req: Request, res: Response) {
+  const updated = await fleetService.setMediaPublication(
+    pool,
+    pathParam(req, "vehicleId").toLowerCase(),
+    pathParam(req, "mediaId"),
+    req.body.published,
+  );
+  if (!updated) {
+    res.status(400).json({ error: "invalid_photo", message: "Upload a JPEG, PNG, WebP, AVIF, or GIF to publish this photo." });
+    return;
+  }
   res.status(204).send();
 }
 

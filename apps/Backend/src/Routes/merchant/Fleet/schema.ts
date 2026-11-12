@@ -62,6 +62,9 @@ export const ReorderMediaSchema = z.object({
   order: z.array(z.object({ id: z.string().uuid(), displayOrder: z.number().int() })),
 });
 
+export const MediaParamsSchema = z.object({ vehicleId: z.uuid(), mediaId: z.uuid() });
+export const PublishMediaSchema = z.object({ published: z.boolean() });
+
 export const SetAccessorySchema = z.object({
   type: z.string().min(1),
   quantity: z.number().int().positive(),

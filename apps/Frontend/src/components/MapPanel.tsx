@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import L from "leaflet";
-import { Plus, Minus } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { rupees } from "../lib/format";
 import type { SearchResult } from "../lib/types";
@@ -10,6 +9,7 @@ import { mapShops } from "../lib/mapShops";
 import type { GeolocationController } from "../lib/useGeolocation";
 import { MapLocationControl } from "./MapLocationControl";
 import { MapShopPreview } from "./MapShopPreview";
+import { MapZoomControls, mapControlButtonClass, mapControlShadowClass } from "./MapZoomControls";
 
 /** Uttarakhand — centres the map even before any shop is plotted. */
 const DEFAULT_CENTER: L.LatLngTuple = [30.1, 78.4];
@@ -173,7 +173,7 @@ export function MapPanel({
           <button
             type="button"
             onClick={onToggleFullscreen}
-            className={`${CHROME} ${CHROME_SHADOW} w-11 h-11 rounded-full`}
+            className={`${mapControlButtonClass} ${mapControlShadowClass} rounded-full`}
             aria-label={fullscreen ? "Collapse map" : "Expand map"}
             title={fullscreen ? "Collapse map" : "Expand map"}
           >
@@ -181,36 +181,14 @@ export function MapPanel({
           </button>
         )}
 
-        <div className={`rounded-full bg-surface ${CHROME_SHADOW} overflow-hidden flex flex-col divide-y divide-line`}>
-          <MapLocationControl geo={geo} className={`${CHROME} w-11 h-11`}
+        <MapZoomControls onZoomIn={() => mapRef.current?.zoomIn()} onZoomOut={() => mapRef.current?.zoomOut()}>
+          <MapLocationControl geo={geo} className={mapControlButtonClass}
             onLocate={({ lat, lng }) => mapRef.current?.setView([lat, lng], 14)} />
-          <button
-            type="button"
-            onClick={() => mapRef.current?.zoomIn()}
-            className={`${CHROME} w-11 h-11`}
-            aria-label="Zoom in"
-          >
-            <Plus className="h-[18px] w-[18px]" />
-          </button>
-          <button
-            type="button"
-            onClick={() => mapRef.current?.zoomOut()}
-            className={`${CHROME} w-11 h-11`}
-            aria-label="Zoom out"
-          >
-            <Minus className="h-[18px] w-[18px]" />
-          </button>
-        </div>
+        </MapZoomControls>
       </div>
     </div>
   );
 }
-
-/* Shared by every control in the stack. Rounding and shadow belong to the
-   group — the pill carries one for all three of its buttons — so this is just
-   the surface. */
-const CHROME = "bg-surface text-ink flex items-center justify-center hover:bg-surface-3 transition-colors";
-const CHROME_SHADOW = "shadow-[0_2px_8px_rgba(18,22,26,0.18)]";
 
 function ExpandIcon() {
   return (

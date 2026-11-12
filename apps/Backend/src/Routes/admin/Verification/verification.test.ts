@@ -18,8 +18,8 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("verification is never a gate", () => {
-  test("rejecting a shop changes verification_status but leaves it OPEN and searchable", async () => {
+describe("verification and operational status", () => {
+  test("rejecting a shop changes verification_status but leaves its operational status OPEN", async () => {
     const merchant = await createMerchant(pool);
     const shop = await createShop(pool, merchant.id, {
       name: "A",

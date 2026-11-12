@@ -61,19 +61,19 @@ export function DateRangeField({
       <span className="flex-1 min-w-0 min-[900px]:min-w-[8.75rem] flex flex-col gap-0.5">
         <span className="text-[11px] uppercase tracking-wide text-ink-3">Pick-up</span>
         <span className="text-ink font-medium truncate">
-          {day(pickupDate)} · {formatTime(pickupTime)}
+          {day(pickupDate)} · <span className="whitespace-nowrap">{formatTime(pickupTime)}</span>
         </span>
       </span>
       <span className="w-px bg-line mx-3 shrink-0" />
       <span className="flex-1 min-w-0 min-[900px]:min-w-[8.75rem] flex flex-col gap-0.5">
         <span className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-ink-3">
           Return
-          <span className="normal-case tracking-normal text-[11px] px-1.5 py-px rounded-full bg-surface-2 text-ink-2">
+          <span className="normal-case tracking-normal text-[11px] px-1.5 rounded-full bg-surface-2 text-ink-2">
             {formatDuration(pickupDate, returnDate)}
           </span>
         </span>
         <span className="text-ink font-medium truncate">
-          {day(returnDate)} · {formatTime(returnTime)}
+          {day(returnDate)} · <span className="whitespace-nowrap">{formatTime(returnTime)}</span>
         </span>
       </span>
     </button>

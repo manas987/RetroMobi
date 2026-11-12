@@ -21,8 +21,8 @@ async function createShop(merchantId: string, opts: {
   name: string; city: string; lat: number; lng: number; rating?: number; reviewCount?: number;
 }) {
   const { rows } = await pool.query(
-    `insert into shops (merchant_user_id, name, address_line1, city, state, pincode, latitude, longitude, gstin, rating, review_count)
-     values ($1, $2, $3, $4, 'Uttarakhand', '248001', $5, $6, '05AAAAA0000A1Z5', $7, $8)
+    `insert into shops (merchant_user_id, name, address_line1, city, state, pincode, latitude, longitude, gstin, rating, review_count, verification_status)
+     values ($1, $2, $3, $4, 'Uttarakhand', '248001', $5, $6, '05AAAAA0000A1Z5', $7, $8, 'VERIFIED')
      returning id`,
     [merchantId, opts.name, `${1 + (seq % 90)} Mall Road`, opts.city, opts.lat, opts.lng, opts.rating ?? null, opts.reviewCount ?? 0],
   );
@@ -74,8 +74,9 @@ async function licenseVehicles(merchantId: string, vehicleIds: string[]) {
   const licenseId = rows[0].id as string;
   for (const vehicleId of vehicleIds) {
     await pool.query(
-      `insert into license_vehicles (license_id, vehicle_id, registration_number) values ($1, $2, $3)`,
-      [licenseId, vehicleId, reg()],
+      `insert into license_vehicles (license_id, vehicle_id, registration_number)
+       select $1, id, registration_number from vehicles where id = $2`,
+      [licenseId, vehicleId],
     );
   }
 }

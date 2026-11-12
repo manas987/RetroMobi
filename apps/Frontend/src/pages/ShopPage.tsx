@@ -95,7 +95,7 @@ export function ShopPage() {
         {shop && <ShopHeader shop={shop} />}
 
         <section className="mt-10">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
             <div>
               <h2 className="text-lg font-semibold text-ink">
                 Vehicles at {shop?.name ?? "this shop"}
@@ -106,11 +106,11 @@ export function ShopPage() {
                   : !failed && data ? `${data.total} available for these dates` : null}
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="rounded-row border border-line-strong px-3 py-2 flex min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex h-12 min-w-0 items-center rounded-full border border-line-strong bg-surface px-3.5 text-sm transition-colors hover:bg-surface-3 has-[:focus-visible]:outline">
                 <DateRangeField
                   ref={datesRef}
-                  label="Dates"
+                  label=""
                   pickupDate={pickup.date}
                   pickupTime={pickup.time}
                   returnDate={ret.date}
@@ -124,7 +124,7 @@ export function ShopPage() {
                 />
               </div>
               <Select value={sort} onValueChange={(v) => update({ sort: v as SortKey })}>
-                <SelectTrigger className="min-w-[150px]">
+                <SelectTrigger className="h-12 min-w-[150px] font-medium focus-visible:outline">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -284,8 +284,8 @@ function ShopHeader({ shop }: { shop: ShopProfile }) {
       </div>
 
       {shop.latitude != null && shop.longitude != null && (
-        <div className="w-full rounded-panel overflow-hidden border border-line">
-          <ShopLocationMap latitude={shop.latitude} longitude={shop.longitude} label={shop.name} />
+        <div className="relative w-full lg:self-stretch">
+          <ShopLocationMap latitude={shop.latitude} longitude={shop.longitude} label={shop.name} fill />
         </div>
       )}
     </div>

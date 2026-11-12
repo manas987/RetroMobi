@@ -28,7 +28,7 @@ test("fallback galleries contain only the matching model", () => {
   expect(honda[0]).toContain("honda-activa-6g");
   expect(ather[0]).toContain("ather-450x");
   expect(honda).not.toEqual(ather);
-  expect(stockPhotos("TVS", "Jupiter 125")).toEqual([]);
-  expect(stockPhotos("Suzuki", "Access 125")).toEqual([]);
+  expect(new Set(stockPhotos("TVS", "Jupiter 125")).size).toBe(2);
+  expect(new Set(stockPhotos("Suzuki", "Access 125")).size).toBe(2);
   expect(stockPhotos("Unknown", "Model")).toEqual([]);
 });

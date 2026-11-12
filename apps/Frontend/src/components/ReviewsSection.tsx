@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { EmptyState, SkeletonRows } from "./ContentFeedback";
 import { SearchFailure } from "./SearchFeedback";
+import { reviewTimeLabel } from "../lib/format";
 import { usePortalSession, usePortalQuery, portalFetch, decodeJwtSubject, PortalApiError, type Row } from "../lib/portal";
 
 async function fetchShopReviews(shopId: string): Promise<{ reviews: Row[] }> {
@@ -10,23 +11,15 @@ async function fetchShopReviews(shopId: string): Promise<{ reviews: Row[] }> {
   return res.json();
 }
 
-/** Shop-level reviews (RetroMobi reviews shops, not individual vehicles) —
- *  public list, plus a "leave a review" form for a signed-in customer whose
- *  own booking of this vehicle has actually been collected. That's the exact
- *  qualification the backend enforces (reviewsService.createReview requires
- *  a booking with actual_pickup_at set, owned by the caller). */
-/** `vehicleId` scopes "can I review this?" to the vehicle actually being
- *  viewed. Omit it on a shop page: reviews are shop-level, so any picked-up
- *  booking at this shop earns the right to write one. */
+/** A collected booking at the shop earns one review. */
 export function ReviewsSection({
   shopId,
   shopName,
-  vehicleId,
 }: {
   shopId: string;
   shopName: string;
-  vehicleId?: string;
 }) {
+  const [revision, setRevision] = useState(0);
   const queryClient = useQueryClient();
   const queryKey = ["shop-reviews", shopId];
   const query = useQuery({
@@ -35,22 +28,22 @@ export function ReviewsSection({
   });
   const { data } = query;
   const reviews = data?.reviews ?? [];
-  const refetch = () => queryClient.invalidateQueries({ queryKey });
+  const refetch = () => {
+    setRevision((value) => value + 1);
+    void queryClient.invalidateQueries({ queryKey });
+  };
 
   const { session } = usePortalSession("user");
   const myUserId = session ? decodeJwtSubject(session.accessToken) : null;
-  const myReview = reviews.find((r) => r.user_id === myUserId);
-
-  const { data: bookingsRes } = usePortalQuery<{ bookings: Row[] }>("user", "/bookings", session?.accessToken);
+  const { data: bookingsRes } = usePortalQuery<{ bookings: Row[] }>("user", `/bookings?r=${revision}`, session?.accessToken);
   const eligibleBooking = (bookingsRes?.bookings ?? []).find(
-    (b) =>
-      (vehicleId ? b.vehicle_id === vehicleId : b.shop_id === shopId) && b.actual_pickup_at != null,
+    (b) => b.shop_id === shopId && b.actual_pickup_at != null && !b.deleted_at && !b.has_review,
   );
 
   return (
     <section className="mt-8">
-      <h2 className="flex items-center gap-2 font-semibold text-ink mb-3">
-        <StarIcon /> Reviews for {shopName}
+      <h2 className="font-semibold text-ink mb-3">
+        Reviews for {shopName}
       </h2>
 
       {query.isPending && <SkeletonRows label="Loading reviews" detail />}
@@ -61,29 +54,41 @@ export function ReviewsSection({
       {reviews.length > 0 && (
         <div className="rounded-panel border border-line divide-y divide-line">
           {reviews.map((r) =>
-            r.id === myReview?.id && session ? (
+            myUserId && r.user_id === myUserId && session ? (
               <MyReviewRow key={String(r.id)} review={r} token={session.accessToken} onChanged={refetch} />
             ) : (
-              <div key={String(r.id)} className="px-5 py-4">
-                <div className="flex items-center gap-1.5 mb-1">
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <StarIcon key={i} filled={i < Number(r.rating)} />
-                  ))}
-                  <span className="text-xs text-ink-4 ml-1">
-                    {new Date(String(r.created_at)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                  </span>
-                </div>
-                {r.comment ? <p className="text-sm text-ink-2">{String(r.comment)}</p> : null}
-              </div>
+              <div key={String(r.id)} className="px-4 py-3.5 sm:px-5"><ReviewContent review={r} /></div>
             ),
           )}
         </div>
       )}
 
-      {data && session && eligibleBooking && !myReview && (
-        <LeaveReviewForm bookingId={String(eligibleBooking.id)} token={session.accessToken} onPosted={refetch} />
+      {data && session && eligibleBooking && (
+        <LeaveReviewForm key={String(eligibleBooking.id)} bookingId={String(eligibleBooking.id)} token={session.accessToken} onPosted={refetch} />
       )}
     </section>
+  );
+}
+
+function ReviewContent({ review, actions }: { review: Row; actions?: ReactNode }) {
+  const name = typeof review.reviewer_name === "string" && review.reviewer_name.trim() || "RetroMobi rider";
+  const postedAt = String(review.created_at);
+  const time = reviewTimeLabel(postedAt);
+  const rating = Number(review.rating);
+  return (
+    <>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <p className="text-sm font-semibold text-ink">{name}</p>
+          {time && <time className="text-xs text-ink-2" dateTime={postedAt}>{time}</time>}
+        </div>
+        {actions}
+      </div>
+      <div role="img" aria-label={`${rating} out of 5 stars`} className="mt-1.5 flex items-center gap-0.5">
+        {Array.from({ length: 5 }, (_, index) => <StarIcon key={index} filled={index < rating} />)}
+      </div>
+      {review.comment ? <p className="mt-1.5 break-words text-sm leading-relaxed text-ink-2">{String(review.comment)}</p> : null}
+    </>
   );
 }
 
@@ -150,15 +155,9 @@ function MyReviewRow({ review: r, token, onChanged }: { review: Row; token: stri
   }
 
   return (
-    <div className="px-5 py-4 bg-surface-2">
+    <div className="px-4 py-3.5 sm:px-5 bg-surface-2">
       {error && <p className="mb-2 text-sm text-danger bg-danger-soft rounded-row px-3 py-2">{error}</p>}
-      <div className="flex items-center justify-between gap-3 mb-1">
-        <div className="flex items-center gap-1.5">
-          {Array.from({ length: 5 }, (_, i) => (
-            <StarIcon key={i} filled={i < Number(r.rating)} />
-          ))}
-          <span className="text-xs text-ink-4 ml-1">Your review</span>
-        </div>
+      <ReviewContent review={r} actions={
         <div className="flex items-center gap-3 text-xs font-medium">
           <button type="button" onClick={() => setEditing(true)} className="text-ink hover:underline">
             Edit
@@ -167,8 +166,7 @@ function MyReviewRow({ review: r, token, onChanged }: { review: Row; token: stri
             Delete
           </button>
         </div>
-      </div>
-      {r.comment ? <p className="text-sm text-ink-2">{String(r.comment)}</p> : null}
+      } />
     </div>
   );
 }
@@ -210,7 +208,7 @@ function LeaveReviewForm({ bookingId, token, onPosted }: { bookingId: string; to
 
   return (
     <div className="mt-4 rounded-panel border border-line p-5">
-      <p className="text-sm font-medium text-ink mb-3">You collected this scooter — leave a review</p>
+      <p className="text-sm font-medium text-ink mb-3">You rented from this shop. Leave a review.</p>
       {error && <p className="mb-3 text-sm text-danger bg-danger-soft rounded-row px-3 py-2">{error}</p>}
       <div className="flex items-center gap-1 mb-3">
         {Array.from({ length: 5 }, (_, i) => (

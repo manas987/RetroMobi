@@ -45,7 +45,10 @@ export function Checkout() {
     session?.accessToken,
   );
 
-  const win = defaultWindow();
+  const lastDatedItem = items.findLast((item) => item.pickupAt && item.returnAt);
+  const win = lastDatedItem?.pickupAt && lastDatedItem.returnAt
+    ? { pickupAt: lastDatedItem.pickupAt, returnAt: lastDatedItem.returnAt }
+    : defaultWindow();
   const initPickup = splitIso(win.pickupAt);
   const initReturn = splitIso(win.returnAt);
   const [pickupDate, setPickupDate] = useState(initPickup.date);

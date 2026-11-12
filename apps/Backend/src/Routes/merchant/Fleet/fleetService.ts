@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
+import { storedContentType } from "../../../lib/storage.ts";
 import type { TrackerClient } from "../../../providers/tracker.ts";
 
 export class VehicleNotFoundError extends Error {}
@@ -333,6 +334,24 @@ export async function getMediaStorageKey(pool: Pool, vehicleId: string, mediaId:
   );
   if (rows.length === 0) throw new VehicleNotFoundError(`media ${mediaId} not found on this vehicle`);
   return rows[0].storage_key;
+}
+
+export async function setMediaPublication(pool: Pool, vehicleId: string, mediaId: string, published: boolean) {
+  if (published) {
+    const key = await getMediaStorageKey(pool, vehicleId, mediaId);
+    const prefix = `vehicles/${vehicleId}/media/`;
+    if (!key.startsWith(prefix) || !/^(?:\d{13}|[0-9a-f-]{36})$/.test(key.slice(prefix.length))) return false;
+    const contentType = await storedContentType(key);
+    if (!contentType || !/^image\/(jpeg|png|webp|avif|gif)$/.test(contentType)) return false;
+  }
+
+  const { rowCount } = await pool.query(
+    `update vehicle_media set published = $3
+      where id = $1 and vehicle_id = $2 and deleted_at is null and type = 'IMAGE'`,
+    [mediaId, vehicleId, published],
+  );
+  if (!rowCount) throw new VehicleNotFoundError(`media ${mediaId} not found on this vehicle`);
+  return true;
 }
 
 export async function listAccessories(pool: Pool, vehicleId: string) {

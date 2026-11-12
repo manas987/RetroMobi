@@ -186,9 +186,8 @@ export interface Decision {
   note?: string;
 }
 
-// Verification is never a gate: approving or rejecting must not change
-// vehicles.status, must not soft-delete anything, and must not touch
-// bookability. The badge is a trust signal; a rejected shop stays searchable.
+// A review updates verification status. Public search and booking read that status
+// independently of the merchant's ACTIVE/INACTIVE listing switch.
 async function decide(
   client: PoolClient,
   table: string,

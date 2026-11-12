@@ -135,6 +135,7 @@ async function main() {
   const customerId = await upsertCustomer();
 
   const shopId = await ensureMerchantShop(merchantId);
+  await pool.query("update shops set verification_status = 'VERIFIED' where id = $1", [shopId]);
   const fleet = await ensureFleet(shopId);
   const [vehicleA, vehicleB, vehicleC, vehicleD] = [fleet[0]!, fleet[1]!, fleet[2]!, fleet[3]!];
 

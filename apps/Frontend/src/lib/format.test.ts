@@ -1,5 +1,15 @@
 import { test, expect } from "bun:test";
-import { dateLabel, enumLabel, rupees } from "./format";
+import { dateLabel, enumLabel, reviewTimeLabel, rupees } from "./format";
+
+test("reviews use relative times today, Yesterday, and the date for older posts", () => {
+  const now = new Date("2026-11-12T08:00:00+05:30");
+  expect(reviewTimeLabel("2026-11-12T07:59:45+05:30", now)).toBe("Just now");
+  expect(reviewTimeLabel("2026-11-12T07:52:00+05:30", now)).toBe("8 minutes ago");
+  expect(reviewTimeLabel("2026-11-12T05:30:00+05:30", now)).toBe("2 hours ago");
+  expect(reviewTimeLabel("2026-11-11T23:55:00+05:30", now)).toBe("Yesterday");
+  expect(reviewTimeLabel("2026-11-10T23:55:00+05:30", now)).toBe("10 Nov 2026");
+  expect(reviewTimeLabel("invalid", now)).toBeNull();
+});
 
 test("enumLabel turns a DB enum into a sentence", () => {
   expect(enumLabel("BANK_PROOF")).toBe("Bank proof");

@@ -28,6 +28,21 @@ function istMidnight(d: Date): number {
   return Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate());
 }
 
+export function reviewTimeLabel(iso: string, now = new Date()): string | null {
+  const posted = new Date(iso);
+  if (Number.isNaN(posted.getTime())) return null;
+  const days = (istMidnight(now) - istMidnight(posted)) / DAY;
+  if (days > 1) {
+    return posted.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+  }
+  if (days === 1) return "Yesterday";
+  const minutes = Math.max(0, Math.floor((now.getTime() - posted.getTime()) / 60_000));
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+}
+
 export function dayLabel(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", {
     day: "numeric",

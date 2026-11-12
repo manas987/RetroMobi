@@ -49,6 +49,29 @@ async function customerWithRider(opts: { dlExpiresOn?: string; verified?: boolea
 }
 
 describe("createHold", () => {
+  test("rejects unverified vehicles, unverified shops and missing or expired licences even without Browse", async () => {
+    const { userId, riderId } = await customerWithRider();
+    const window = futureWindow(25);
+    const pending = await createBookableVehicle(pool);
+    const rejectedShop = await createBookableVehicle(pool);
+    const unlicensed = await createBookableVehicle(pool, { withLicence: false });
+    const expired = await createBookableVehicle(pool, { withLicence: false });
+    await pool.query("update vehicles set verification_status = 'PENDING' where id = $1", [pending.id]);
+    await pool.query("update shops set verification_status = 'REJECTED' where id = $1", [rejectedShop.shopId]);
+    await pool.query(
+      `with licence as (
+        insert into shop_licenses (merchant_user_id, licence_number, status)
+        select merchant_user_id, 'EXPIRED-HOLD-TEST', 'EXPIRED' from shops where id = $1 returning id
+      ) insert into license_vehicles (license_id, vehicle_id, registration_number)
+        select licence.id, v.id, v.registration_number from licence cross join vehicles v where v.id = $2`,
+      [expired.shopId, expired.id],
+    );
+    for (const vehicle of [pending, rejectedShop, unlicensed, expired]) {
+      await expect(createHold(pool, { userId, items: [{ vehicleId: vehicle.id, riderId }], ...window }))
+        .rejects.toBeInstanceOf(VehicleUnavailableError);
+    }
+  });
+
   test("creates a group with one booking per vehicle, all HOLD", async () => {
     const { userId, riderId } = await customerWithRider();
     const rider2 = await createRider(pool, userId);

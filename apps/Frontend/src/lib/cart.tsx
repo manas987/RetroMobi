@@ -8,6 +8,8 @@ export interface CartItem {
   shopName: string;
   /** paise, per day, per unit */
   pricePerDay: number;
+  pickupAt?: string;
+  returnAt?: string;
   /** one real vehicleId per unit requested — length is this line's qty */
   vehicleIds: string[];
   /** full pool this line's ids were drawn from — lets the cart drawer increase qty without re-fetching */
@@ -21,6 +23,8 @@ export interface CartLine {
   model: string;
   shopName: string;
   pricePerDay: number;
+  pickupAt?: string;
+  returnAt?: string;
 }
 
 // Matches the backend's CreateHoldSchema ("items" array, max 5) — now counted
@@ -46,7 +50,6 @@ function readStoredCart(): CartItem[] {
 interface CartContextValue {
   items: CartItem[];
   totalUnits: number;
-  qtyFor: (modelId: string, shopId: string) => number;
   /** Sets this line's qty (0 removes it). `availableVehicleIds` is the pool to
    *  pull unit ids from when increasing — pass the line's own current ids
    *  when only decreasing/removing. */
@@ -80,8 +83,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => ({
       items,
       totalUnits,
-      qtyFor: (modelId, shopId) =>
-        items.find((i) => i.modelId === modelId && i.shopId === shopId)?.vehicleIds.length ?? 0,
       setQty: (line, qty, availableVehicleIds) => {
         const unitsInOtherLines = items
           .filter((i) => !(i.modelId === line.modelId && i.shopId === line.shopId))

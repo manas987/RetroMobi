@@ -57,7 +57,7 @@ export async function createUser(pool: Pool): Promise<{ id: string; phone: strin
  * pass, which is the whole point of it.
  */
 export async function createRider(
-  pool: Pool,
+  pool: Pick<Pool, "query">,
   userId: string,
   opts: {
     dlExpiresOn?: string | null;
@@ -137,8 +137,8 @@ export async function createShop(
   // would quietly change what the payment tests are asserting.
   const gstin = opts.gstin === undefined ? "05AAAAA0000A1Z5" : opts.gstin;
   const { rows } = await pool.query(
-    `insert into shops (merchant_user_id, name, address_line1, city, state, pincode, latitude, longitude, gstin)
-     values ($1, $2, '1 Test Road', $3, $4, '248001', $5, $6, $7)
+    `insert into shops (merchant_user_id, name, address_line1, city, state, pincode, latitude, longitude, gstin, verification_status)
+     values ($1, $2, '1 Test Road', $3, $4, '248001', $5, $6, $7, 'VERIFIED')
      returning id, city`,
     [
       merchantUserId,
@@ -180,6 +180,7 @@ export async function createBookableVehicle(
     amount?: number;
     weekendAmount?: number;
     depositAmount?: number;
+    withLicence?: boolean;
   } = {},
 ): Promise<{ id: string; shopId: string; modelId: string }> {
   let shopId = opts.shopId;
@@ -190,8 +191,8 @@ export async function createBookableVehicle(
   const modelId = opts.modelId ?? (await createModel(pool)).id;
 
   const { rows } = await pool.query(
-    `insert into vehicles (shop_id, model_id, registration_number, status)
-     values ($1, $2, $3, $4) returning id`,
+    `insert into vehicles (shop_id, model_id, registration_number, status, verification_status)
+     values ($1, $2, $3, $4, 'VERIFIED') returning id`,
     [shopId, modelId, uniqueRegistration(), opts.status ?? "ACTIVE"],
   );
   const vehicleId = rows[0].id;
@@ -201,6 +202,19 @@ export async function createBookableVehicle(
      values ($1, $2, $3, $4)`,
     [vehicleId, opts.amount ?? 45_000, opts.weekendAmount ?? 60_000, opts.depositAmount ?? 200_000],
   );
+
+  if (opts.withLicence !== false) {
+    await pool.query(
+      `with licence as (
+         insert into shop_licenses (merchant_user_id, licence_number, status, expires_at)
+         select merchant_user_id, 'TEST-' || $1::text, 'ACTIVE', current_date + interval '10 years'
+           from shops where id = $2 returning id
+       )
+       insert into license_vehicles (license_id, vehicle_id, registration_number)
+       select licence.id, v.id, v.registration_number from licence cross join vehicles v where v.id = $1::uuid`,
+      [vehicleId, shopId],
+    );
+  }
 
   return { id: vehicleId, shopId, modelId };
 }

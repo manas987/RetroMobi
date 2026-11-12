@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { PUBLIC_LISTING_ELIGIBLE, VEHICLE_LICENCE_JOIN } from "../../../lib/vehicleBookingRules.ts";
 import { ShopNotFoundError } from "../../merchant/Shops/shopsService.ts";
 
 export interface ShopHours {
@@ -70,16 +71,17 @@ export async function getShopProfile(pool: Pool, shopId: string): Promise<ShopPr
         order by sl.expires_at nulls last`,
       [shopId],
     ),
-    // Only ACTIVE vehicles: a shop page that advertises a type it has taken
-    // off the road sends the visitor into an empty filter.
     pool.query(
       `select distinct m.body_type
          from vehicles v
+         join shops s on s.id = v.shop_id
          join vehicle_models m on m.id = v.model_id
-        where v.shop_id = $1 and v.status = 'ACTIVE' and v.deleted_at is null
+         join vehicle_pricing vp on vp.vehicle_id = v.id
+         ${VEHICLE_LICENCE_JOIN}
+        where v.shop_id = $1 and ${PUBLIC_LISTING_ELIGIBLE}
           and m.body_type is not null
         order by m.body_type`,
-      [shopId],
+      [shopId, null, null],
     ),
   ]);
 

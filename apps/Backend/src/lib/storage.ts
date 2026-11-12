@@ -2,6 +2,7 @@ import {
   S3Client,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -53,6 +54,19 @@ export async function presignDownload(key: string, expiresIn = 300): Promise<str
   const { client, bucket } = config;
   const command = new GetObjectCommand({ Bucket: bucket, Key: key });
   return getSignedUrl(client, command, { expiresIn });
+}
+
+export async function storedContentType(key: string): Promise<string | null> {
+  const config = getClient();
+  if (!config) return null;
+  const { client, bucket } = config;
+  try {
+    const object = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return object.ContentType ?? null;
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFound") return null;
+    throw error;
+  }
 }
 
 /**

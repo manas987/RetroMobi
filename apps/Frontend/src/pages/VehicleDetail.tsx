@@ -1,5 +1,6 @@
-import { Link, useParams } from "wouter";
-import { ArrowUpRight, Check } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Link, useLocation, useParams, useSearch } from "wouter";
+import { ArrowUpRight, Check, ChevronLeft, ChevronRight, ClipboardList } from "lucide-react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock } from "../components/ContentFeedback";
@@ -7,28 +8,79 @@ import { SearchFailure } from "../components/SearchFeedback";
 import { ShopLocationMap } from "../components/ShopLocationMap";
 import { ReviewsSection } from "../components/ReviewsSection";
 import { ShareButton } from "../components/ShareButton";
+import { DateRangeField } from "../components/DateRangeField";
+import { combine, splitIso } from "../components/DateTimeField";
 import { ApiError, useVehicleDetail } from "../lib/api";
 import { useCart } from "../lib/cart";
-import { rupees } from "../lib/format";
+import { dateLabel, enumLabel, rupees } from "../lib/format";
+import { formatDateSummary } from "../lib/dateRange";
+import { defaultWindow, rentalWindowFromSearch, toIsoWithOffset } from "../lib/searchParams";
+import { useModelImage } from "../lib/useModelImage";
+import { stockPhotos } from "../lib/stockPhoto";
+import type { VehicleDetail as Listing } from "../lib/types";
 
 export function VehicleDetail() {
   const { id } = useParams<{ id: string }>();
-  const query = useVehicleDetail(id);
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const [datesError, setDatesError] = useState<string | null>(null);
+  const rentalWindow = rentalWindowFromSearch(search) ?? defaultWindow();
+  const pickup = splitIso(rentalWindow.pickupAt);
+  const ret = splitIso(rentalWindow.returnAt);
+  const query = useVehicleDetail(id, rentalWindow);
   const { data: v, isLoading, error } = query;
-  const unavailable = error instanceof ApiError && error.status === 404;
-  const { qtyFor, setQty, openDrawer } = useCart();
-  const inCart = v ? qtyFor(v.modelId, v.shopId) > 0 : false;
+  const invalidLink = error instanceof ApiError && error.status === 400;
+  const unavailable = invalidLink || (error instanceof ApiError && error.status === 404);
+  const { items, setQty, openDrawer } = useCart();
+  const cartLine = v && items.find((item) => item.modelId === v.modelId && item.shopId === v.shopId);
+  const inCart = !!(v && cartLine && cartLine.vehicleIds.includes(v.vehicleId));
+  const canAdd = !!(v?.listingEligible && v.datesAvailable && v.quote && !query.isPlaceholderData && !error);
+  const params = new URLSearchParams(search);
+  const shopId = params.get("shopId");
+  const backPath = shopId && !params.get("city") ? `/shops/${encodeURIComponent(shopId)}` : "/browse";
+  const backHref = `${backPath}${search ? `?${search}` : ""}`;
+  const backLabel = backPath === "/browse" ? "Back to browse" : "Back to shop";
+  const pickupPin = v?.shopLatitude != null && v?.shopLongitude != null
+    ? { latitude: v.shopLatitude, longitude: v.shopLongitude }
+    : null;
+  const pickupDestination = pickupPin ? `${pickupPin.latitude},${pickupPin.longitude}` : v?.shopAddress;
+
+  function changeDates(from: Date, to: Date) {
+    const next = new URLSearchParams(search);
+    next.set("pickupAt", toIsoWithOffset(from));
+    next.set("returnAt", toIsoWithOffset(to));
+    if (!rentalWindowFromSearch(next.toString())) {
+      setDatesError("Choose a return time after pickup and a window of up to 365 days.");
+      return;
+    }
+    setDatesError(null);
+    navigate(`/vehicles/${id}?${next}`, { replace: true });
+  }
+
+  function addOrOpenCart() {
+    if (v?.quote && canAdd) {
+      const selected = [...new Set([...(cartLine?.vehicleIds ?? []), v.vehicleId])];
+      const available = [...new Set([...selected, ...(cartLine?.availableVehicleIds ?? [])])];
+      const outcome = setQty({
+        modelId: v.modelId, shopId: v.shopId, make: v.make, model: v.model, shopName: v.shopName,
+        pricePerDay: v.quote.pricePerDay,
+        ...rentalWindow,
+      }, selected.length, available);
+      if (outcome === "full") return;
+    }
+    openDrawer();
+  }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className={`min-h-screen flex flex-col ${v && !unavailable ? "pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0" : ""}`}>
       <Header />
 
       <div className="max-w-[1180px] w-full mx-auto px-5 py-8 flex-1">
-        {!unavailable && <Link href="/browse" className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink transition-colors">
+        {!unavailable && <Link href={backHref} className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink transition-colors">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Back to browse
+          {backLabel}
         </Link>}
 
         {isLoading && (
@@ -50,8 +102,8 @@ export function VehicleDetail() {
         )}
 
         {unavailable && (
-          <EmptyState title="Listing unavailable" description="This vehicle is no longer listed. Browse for another ride." className="mt-6">
-            <Link href="/browse" className={feedbackActionClass}>Back to browse</Link>
+          <EmptyState title="Listing unavailable" description={invalidLink ? "This listing link is invalid. Browse for another ride." : "This vehicle is no longer listed. Browse for another ride."} className="mt-6">
+            <Link href={backHref} className={feedbackActionClass}>{backLabel}</Link>
           </EmptyState>
         )}
         {!v && error && !unavailable && (
@@ -61,11 +113,10 @@ export function VehicleDetail() {
         )}
 
         {v && !unavailable && (
-          <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-10 items-start">
-            <div>
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-x-10 lg:gap-y-0">
+            <div className="min-w-0 lg:col-start-1 lg:row-start-1">
               <div className="relative aspect-[16/10] rounded-panel bg-surface-3 flex flex-col items-center justify-center gap-2 text-ink-4 mb-6 overflow-hidden">
-                <VehicleGlyph />
-                <span className="text-sm">Photo pending</span>
+                <ListingPhoto key={v.vehicleId} listing={v} />
                 {v.licence && (
                   <span className="absolute left-4 top-4 inline-flex items-center gap-1 rounded-full bg-verified-soft text-verified text-xs font-medium px-2.5 py-1">
                     <CheckIcon /> Licensed to rent
@@ -96,7 +147,69 @@ export function VehicleDetail() {
                 </div>
                 <RatingBadge rating={v.rating} reviewCount={v.reviewCount} />
               </div>
+            </div>
 
+            <aside className="self-start rounded-panel border border-line p-5 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+              {query.isPlaceholderData ? (
+                <LoadingSkeleton label="Checking availability and price" className="space-y-2">
+                  <SkeletonBlock className="h-9 w-32" />
+                  <SkeletonBlock className="h-4 w-48" />
+                </LoadingSkeleton>
+              ) : (
+                <>
+                  <div className="hidden tnum text-3xl font-bold text-ink lg:block">
+                    {rupees(v.quote?.pricePerDay ?? v.amount)}
+                    <span className="text-base font-normal text-ink-3">{v.quote ? " / first day" : " / weekday"}</span>
+                  </div>
+                  {v.quote && <p className="mt-1 text-sm text-ink-2">{rupees(v.quote.rentalAmount)} rental subtotal · {formatDateSummary(pickup.date, ret.date)}</p>}
+                </>
+              )}
+              <div className="mt-4 flex rounded-row border border-line px-2.5 py-2 text-xs max-[360px]:[&_span.truncate]:whitespace-normal sm:px-3 sm:text-base">
+                <DateRangeField pickupDate={pickup.date} pickupTime={pickup.time} returnDate={ret.date} returnTime={ret.time}
+                  onDatesChange={(from, to) => changeDates(combine(from, pickup.time), combine(to, ret.time))}
+                  onPickupTime={(time) => changeDates(combine(pickup.date, time), combine(ret.date, ret.time))}
+                  onReturnTime={(time) => changeDates(combine(pickup.date, pickup.time), combine(ret.date, time))}
+                />
+              </div>
+              {datesError && <p role="alert" className="mt-2 text-sm text-danger">{datesError}</p>}
+
+              <div className="mt-4 flex items-start gap-3 rounded-row bg-surface-2 px-4 py-3">
+                <ShieldIcon />
+                <div>
+                  <p className="text-sm font-medium text-ink">{rupees(v.securityDeposit)} refundable security deposit</p>
+                  <p className="mt-1 text-xs text-ink-3">Your deposit is returned in full when you return the scooter on time and undamaged.</p>
+                </div>
+              </div>
+
+              {error && v && <div className="mt-4"><SearchFailure title="We couldn’t check these dates" onRetry={() => void query.refetch({ cancelRefetch: false })} retrying={query.isFetching} /></div>}
+              {!query.isPlaceholderData && !error && !canAdd && (
+                <p className="mt-4 text-sm text-ink-2">
+                  {v.listingEligible ? "Try a different rental window." : "This vehicle can’t be booked for the selected dates."}
+                </p>
+              )}
+              <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-2 border-t border-line bg-surface px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:static lg:mt-5 lg:block lg:border-0 lg:p-0">
+                {canAdd && v.quote && (
+                  <div className="min-w-0 lg:hidden">
+                    <p className="text-lg font-semibold leading-tight text-ink tnum">{rupees(v.quote.rentalAmount)}</p>
+                    <p className="text-xs text-ink-2">Rental subtotal</p>
+                    {v.securityDeposit > 0 && <p className="text-xs text-ink-3">+ {rupees(v.securityDeposit)} refundable deposit</p>}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={addOrOpenCart}
+                  disabled={!canAdd}
+                  className={`min-h-11 shrink-0 flex-1 rounded-row px-3 text-sm font-semibold flex items-center justify-center gap-1.5 lg:w-full ${
+                    !canAdd ? "bg-surface-3 text-ink-2" : inCart ? "bg-verified-soft text-verified" : "bg-amber text-on-amber hover:brightness-95"
+                  }`}
+                >
+                  {query.isPlaceholderData ? "Checking dates…" : !canAdd ? "Not available" : inCart ? <><Check className="h-4 w-4" /> View cart</> : "Add to cart"}
+                </button>
+              </div>
+              {canAdd && <p className="mt-2 hidden text-center text-xs text-ink-3 lg:block">Assign riders at checkout and see the full price before paying.</p>}
+            </aside>
+
+            <div className="min-w-0 lg:col-start-1 lg:row-start-2">
               <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <SpecChip icon={<FuelIcon />} label="Fuel" value={v.fuelType ?? "—"} />
                 <SpecChip icon={<EngineIcon />} label="Engine" value={v.engineCc != null ? `${v.engineCc} cc` : "—"} />
@@ -112,14 +225,14 @@ export function VehicleDetail() {
                   <p className="mt-1 text-sm text-ink-2">
                     Named on {v.shopName}'s Rent-a-Motorcycle licence {v.licence.licenceNumber}
                     {v.licence.issuingAuthority ? ` (${v.licence.issuingAuthority})` : ""}
-                    {v.licence.validUntil ? `, valid to ${formatDate(v.licence.validUntil)}.` : "."}
+                    {v.licence.validUntil ? `, valid to ${dateLabel(v.licence.validUntil)}.` : "."}
                   </p>
                 </div>
               ) : (
                 <div className="mt-6 rounded-panel bg-warning-soft border border-warning/20 px-5 py-4">
                   <p className="text-warning font-semibold">Licence not yet confirmed</p>
                   <p className="mt-1 text-sm text-ink-2">
-                    This vehicle isn't currently named on an active rental licence.
+                    This vehicle has no confirmed rental licence covering these dates.
                   </p>
                 </div>
               )}
@@ -135,11 +248,30 @@ export function VehicleDetail() {
               </section>
 
               <section className="mt-8">
+                <SectionHeading icon={<ClipboardList size={16} />} title="Rental terms" />
+                <div className="rounded-panel border border-line divide-y divide-line">
+                  <Row label="Bring to pickup" value="Your original driving licence" />
+                  {!!v.accessories?.length && (
+                    <Row label="Accessories" value={v.accessories.map(({ type, quantity }) => `${quantity} × ${enumLabel(type)}`).join(", ")} />
+                  )}
+                  <details className="px-5 py-3 text-sm text-ink">
+                    <summary className="cursor-pointer font-medium">Cancellation policy</summary>
+                    <ul className="mt-2 space-y-1 text-ink-2">
+                      <li>More than 24 hours before pickup · 90% of the rental refunded</li>
+                      <li>2–24 hours before pickup · 50% of the rental refunded</li>
+                      <li>Under 2 hours until pickup · No rental refund</li>
+                    </ul>
+                    <p className="mt-2 text-ink-2">Eligible cancellations include a full deposit refund. Rental refunds are based on the scheduled pickup time and exclude platform fees and taxes.</p>
+                  </details>
+                </div>
+              </section>
+
+              <section className="mt-8">
                 <SectionHeading icon={<ShopIcon />} title="Shop identity" />
                 <div className="rounded-panel border border-line divide-y divide-line">
                   <Row label="Name" value={v.shopName} />
                   <Row label="Address" value={v.shopAddress} />
-                  {v.shopPhone && <Row label="Phone" value={v.shopPhone} />}
+                  {v.shopPhone && <Row label="Phone" value={<a href={`tel:${v.shopPhone}`} className="underline underline-offset-2">{v.shopPhone}</a>} />}
                 </div>
                 <div className="mt-3 flex justify-end">
                   <Link
@@ -152,68 +284,27 @@ export function VehicleDetail() {
                 </div>
               </section>
 
-              {v.shopLatitude != null && v.shopLongitude != null && (
+              {pickupDestination && (
                 <section className="mt-8">
-                  <SectionHeading icon={<PinIcon />} title="Pickup location" />
-                  <ShopLocationMap latitude={v.shopLatitude} longitude={v.shopLongitude} label={v.shopName} />
+                  <div className="flex flex-wrap justify-between gap-x-3">
+                    <SectionHeading icon={<PinIcon />} title="Pickup location" />
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(pickupDestination)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mb-3 inline-flex items-center gap-1 text-sm text-ink-2 underline underline-offset-2 hover:text-ink"
+                    >
+                      Get directions <ArrowUpRight className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                  {pickupPin ? <ShopLocationMap {...pickupPin} label={v.shopName} /> : (
+                    <p className="text-sm text-ink-2">{v.shopAddress}</p>
+                  )}
                 </section>
               )}
 
-              <ReviewsSection shopId={v.shopId} shopName={v.shopName} vehicleId={v.vehicleId} />
+              <ReviewsSection shopId={v.shopId} shopName={v.shopName} />
             </div>
-
-            <aside className="rounded-panel border border-line p-5 lg:sticky lg:top-24">
-              <div className="tnum text-3xl font-bold text-ink">
-                {rupees(v.amount)}
-                <span className="text-base font-normal text-ink-3"> /day</span>
-              </div>
-
-              <div className="mt-4 flex items-start gap-3 rounded-row bg-surface-2 px-4 py-3">
-                <ShieldIcon />
-                <div>
-                  <p className="text-sm font-medium text-ink">Refundable deposit: {rupees(v.securityDeposit)}</p>
-                  <p className="mt-1 text-xs text-ink-3">
-                    Held by {v.shopName}, not RetroMobi. Returned per the shop's stated condition after
-                    the vehicle is checked in.
-                  </p>
-                </div>
-              </div>
-
-              {inCart ? (
-                <button
-                  type="button"
-                  onClick={openDrawer}
-                  className="mt-5 w-full h-11 rounded-row bg-verified-soft text-verified font-semibold flex items-center justify-center gap-1.5"
-                >
-                  <Check className="h-4 w-4" /> In your cart — view cart
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const outcome = setQty(
-                      {
-                        modelId: v.modelId,
-                        shopId: v.shopId,
-                        make: v.make,
-                        model: v.model,
-                        shopName: v.shopName,
-                        pricePerDay: v.amount,
-                      },
-                      1,
-                      [v.vehicleId],
-                    );
-                    if (outcome === "ok") openDrawer();
-                  }}
-                  className="mt-5 w-full h-11 rounded-row bg-amber text-on-amber font-semibold hover:brightness-95 transition-[filter] flex items-center justify-center"
-                >
-                  Add to cart
-                </button>
-              )}
-              <p className="mt-2 text-center text-xs text-ink-4">
-                Pick dates and riders at checkout — full price breakdown before you pay.
-              </p>
-            </aside>
           </div>
         )}
       </div>
@@ -223,7 +314,7 @@ export function VehicleDetail() {
   );
 }
 
-function Row({ label, value, tnum }: { label: string; value: string; tnum?: boolean }) {
+function Row({ label, value, tnum }: { label: string; value: ReactNode; tnum?: boolean }) {
   return (
     <div className="px-5 py-3 flex items-center justify-between gap-4 text-sm">
       <span className="text-ink-3">{label}</span>
@@ -268,8 +359,41 @@ function RatingBadge({ rating, reviewCount }: { rating: number | null; reviewCou
   );
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+function ListingPhoto({ listing }: { listing: Listing }) {
+  const uploaded = useModelImage(listing.modelId, !!listing.imageKey);
+  const [selected, setSelected] = useState(0);
+  const [failed, setFailed] = useState<string[]>([]);
+  const published = (listing.photoUrls ?? []).filter((url) => !failed.includes(url));
+  const representative = published.length === 0;
+  const photos = representative
+    ? [...new Set([uploaded, ...stockPhotos(listing.make, listing.model)])].filter((url): url is string => !!url && !failed.includes(url))
+    : published;
+  const index = Math.min(selected, Math.max(0, photos.length - 1));
+  const src = photos[index];
+  if (!src) return <><VehicleGlyph /><span className="text-sm">Photo pending</span></>;
+  const photoButton = "absolute top-1/2 -translate-y-1/2 grid size-10 place-items-center rounded-full bg-surface text-ink shadow-sm";
+  return (
+    <>
+      <img key={src} src={src} alt={`${listing.make} ${listing.model}`} className="absolute inset-0 h-full w-full object-cover" onError={() => setFailed((urls) => [...urls, src])} />
+      {(representative || photos.length > 1) && (
+        <span role="status" className="absolute bottom-4 left-4 rounded-full bg-surface px-2.5 py-1 text-xs text-ink-2">
+          {representative && "Representative photo"}
+          {representative && photos.length > 1 && " · "}
+          {photos.length > 1 && `${index + 1} / ${photos.length}`}
+        </span>
+      )}
+      {photos.length > 1 && (
+        <>
+          <button type="button" aria-label="Previous photo" className={`${photoButton} left-3`} onClick={() => setSelected((index + photos.length - 1) % photos.length)}>
+            <ChevronLeft size={18} />
+          </button>
+          <button type="button" aria-label="Next photo" className={`${photoButton} right-3`} onClick={() => setSelected((index + 1) % photos.length)}>
+            <ChevronRight size={18} />
+          </button>
+        </>
+      )}
+    </>
+  );
 }
 
 function VehicleGlyph() {

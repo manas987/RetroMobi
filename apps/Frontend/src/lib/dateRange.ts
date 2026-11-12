@@ -24,6 +24,19 @@ export function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
+const shortMonth = new Intl.DateTimeFormat("en-IN", { month: "short" });
+
+export function formatDateSummary(from: Date | null, to: Date | null): string {
+  if (!from || !to) return "Add dates";
+  const start = `${from.getDate()} ${shortMonth.format(from)}`;
+  if (isSameDay(from, to)) return start;
+  const end = `${to.getDate()} ${shortMonth.format(to)}`;
+  if (from.getFullYear() !== to.getFullYear()) {
+    return `${start} ${from.getFullYear()}–${end} ${to.getFullYear()}`;
+  }
+  return from.getMonth() === to.getMonth() ? `${from.getDate()}–${end}` : `${start}–${end}`;
+}
+
 export function nextSelection(pending: Date | null, next: DateRange | undefined): SelectionResult {
   // react-day-picker clears the range when you click the one day it holds.
   if (!next?.from) return { pending: null, commit: null };

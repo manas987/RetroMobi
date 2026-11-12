@@ -11,6 +11,7 @@ import {
   ReviewExistsError,
   ReviewNotAllowedError,
   createReview,
+  listShopReviews,
   softDeleteReview,
 } from "./reviewsService.ts";
 
@@ -66,6 +67,11 @@ describe("reviews and shop rating", () => {
     const { userId, bookingId } = await pickedUpBooking(vehicle.id);
 
     const review = await createReview(pool, userId, { bookingId, rating: 4 });
+    await pool.query("update users set name = 'Asha Kumari Rao' where id = $1", [userId]);
+    const [publicReview] = await listShopReviews(pool, vehicle.shopId, {});
+    expect(publicReview?.reviewer_name).toBe("Asha R.");
+    expect(publicReview).not.toHaveProperty("email");
+    expect(publicReview).not.toHaveProperty("phone");
 
     const { rows: afterCreate } = await pool.query(`select rating, review_count from shops where id = $1`, [
       vehicle.shopId,

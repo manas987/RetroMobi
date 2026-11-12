@@ -46,11 +46,13 @@ export function useSearch(criteria: SearchCriteria, coords?: { lat: number; lng:
   });
 }
 
-export function useVehicleDetail(vehicleId: string | undefined) {
+export function useVehicleDetail(vehicleId: string | undefined, window: { pickupAt: string; returnAt: string }) {
   return useQuery({
-    queryKey: ["vehicle", vehicleId],
-    queryFn: () => getJson<VehicleDetail>(`/api/user/search/vehicle/${vehicleId}`),
+    queryKey: ["vehicle", vehicleId, window],
+    queryFn: () => getJson<VehicleDetail>(`/api/user/search/vehicle/${encodeURIComponent(vehicleId!)}?${new URLSearchParams(window)}`),
     enabled: !!vehicleId,
+    placeholderData: (previous) => previous?.vehicleId === vehicleId ? previous : undefined,
+    retry: (failures, error) => !(error instanceof ApiError && error.status >= 400 && error.status < 500) && failures < 1,
   });
 }
 

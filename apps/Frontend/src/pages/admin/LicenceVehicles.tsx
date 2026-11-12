@@ -13,10 +13,8 @@ import { dateLabel } from "../../lib/format";
  * licence, and this is the only surface that records that — the endpoints
  * existed with no UI at all.
  *
- * Linking does not gate anything: per the product decision, verification and
- * licence membership are a trust signal, not a search filter. What it does
- * drive is the licence badge a rider sees on the vehicle detail and shop
- * pages, which is the product's stated differentiator.
+ * The link supplies the licence badge. An expired linked licence hides the
+ * vehicle from public inventory and blocks online booking.
  */
 function LicenceVehiclesBody() {
   const { session } = usePortalSession("admin");

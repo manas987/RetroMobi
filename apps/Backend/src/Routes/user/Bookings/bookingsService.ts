@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { composeTotal, priceRental, refundForCancellation } from "../../../lib/pricing.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import { notify } from "../../../lib/notify.ts";
+import { PUBLIC_LISTING_ELIGIBLE, VEHICLE_LICENCE_JOIN } from "../../../lib/vehicleBookingRules.ts";
 import {
   evaluateRiderForVehicle,
   flagSessionForReview,
@@ -45,8 +46,8 @@ async function loadPricingAndSpecials(client: PoolClient, vehicleId: string) {
   const pricing = rows[0];
 
   const { rows: specialRows } = await client.query(
-    `select amount, weekend_amount, effective_from, effective_until
-       from special_pricings where vehicle_pricing_id = $1 and deleted_at is null`,
+    `select amount, weekend_amount, effective_from::text, effective_until::text
+       from special_pricings where vehicle_pricing_id = $1 and deleted_at is null order by created_at, id`,
     [pricing.id],
   );
 
@@ -59,8 +60,8 @@ async function loadPricingAndSpecials(client: PoolClient, vehicleId: string) {
     specials: specialRows.map((s) => ({
       amount: Number(s.amount),
       weekendAmount: Number(s.weekend_amount),
-      effectiveFrom: s.effective_from.toISOString().slice(0, 10),
-      effectiveUntil: s.effective_until.toISOString().slice(0, 10),
+      effectiveFrom: s.effective_from,
+      effectiveUntil: s.effective_until,
     })),
   };
 }
@@ -175,8 +176,9 @@ export async function createHold(
 
     for (const item of items) {
       const vehicleCheck = await client.query(
-        `select id from vehicles where id = $1 and status = 'ACTIVE' and deleted_at is null`,
-        [item.vehicleId],
+        `select v.id from vehicles v join shops s on s.id = v.shop_id
+          ${VEHICLE_LICENCE_JOIN} where v.id = $1 and ${PUBLIC_LISTING_ELIGIBLE}`,
+        [item.vehicleId, pickupAt, returnAt],
       );
       if (vehicleCheck.rows.length === 0) {
         throw new VehicleUnavailableError(`vehicle ${item.vehicleId} is not available`);
@@ -548,6 +550,7 @@ export async function listMyBookings(pool: Pool, userId: string) {
     `select b.*, m.make, m.model, s.id as shop_id, s.name as shop_name,
             s.address_line1 as shop_address, s.city as shop_city, s.phone as shop_phone,
             r.name as rider_name,
+            exists(select 1 from reviews review where review.booking_id = b.id and review.deleted_at is null) as has_review,
             -- So the list can offer "Complete payment" on a HOLD whose clock is
             -- still running. Without it a customer who closed the tab at the
             -- Cashfree screen has no route back to a hold that is still live.

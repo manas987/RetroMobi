@@ -158,8 +158,15 @@ export async function listShopReviews(pool: Pool, shopId: string, filters: { pag
   const page = Math.max(filters.page ?? 1, 1);
   const offset = (page - 1) * limit;
   const { rows } = await pool.query(
-    `select * from reviews where shop_id = $1 and deleted_at is null order by created_at desc limit $2 offset $3`,
+    `select r.*, case when u.status <> 'DELETED' then u.name end as reviewer_name
+       from reviews r left join users u on u.id = r.user_id
+      where r.shop_id = $1 and r.deleted_at is null order by r.created_at desc limit $2 offset $3`,
     [shopId, limit, offset],
   );
-  return rows;
+  return rows.map(({ reviewer_name, ...review }) => {
+    const names: string[] = typeof reviewer_name === "string" ? reviewer_name.trim().split(/\s+/).filter(Boolean) : [];
+    const first = names[0];
+    const last = names.length > 1 ? names.at(-1) : undefined;
+    return { ...review, reviewer_name: last ? `${first} ${Array.from(last)[0]}.` : first ?? null };
+  });
 }

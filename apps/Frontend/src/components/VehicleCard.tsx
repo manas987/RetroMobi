@@ -1,18 +1,26 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import { rupees } from "../lib/format";
 import { useCart } from "../lib/cart";
 import { useModelImage } from "../lib/useModelImage";
 import { stockPhotos } from "../lib/stockPhoto";
+import { defaultWindow, rentalWindowFromSearch } from "../lib/searchParams";
 import type { SearchResult } from "../lib/types";
 
 export function VehicleCard({ result, highlighted = false }: { result: SearchResult; highlighted?: boolean }) {
   const { model, primaryOffer: offer, offerVehicleIds } = result;
-  const { qtyFor, setQty, openDrawer } = useCart();
-  const qty = qtyFor(model.id, offer.shopId);
+  const { items, setQty, openDrawer } = useCart();
+  const selected = items.find((item) => item.modelId === model.id && item.shopId === offer.shopId)?.vehicleIds ?? [];
+  const qty = selected.length;
   const maxQty = offerVehicleIds.length;
   const [, navigate] = useLocation();
+  const search = useSearch();
+  const rentalWindow = rentalWindowFromSearch(search) ?? defaultWindow();
+  const params = new URLSearchParams(search);
+  params.set("pickupAt", rentalWindow.pickupAt);
+  params.set("returnAt", rentalWindow.returnAt);
+  const detailHref = `/vehicles/${offer.vehicleId}?${params}`;
 
   const line = {
     modelId: model.id,
@@ -21,23 +29,24 @@ export function VehicleCard({ result, highlighted = false }: { result: SearchRes
     model: model.model,
     shopName: offer.shopName,
     pricePerDay: offer.pricePerDay,
+    ...rentalWindow,
   };
 
   function changeQty(e: React.MouseEvent, next: number) {
     e.stopPropagation();
-    const outcome = setQty(line, next, offerVehicleIds);
+    const outcome = setQty(line, next, [...new Set([...selected, ...offerVehicleIds])]);
     if (outcome === "ok" && next > qty) openDrawer();
   }
 
   return (
     <article
-      onClick={() => navigate(`/vehicles/${offer.vehicleId}`)}
+      onClick={() => navigate(detailHref)}
       tabIndex={0}
       aria-label={`${model.make} ${model.model} at ${offer.shopName}`}
       onKeyDown={(e) => {
         if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
-          navigate(`/vehicles/${offer.vehicleId}`);
+          navigate(detailHref);
         }
       }}
       className="group flex flex-col cursor-pointer rounded-[18px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"

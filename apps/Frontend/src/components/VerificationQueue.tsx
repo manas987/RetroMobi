@@ -403,8 +403,7 @@ export function VerificationQueue({ types }: { types: QueueType[] }) {
           say so rather than implying the decided views are editable. */}
       {isPendingView ? (
         <p className="text-xs text-ink-3 mb-3">
-          Approving or rejecting is final and cannot be undone. Verification is a trust badge, not a gate: a
-          rejected shop stays searchable.
+          Approving or rejecting is final. Public listings require both a verified shop and a verified vehicle.
         </p>
       ) : (
         <p className="text-xs text-ink-3 mb-3">Already decided — shown for reference, no further action here.</p>

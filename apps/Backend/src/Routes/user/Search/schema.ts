@@ -30,7 +30,6 @@ export const SearchQuerySchema = z.object({
   minEngineCc: z.coerce.number().optional(),
   maxEngineCc: z.coerce.number().optional(),
   seatingCapacity: z.coerce.number().int().optional(),
-  fullyVerified: z.coerce.boolean().optional(),
   sort: z.enum(["price", "rating", "distance"]).optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -49,3 +48,11 @@ export const SearchQuerySchema = z.object({
 export const VehicleDetailParamsSchema = z.object({
   vehicleId: z.string().uuid(),
 });
+
+export const VehicleDetailWindowSchema = z.object({
+  pickupAt: z.coerce.date(),
+  returnAt: z.coerce.date(),
+}).refine(({ pickupAt, returnAt }) => {
+  const duration = returnAt.getTime() - pickupAt.getTime();
+  return duration > 0 && duration <= 365 * 86_400_000;
+}, { message: "Return must follow pickup within 365 days", path: ["returnAt"] });

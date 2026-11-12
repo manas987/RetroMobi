@@ -801,6 +801,23 @@ function PhotosTab({
     }
   }
 
+  async function publish(mediaId: string, published: boolean) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await portalFetch("merchant", `/vehicles/${vehicleId}/media/${mediaId}`, {
+        method: "PATCH",
+        token,
+        body: { published },
+      });
+      reload();
+    } catch (err) {
+      fail(err, "Couldn't change photo visibility.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   /** Swaps one photo with its neighbour. The endpoint replaces the whole
    *  order, so the full list is sent even for a single move. */
   async function move(index: number, delta: number) {
@@ -830,7 +847,7 @@ function PhotosTab({
   return (
     <div>
       <p className="text-xs text-ink-3 mb-3">
-        The first photo is the one riders see first in search results.
+        Publish the photos you want riders to see on the vehicle details page.
       </p>
 
       {actionError && <ErrorBox text={actionError} />}
@@ -843,16 +860,26 @@ function PhotosTab({
       {media.length > 0 && (
         <ul className="flex flex-col gap-2 mb-4">
           {media.map((m, i) => (
-            <li key={String(m.id)} className="flex items-center gap-3 rounded-row bg-surface-2 px-3 py-2">
+            <li key={String(m.id)} className="flex flex-wrap items-center gap-3 rounded-row bg-surface-2 px-3 py-2">
               <MediaThumb vehicleId={vehicleId} mediaId={String(m.id)} token={token} type={String(m.type)} />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm text-ink">
-                  {i === 0 ? "Lead photo" : `Photo ${i + 1}`}
+                  {m.type === "VIDEO" ? "Video" : `Photo ${i + 1}`}
                 </span>
-                <span className="block text-xs text-ink-3">{enumLabel(m.type)}</span>
+                <span className="block text-xs text-ink-3">{m.published ? "Published" : "Private"}</span>
               </span>
               {canWrite && (
                 <>
+                  {m.type === "IMAGE" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => publish(String(m.id), !m.published)}
+                      className="text-xs font-medium text-ink hover:underline disabled:opacity-40"
+                    >
+                      {m.published ? "Unpublish" : "Publish"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={busy || i === 0}

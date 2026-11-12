@@ -13,7 +13,7 @@ declare global {
 
 async function resolveShopId(req: Request): Promise<string | null> {
   const direct = req.params.shopId ?? (req.body as any)?.shopId ?? (req.query as any)?.shopId;
-  if (typeof direct === "string") return direct;
+  if (!req.params.vehicleId && typeof direct === "string") return direct;
 
   const vehicleId = req.params.vehicleId ?? (req.body as any)?.vehicleId;
   if (typeof vehicleId === "string") {

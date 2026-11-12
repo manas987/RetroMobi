@@ -16,8 +16,7 @@ export async function listLicenceVehicles(pool: Pool, licenceId: string) {
   return rows;
 }
 
-// Does not gate bookability -- linking/unlinking never touches vehicles.status
-// or verification_status.
+// Linking records licence membership independently of listing and verification status.
 export async function linkVehicle(
   pool: Pool,
   adminId: string,

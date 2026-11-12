@@ -5,6 +5,7 @@ import { Link, useLocation } from "wouter";
 import { Minus, Plus, Trash2, X } from "lucide-react";
 import { MAX_CART_ITEMS, useCart } from "../lib/cart";
 import { rupees } from "../lib/format";
+import { toSearchParams } from "../lib/searchParams";
 import { EmptyState, feedbackActionClass } from "./ContentFeedback";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 
@@ -51,7 +52,7 @@ export function CartDrawer({ children }: { children: ReactNode }) {
                     className="flex items-center justify-between gap-3 py-3"
                   >
                     <Link
-                      href={`/vehicles/${item.vehicleIds[0]}`}
+                      href={`/vehicles/${item.vehicleIds[0]}?${toSearchParams({ pickupAt: item.pickupAt, returnAt: item.returnAt })}`}
                       onClick={closeDrawer}
                       className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                     >

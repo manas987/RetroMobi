@@ -10,6 +10,7 @@ import {
   insertBooking,
 } from "../../../test/fixtures.ts";
 import { sweepExpiredHolds } from "../../../lib/holds.ts";
+import { setMediaPublication } from "../../merchant/Fleet/fleetService.ts";
 import {
   DistanceSortUnavailableError,
   getVehicleDetail,
@@ -328,19 +329,20 @@ describe("pricing in results", () => {
 });
 
 describe("licence", () => {
-  test("a vehicle with no licence link reports licence: null", async () => {
+  test("a vehicle with no licence link is excluded from city and shop search and blocked on a direct link", async () => {
     const { shopId, city } = await isolatedCity();
-    await createBookableVehicle(pool, { shopId });
-    const { pickupAt, returnAt } = futureWindow(1100);
+    const v = await createBookableVehicle(pool, { shopId, withLicence: false });
+    const window = futureWindow(1100);
 
-    const { results } = await searchVehicles(pool, { city, pickupAt, returnAt });
-    expect(results[0]!.primaryOffer.licence).toBeNull();
+    expect((await searchVehicles(pool, { city, ...window })).results).toEqual([]);
+    expect((await searchVehicles(pool, { shopId, ...window })).results).toEqual([]);
+    expect(await getVehicleDetail(pool, v.id, window)).toMatchObject({ listingEligible: false, licence: null, quote: null });
   });
 
   test("a vehicle named on an ACTIVE shop licence reports it", async () => {
     const merchant = await createMerchant(pool);
     const shop = await createShop(pool, merchant.id);
-    const v = await createBookableVehicle(pool, { shopId: shop.id });
+    const v = await createBookableVehicle(pool, { shopId: shop.id, withLicence: false });
     const { pickupAt, returnAt } = futureWindow(1110);
 
     const license = await pool.query(
@@ -361,18 +363,22 @@ describe("licence", () => {
     });
   });
 
-  test("fullyVerified excludes vehicles without an active licence", async () => {
+  test("a licence must be active and cover the full rental window", async () => {
     const { shopId, city } = await isolatedCity();
-    await createBookableVehicle(pool, { shopId });
-    const { pickupAt, returnAt } = futureWindow(1120);
-
-    const { results } = await searchVehicles(pool, {
-      city,
-      pickupAt,
-      returnAt,
-      fullyVerified: true,
-    });
-    expect(results).toHaveLength(0);
+    const v = await createBookableVehicle(pool, { shopId });
+    const window = futureWindow(20);
+    await pool.query(
+      `update shop_licenses set status = 'PENDING'
+        where id = (select license_id from license_vehicles where vehicle_id = $1)`,
+      [v.id],
+    );
+    expect((await searchVehicles(pool, { city, ...window })).results).toEqual([]);
+    await pool.query(
+      `update shop_licenses set status = 'ACTIVE', expires_at = ($2::timestamptz at time zone 'Asia/Kolkata')::date
+        where id = (select license_id from license_vehicles where vehicle_id = $1)`,
+      [v.id, window.pickupAt],
+    );
+    expect((await searchVehicles(pool, { city, ...window })).results).toEqual([]);
   });
 });
 
@@ -417,6 +423,51 @@ describe("bodyType filter", () => {
 });
 
 describe("getVehicleDetail", () => {
+  test("only verified inventory is listed, but direct links return its booking eligibility", async () => {
+    const { shopId, city } = await isolatedCity();
+    const listed = await createBookableVehicle(pool, { shopId });
+    const pending = await createBookableVehicle(pool, { shopId });
+    const expired = await createBookableVehicle(pool, { shopId, withLicence: false });
+    const otherMerchant = await createMerchant(pool);
+    const unverifiedShop = await createShop(pool, otherMerchant.id, { city });
+    const unverifiedShopVehicle = await createBookableVehicle(pool, { shopId: unverifiedShop.id });
+    await pool.query("update vehicles set verification_status = 'PENDING' where id = $1", [pending.id]);
+    await pool.query("update shops set verification_status = 'UNVERIFIED' where id = $1", [unverifiedShop.id]);
+    await pool.query(
+      `with licence as (
+        insert into shop_licenses (merchant_user_id, licence_number, status, expires_at)
+        select merchant_user_id, 'EXPIRED-TEST', 'ACTIVE', current_date - 1 from shops where id = $1 returning id
+      ) insert into license_vehicles (license_id, vehicle_id, registration_number)
+        select licence.id, v.id, v.registration_number from licence cross join vehicles v where v.id = $2`,
+      [shopId, expired.id],
+    );
+    const window = futureWindow(25);
+    const { results } = await searchVehicles(pool, { city, ...window });
+    expect(results.map((result) => result.primaryOffer.vehicleId)).toEqual([listed.id]);
+    for (const vehicle of [pending, expired, unverifiedShopVehicle]) {
+      const detail = await getVehicleDetail(pool, vehicle.id, window);
+      expect(detail.listingEligible).toBe(false);
+      expect(detail.quote).toBeNull();
+    }
+    expect((await getVehicleDetail(pool, listed.id, window)).listingEligible).toBe(true);
+  });
+
+  test("detail uses the same special rate as Browse", async () => {
+    const { shopId, city } = await isolatedCity();
+    const vehicle = await createBookableVehicle(pool, { shopId });
+    const window = { pickupAt: new Date("2029-01-06T04:30:00Z"), returnAt: new Date("2029-01-07T04:30:00Z") };
+    await pool.query(
+      `insert into special_pricings (vehicle_pricing_id, name, amount, weekend_amount, effective_from, effective_until)
+       select id, 'Test weekend', 74000, 84000, '2029-01-06', '2029-01-07' from vehicle_pricing where vehicle_id = $1`,
+      [vehicle.id],
+    );
+    const offer = (await searchVehicles(pool, { city, ...window })).results[0]!.primaryOffer;
+    const detail = await getVehicleDetail(pool, vehicle.id, window);
+    expect(detail.quote).toEqual({ pricePerDay: 84000, rentalAmount: 84000 });
+    expect(detail.quote!.pricePerDay).toBe(offer.pricePerDay);
+    expect(detail.datesAvailable).toBe(true);
+  });
+
   test("returns pricing and shop identity for a real vehicle", async () => {
     const { shopId } = await isolatedCity();
     const v = await createBookableVehicle(pool, { shopId, amount: 55_000 });
@@ -425,6 +476,34 @@ describe("getVehicleDetail", () => {
     expect(detail.vehicleId).toBe(v.id);
     expect(detail.amount).toBe(55_000);
     expect(detail.shopId).toBe(shopId);
+  });
+
+  test("details include only published, current photos and available accessories", async () => {
+    const { shopId } = await isolatedCity();
+    const v = await createBookableVehicle(pool, { shopId });
+    const lead = `vehicles/${v.id}/media/${crypto.randomUUID()}`;
+    const second = `vehicles/${v.id}/media/${crypto.randomUUID()}`;
+    const { rows } = await pool.query(
+      `insert into vehicle_media (vehicle_id, storage_key, type, published, display_order, deleted_at)
+       values ($1, $2, 'IMAGE', true, 2, null), ($1, $3, 'IMAGE', true, 1, null),
+         ($1, 'private-document', 'IMAGE', false, 0, null), ($1, 'removed', 'IMAGE', true, 0, now()),
+         ($1, 'video', 'VIDEO', false, 0, null)
+       returning id, storage_key`,
+      [v.id, second, lead],
+    );
+    await pool.query(
+      `insert into vehicle_accessories (vehicle_id, type, quantity, status)
+       values ($1, 'HELMET', 2, 'AVAILABLE'), ($1, 'TOP_BOX', 1, 'UNAVAILABLE')`,
+      [v.id],
+    );
+    const detail = await getVehicleDetail(pool, v.id);
+    expect(detail.photoKeys).toEqual([lead, second]);
+    expect(detail.accessories).toEqual([{ type: "HELMET", quantity: 2 }]);
+    expect(await setMediaPublication(pool, v.id, rows.find((row) => row.storage_key === "private-document").id, true)).toBe(false);
+    await setMediaPublication(pool, v.id, rows.find((row) => row.storage_key === lead).id, false);
+    expect((await getVehicleDetail(pool, v.id)).photoKeys).toEqual([second]);
+    await pool.query("update vehicles set verification_status = 'PENDING' where id = $1", [v.id]);
+    expect((await getVehicleDetail(pool, v.id)).photoKeys).toEqual([]);
   });
 
   test("throws for an unknown vehicle id", async () => {
