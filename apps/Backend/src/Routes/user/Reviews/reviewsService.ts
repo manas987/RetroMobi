@@ -36,7 +36,8 @@ export async function createReview(
          from bookings b
          join booking_groups g on g.id = b.group_id
          join vehicles v on v.id = b.vehicle_id
-        where b.id = $1 and g.user_id = $2 and b.actual_pickup_at is not null and b.deleted_at is null`,
+        where b.id = $1 and g.user_id = $2 and b.status = 'COMPLETED'
+          and b.actual_return_at is not null and b.deleted_at is null`,
       [input.bookingId, userId],
     );
     if (rows.length === 0) {

@@ -25,6 +25,10 @@ export async function get(req: Request, res: Response) {
   res.status(200).json(vehicle);
 }
 
+export async function submitVerification(req: Request, res: Response) {
+  res.status(200).json(await fleetService.submitVehicleForVerification(pool, pathParam(req, "vehicleId")));
+}
+
 export async function update(req: Request, res: Response) {
   const vehicle = await fleetService.updateVehicle(
     pool,

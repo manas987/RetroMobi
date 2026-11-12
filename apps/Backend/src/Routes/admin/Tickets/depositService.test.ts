@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
-import { createBookableVehicle, createRider, createUser, futureWindow, uniquePhone } from "../../../test/fixtures.ts";
+import { createBookableVehicle, createRider, createUser, futureWindow, passIdentityCheck, uniquePhone } from "../../../test/fixtures.ts";
 import { createHold } from "../../user/Bookings/bookingsService.ts";
 import { createPaymentIntent, handlePaymentWebhook } from "../../user/Payments/paymentsService.ts";
-import { merchantReturn } from "../../user/Pickup/pickupService.ts";
+import { confirmInspection, merchantReturn } from "../../user/Pickup/pickupService.ts";
 import {
   DepositAlreadySettledError,
   DepositSplitMismatchError,
@@ -74,6 +74,13 @@ async function claimedDepositTicket(dayOffset: number) {
   );
 
   const bookingId = held.bookings[0]!.id;
+
+  // A deposit can only be claimed on a rental that actually happened: merchantReturn
+  // requires the booking to have been picked up and not already returned. This
+  // fixture used to skip pickup entirely, which the service no longer allows.
+  await passIdentityCheck(pool, bookingId);
+  await confirmInspection(pool, { userId: user.id, bookingId, storageKey: `deposit_${dayOffset}` });
+
   let ticketId = "";
   await merchantReturn(
     pool,

@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { EmptyState, SkeletonRows } from "./ContentFeedback";
 import { SearchFailure } from "./SearchFeedback";
+import { Modal } from "./Modal";
 import { reviewTimeLabel } from "../lib/format";
 import { usePortalSession, usePortalQuery, portalFetch, decodeJwtSubject, PortalApiError, type Row } from "../lib/portal";
 
@@ -11,15 +12,19 @@ async function fetchShopReviews(shopId: string): Promise<{ reviews: Row[] }> {
   return res.json();
 }
 
-/** A collected booking at the shop earns one review. */
+/** Each completed rental at the shop earns one review. */
 export function ReviewsSection({
   shopId,
   shopName,
+  reviewBookingId,
 }: {
   shopId: string;
   shopName: string;
+  reviewBookingId?: string | null;
 }) {
   const [revision, setRevision] = useState(0);
+  const [openBookingId, setOpenBookingId] = useState(reviewBookingId ?? null);
+  const [posted, setPosted] = useState(false);
   const queryClient = useQueryClient();
   const queryKey = ["shop-reviews", shopId];
   const query = useQuery({
@@ -36,15 +41,26 @@ export function ReviewsSection({
   const { session } = usePortalSession("user");
   const myUserId = session ? decodeJwtSubject(session.accessToken) : null;
   const { data: bookingsRes } = usePortalQuery<{ bookings: Row[] }>("user", `/bookings?r=${revision}`, session?.accessToken);
-  const eligibleBooking = (bookingsRes?.bookings ?? []).find(
-    (b) => b.shop_id === shopId && b.actual_pickup_at != null && !b.deleted_at && !b.has_review,
+  const eligible = (bookingsRes?.bookings ?? []).filter(
+    (b) => b.shop_id === shopId && b.status === "COMPLETED" && !!b.actual_return_at && !b.deleted_at && !b.has_review,
   );
+  const selected = eligible.find((booking) => booking.id === openBookingId);
+  useEffect(() => {
+    if (reviewBookingId) document.getElementById("shop-reviews")?.scrollIntoView({ block: "start" });
+  }, [reviewBookingId]);
 
   return (
-    <section className="mt-8">
-      <h2 className="font-semibold text-ink mb-3">
-        Reviews for {shopName}
-      </h2>
+    <section id="shop-reviews" className="mt-8 scroll-mt-24">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold text-ink">Reviews for {shopName}</h2>
+        {reviewBookingId !== undefined && eligible.length > 0 && (
+          <button type="button" onClick={() => { setPosted(false); setOpenBookingId(String(eligible[0]!.id)); }}
+            className="min-h-9 rounded-row border border-line-strong px-3 text-sm font-medium text-ink hover:bg-surface-2">
+            Write a review
+          </button>
+        )}
+      </div>
+      {posted && <p role="status" className="mb-3 text-sm text-verified">Thanks for sharing your experience. Your review is posted.</p>}
 
       {query.isPending && <SkeletonRows label="Loading reviews" detail />}
       {!data && query.isError && (
@@ -63,8 +79,15 @@ export function ReviewsSection({
         </div>
       )}
 
-      {data && session && eligibleBooking && (
-        <LeaveReviewForm key={String(eligibleBooking.id)} bookingId={String(eligibleBooking.id)} token={session.accessToken} onPosted={refetch} />
+      {session && selected && (
+        <Modal open onClose={() => setOpenBookingId(null)} title="Review your rental">
+          <LeaveReviewForm key={String(selected.id)} bookingId={String(selected.id)} shopName={shopName}
+            vehicle={[selected.make, selected.model].filter(Boolean).join(" ")} token={session.accessToken} onPosted={(success) => {
+              setOpenBookingId(null);
+              setPosted(success);
+              refetch();
+            }} />
+        </Modal>
       )}
     </section>
   );
@@ -171,14 +194,16 @@ function MyReviewRow({ review: r, token, onChanged }: { review: Row; token: stri
   );
 }
 
-function LeaveReviewForm({ bookingId, token, onPosted }: { bookingId: string; token: string; onPosted: () => void }) {
-  const [rating, setRating] = useState(5);
+function LeaveReviewForm({ bookingId, shopName, vehicle, token, onPosted }: {
+  bookingId: string; shopName: string; vehicle: string; token: string; onPosted: (success: boolean) => void;
+}) {
+  const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
-  const [status, setStatus] = useState<"idle" | "busy" | "done" | "already">("idle");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    setStatus("busy");
+    setBusy(true);
     setError(null);
     try {
       await portalFetch("user", "/reviews", {
@@ -186,51 +211,51 @@ function LeaveReviewForm({ bookingId, token, onPosted }: { bookingId: string; to
         token,
         body: { bookingId, rating, comment: comment || undefined },
       });
-      setStatus("done");
-      onPosted();
+      onPosted(true);
     } catch (err) {
       if (err instanceof PortalApiError && err.status === 409) {
-        setStatus("already");
-        onPosted();
+        onPosted(false);
         return;
       }
       setError(err instanceof Error ? err.message : "Couldn't submit that.");
-      setStatus("idle");
+      setBusy(false);
     }
   }
 
-  if (status === "done") {
-    return <p className="mt-4 text-sm text-verified">Thanks — your review is posted.</p>;
-  }
-  if (status === "already") {
-    return null;
-  }
-
   return (
-    <div className="mt-4 rounded-panel border border-line p-5">
-      <p className="text-sm font-medium text-ink mb-3">You rented from this shop. Leave a review.</p>
+    <div className="space-y-4">
+      <div className="rounded-row bg-surface-2 px-4 py-3">
+        <p className="text-sm font-semibold text-ink">{vehicle}</p>
+        <p className="text-sm text-ink-2">{shopName}</p>
+      </div>
       {error && <p className="mb-3 text-sm text-danger bg-danger-soft rounded-row px-3 py-2">{error}</p>}
-      <div className="flex items-center gap-1 mb-3">
+      <fieldset>
+        <legend className="mb-1 text-sm font-medium text-ink">How was your experience?</legend>
+        <div className="flex flex-wrap gap-1">
         {Array.from({ length: 5 }, (_, i) => (
-          <button key={i} type="button" onClick={() => setRating(i + 1)} aria-label={`${i + 1} stars`}>
+          <button key={i} type="button" onClick={() => setRating(i + 1)} aria-label={`Rate ${i + 1} out of 5`}
+            aria-pressed={rating === i + 1} className="grid size-10 place-items-center rounded-row hover:bg-surface-2 [&_svg]:size-5">
             <StarIcon filled={i < rating} />
           </button>
         ))}
-      </div>
-      <textarea
+        </div>
+      </fieldset>
+      <label className="block text-sm font-medium text-ink">Tell us more <span className="font-normal text-ink-2">(optional)</span>
+        <textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
-        placeholder="How was the shop, the vehicle's condition, the handover? (optional)"
+        placeholder="How was pickup, the vehicle, or the shop’s service?"
         rows={3}
-        className="w-full rounded-row border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink mb-3"
-      />
+        className="mt-1.5 w-full rounded-row border border-line-strong px-3 py-2 text-sm font-normal outline-none focus:border-ink"
+        />
+      </label>
       <button
         type="button"
-        disabled={status === "busy"}
+        disabled={busy || rating === 0}
         onClick={submit}
-        className="h-11 px-5 rounded-row bg-ink text-surface font-medium text-sm disabled:opacity-50"
+        className="h-11 px-5 rounded-row bg-amber text-on-amber font-semibold text-sm disabled:opacity-50"
       >
-        {status === "busy" ? "Posting…" : "Post review"}
+        {busy ? "Posting…" : "Post review"}
       </button>
     </div>
   );

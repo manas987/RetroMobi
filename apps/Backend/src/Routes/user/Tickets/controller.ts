@@ -11,12 +11,13 @@ export async function create(req: Request, res: Response) {
     openedById: req.userId!,
     subject: req.body.subject,
     firstMessage: req.body.firstMessage,
+    category: req.body.category,
   });
   res.status(201).json(ticket);
 }
 
 export async function list(req: Request, res: Response) {
-  const tickets = await ticketsService.listTickets(pool, { partyType: "CUSTOMER", partyId: req.userId! });
+  const tickets = await ticketsService.listCustomerConversations(pool, req.userId!);
   res.status(200).json({ tickets });
 }
 

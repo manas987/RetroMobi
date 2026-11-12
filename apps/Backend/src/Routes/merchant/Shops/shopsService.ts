@@ -279,3 +279,29 @@ export async function setShopHours(
   }
   return getShop(pool, shopId);
 }
+
+/**
+ * A shop's reviews as its own staff see them. Reviewer names follow the same
+ * rule as the public page: a deleted account's name is not shown.
+ */
+export async function listShopReviews(pool: Pool, shopId: string) {
+  const { rows } = await pool.query(
+    `select r.id, r.rating, r.comment, r.created_at,
+            case when u.status <> 'DELETED' then u.name end as reviewer_name,
+            v.registration_number, m.make, m.model
+       from reviews r
+       join users u on u.id = r.user_id
+       join vehicles v on v.id = r.vehicle_id
+       join vehicle_models m on m.id = v.model_id
+      where r.shop_id = $1 and r.deleted_at is null
+      order by r.created_at desc
+      limit 50`,
+    [shopId],
+  );
+  const { rows: shopRows } = await pool.query(`select rating, review_count from shops where id = $1`, [shopId]);
+  return {
+    rating: shopRows[0]?.rating == null ? null : Number(shopRows[0].rating),
+    reviewCount: Number(shopRows[0]?.review_count ?? 0),
+    reviews: rows,
+  };
+}

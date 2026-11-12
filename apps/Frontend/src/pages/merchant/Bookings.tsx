@@ -9,6 +9,9 @@ import { Modal } from "../../components/Modal";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { defaultWindow } from "../../lib/searchParams";
 import { enumLabel, rupees } from "../../lib/format";
+import { bookingStage, nextAction } from "../../lib/bookingStage";
+import { useT } from "../../i18n";
+import { HandoverSheet, ReturnSheet } from "./bookingActions";
 
 /** A booking is either an online one (a rider, a customer account) or a
  *  walk-in (loose name and phone on the row). The two sets of columns are
@@ -147,7 +150,7 @@ function BookingsBody() {
               key: "__actions",
               label: "",
               render: (r) =>
-                canReturn ? <BookingRowActions booking={r} token={token} onChanged={reload} /> : null,
+                canReturn ? <BookingRowActions booking={r} onChanged={reload} /> : null,
             },
           ]}
         />
@@ -282,86 +285,32 @@ function Pair({ label, value, strong }: { label: string; value: string; strong?:
   );
 }
 
-function BookingRowActions({ booking: b, token, onChanged }: { booking: Row; token: string; onChanged: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [claiming, setClaiming] = useState(false);
-  const [reason, setReason] = useState("");
-
-  const canPickup = b.status === "CONFIRMED" && !b.actual_pickup_at && b.source === "OFFLINE";
-  const canReturn = Boolean(b.actual_pickup_at) && !b.actual_return_at;
-
-  async function pickup() {
-    setBusy(true);
-    setError(null);
-    try {
-      await portalFetch("merchant", `/bookings/${b.id}/pickup`, { method: "POST", token });
-      onChanged();
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't confirm pickup.");
-      setBusy(false);
-    }
-  }
-
-  async function returnClean() {
-    setBusy(true);
-    setError(null);
-    try {
-      await portalFetch("merchant", `/bookings/${b.id}/return`, { method: "POST", token, body: { claim: false } });
-      onChanged();
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't process that return.");
-      setBusy(false);
-    }
-  }
-
-  async function returnWithClaim() {
-    setBusy(true);
-    setError(null);
-    try {
-      await portalFetch("merchant", `/bookings/${b.id}/return`, { method: "POST", token, body: { claim: true, reason } });
-      onChanged();
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't process that return.");
-      setBusy(false);
-    }
-  }
-
-  if (claiming) {
-    return (
-      <span className="inline-flex items-center gap-2">
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="Reason for deposit claim"
-          className="rounded-row border border-line-strong px-2 py-1 text-xs outline-none focus:border-ink"
-        />
-        <button type="button" disabled={busy || !reason} onClick={returnWithClaim} className="text-xs text-danger font-medium hover:underline disabled:opacity-40">
-          Confirm claim
-        </button>
-      </span>
-    );
-  }
-
+/** Row actions open the shared counter sheets, so the ID check and the claim
+ *  amount behave here exactly as they do on the overview. Phase 2 replaces
+ *  this page; until then this keeps it working against the stricter API. */
+function BookingRowActions({ booking: b, onChanged }: { booking: Row; onChanged: () => void }) {
+  const { t } = useT();
+  const [open, setOpen] = useState<"handover" | "return" | null>(null);
+  const action = nextAction(bookingStage(b));
+  const close = () => {
+    setOpen(null);
+    onChanged();
+  };
   return (
-    <div className="flex items-center gap-2 whitespace-nowrap">
-      {error && <span className="text-xs text-danger">{error}</span>}
-      {canPickup && (
-        <button type="button" disabled={busy} onClick={pickup} className="text-xs font-medium text-ink hover:underline disabled:opacity-40">
-          Confirm pickup
+    <>
+      {action === "handover" && (
+        <button type="button" onClick={() => setOpen("handover")} className="text-xs font-medium text-ink hover:underline">
+          {b.source === "OFFLINE" ? t("actions.handoverWalkin") : t("actions.handover")}
         </button>
       )}
-      {canReturn && (
-        <>
-          <button type="button" disabled={busy} onClick={returnClean} className="text-xs font-medium text-verified hover:underline disabled:opacity-40">
-            Clean return
-          </button>
-          <button type="button" disabled={busy} onClick={() => setClaiming(true)} className="text-xs font-medium text-danger hover:underline disabled:opacity-40">
-            Claim deposit
-          </button>
-        </>
+      {action === "return" && (
+        <button type="button" onClick={() => setOpen("return")} className="text-xs font-medium text-ink hover:underline">
+          {t("actions.markReturned")}
+        </button>
       )}
-    </div>
+      <HandoverSheet booking={open === "handover" ? b : null} onClose={close} />
+      <ReturnSheet booking={open === "return" ? b : null} onClose={close} />
+    </>
   );
 }
 

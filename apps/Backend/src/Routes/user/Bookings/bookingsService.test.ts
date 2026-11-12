@@ -13,6 +13,8 @@ import {
   CouponInvalidError,
   DuplicateRiderError,
   ExtensionPendingError,
+  BookingNotExtendableError,
+  getExtensionPayment,
   InvalidDurationError,
   LicenceInvalidError,
   RiderUnavailableError,
@@ -98,7 +100,7 @@ describe("createHold", () => {
     expect(rows.every((r) => r.status === "HOLD")).toBe(true);
   });
 
-  test("sets hold_expires_at 10 minutes out, on the group", async () => {
+  test("sets hold_expires_at 15 minutes out, on the group", async () => {
     const { userId, riderId } = await customerWithRider();
     const v = await createBookableVehicle(pool);
     const { pickupAt, returnAt } = futureWindow(41);
@@ -115,8 +117,44 @@ describe("createHold", () => {
       [result.groupId],
     );
     const minutesOut = (new Date(rows[0].hold_expires_at).getTime() - Date.now()) / 60_000;
-    expect(minutesOut).toBeGreaterThan(8);
-    expect(minutesOut).toBeLessThan(12);
+    expect(minutesOut).toBeGreaterThan(13);
+    expect(minutesOut).toBeLessThan(17);
+  });
+
+  // The exclusion constraint arbitrates booking-vs-booking and nothing else, so
+  // a shop taking a scooter off the road is a separate check entirely -- and it
+  // was missing here while search had always filtered on it.
+  test("a vehicle blocked by its shop for the window is rejected", async () => {
+    const { userId, riderId } = await customerWithRider();
+    const v = await createBookableVehicle(pool);
+    const { pickupAt, returnAt } = futureWindow(60);
+
+    await pool.query(
+      `insert into vehicle_unavailability (vehicle_id, start_at, end_at, reason)
+       values ($1, $2, $3, 'SERVICING')`,
+      [v.id, new Date(pickupAt.getTime() - 86_400_000), new Date(returnAt.getTime() + 86_400_000)],
+    );
+
+    await expect(
+      createHold(pool, { userId, items: [{ vehicleId: v.id, riderId }], pickupAt, returnAt }),
+    ).rejects.toBeInstanceOf(VehicleUnavailableError);
+  });
+
+  // A window that has already started is not a rental anyone can collect. The
+  // realistic path is a customer who sat on the checkout page past their own
+  // pickup time, not abuse.
+  test("a pickup time that has already passed is rejected", async () => {
+    const { userId, riderId } = await customerWithRider();
+    const v = await createBookableVehicle(pool);
+
+    await expect(
+      createHold(pool, {
+        userId,
+        items: [{ vehicleId: v.id, riderId }],
+        pickupAt: new Date(Date.now() - 60 * 60 * 1000),
+        returnAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }),
+    ).rejects.toBeInstanceOf(InvalidDurationError);
   });
 
   // THE critical behaviour. Application-level checks cannot do this.
@@ -606,7 +644,7 @@ describe("requestExtension (pay-first)", () => {
     verifyWebhookSignature: () => true,
   };
 
-  async function confirmed(dayOffset: number) {
+  async function confirmed(dayOffset: number, pickedUp = true) {
     const { userId, riderId } = await customerWithRider();
     const v = await createBookableVehicle(pool, { amount: 50_000, weekendAmount: 50_000 });
     const { pickupAt, returnAt } = futureWindow(dayOffset, 2);
@@ -616,9 +654,57 @@ describe("requestExtension (pay-first)", () => {
       pickupAt,
       returnAt,
     });
-    await pool.query(`update bookings set status = 'CONFIRMED' where group_id = $1`, [held.groupId]);
+    await pool.query(`update bookings set status = 'CONFIRMED', actual_pickup_at = case when $2 then scheduled_pickup_at end where group_id = $1`, [held.groupId, pickedUp]);
     return { userId, bookingId: held.bookings[0]!.id, vehicleId: v.id, pickupAt, returnAt };
   }
+
+  test("cannot request an extension before pickup", async () => {
+    const b = await confirmed(1190, false);
+    await expect(requestExtension(pool, {
+      userId: b.userId, bookingId: b.bookingId, newReturnAt: new Date(b.returnAt.getTime() + 86_400_000),
+    }, fakeCashfree)).rejects.toBeInstanceOf(BookingNotExtendableError);
+  });
+
+  test("an overlapping booking is rejected before creating a payment order", async () => {
+    const b = await confirmed(1192);
+    const newReturnAt = new Date(b.returnAt.getTime() + 86_400_000);
+    await insertBooking(pool, { vehicleId: b.vehicleId, pickupAt: b.returnAt.toISOString(), returnAt: newReturnAt.toISOString() });
+    await expect(requestExtension(pool, { ...b, newReturnAt }, {
+      ...fakeCashfree,
+      createOrder: async () => { throw new Error("No order should be created"); },
+    })).rejects.toBeInstanceOf(VehicleUnavailableError);
+  });
+
+  test("a shop block added after the quote prevents payment and triggers a refund if already paid", async () => {
+    const b = await confirmed(1193);
+    const newReturnAt = new Date(b.returnAt.getTime() + 86_400_000);
+    const { extensionId } = await requestExtension(pool, { ...b, newReturnAt }, fakeCashfree);
+    await pool.query("insert into vehicle_unavailability (vehicle_id, start_at, end_at) values ($1, $2, $3)", [
+      b.vehicleId, b.returnAt, newReturnAt,
+    ]);
+    await expect(getExtensionPayment(pool, b.userId, b.bookingId, extensionId, {
+      ...fakeCashfree,
+      getOrder: async () => ({ orderStatus: "ACTIVE", paymentSessionId: "test-session" }),
+    })).rejects.toBeInstanceOf(VehicleUnavailableError);
+    await getExtensionPayment(pool, b.userId, b.bookingId, extensionId, fakeCashfree);
+    expect((await getExtension(pool, b.userId, b.bookingId)).status).toBe("REJECTED");
+    const { rows } = await pool.query("select reason from refunds where booking_id = $1", [b.bookingId]);
+    expect(rows[0]?.reason).toBe("EXTENSION_UNAVAILABLE");
+  });
+
+  test("a paid extension only updates the booking once when payment is checked concurrently", async () => {
+    const b = await confirmed(1191);
+    const newReturnAt = new Date(b.returnAt.getTime() + 86_400_000);
+    const before = await pool.query("select total_amount from bookings where id = $1", [b.bookingId]);
+    const { extensionId, additionalAmount } = await requestExtension(pool, { ...b, newReturnAt }, fakeCashfree);
+    await Promise.all([
+      getExtensionPayment(pool, b.userId, b.bookingId, extensionId, fakeCashfree),
+      getExtensionPayment(pool, b.userId, b.bookingId, extensionId, fakeCashfree),
+    ]);
+    const { rows: [updated] } = await pool.query("select scheduled_return_at, total_amount from bookings where id = $1", [b.bookingId]);
+    expect(updated.scheduled_return_at).toEqual(newReturnAt);
+    expect(Number(updated.total_amount)).toBe(Number(before.rows[0].total_amount) + additionalAmount);
+  });
 
   test("requesting does not touch scheduled_return_at -- it only moves after the webhook fires", async () => {
     const b = await confirmed(1200);

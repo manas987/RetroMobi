@@ -10,7 +10,7 @@ import { EmptyState, feedbackActionClass } from "./ContentFeedback";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 
 export function CartDrawer({ children }: { children: ReactNode }) {
-  const { items, totalUnits, setQty, drawerOpen, openDrawer, closeDrawer, limitNoticeId, dismissLimit } = useCart();
+  const { items, totalUnits, setQty, drawerOpen, openDrawer, closeDrawer, limitNoticeId, dismissLimit, removedNotice, dismissRemoved } = useCart();
   const [, navigate] = useLocation();
 
   const subtotal = items.reduce((sum, i) => sum + i.pricePerDay * i.vehicleIds.length, 0);
@@ -127,11 +127,16 @@ export function CartDrawer({ children }: { children: ReactNode }) {
     {limitNoticeId > 0 && typeof document !== "undefined" && createPortal(
       <CartLimitNotice key={limitNoticeId} onOpen={openDrawer} onDismiss={dismissLimit} />, document.body,
     )}
+    {removedNotice.count > 0 && typeof document !== "undefined" && createPortal(
+      <CartRemovedNotice key={removedNotice.id} count={removedNotice.count} onOpen={openDrawer} onDismiss={dismissRemoved} />,
+      document.body,
+    )}
     </>
   );
 }
 
-export function CartLimitNotice({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: () => void }) {
+/** The toast chrome, shared so the two notices cannot drift apart visually. */
+function CartToast({ children, onOpen, onDismiss }: { children: ReactNode; onOpen: () => void; onDismiss: () => void }) {
   useEffect(() => {
     const timer = setTimeout(onDismiss, 3200);
     return () => clearTimeout(timer);
@@ -139,8 +144,29 @@ export function CartLimitNotice({ onOpen, onDismiss }: { onOpen: () => void; onD
 
   return (
     <div className="cart-limit-toast fixed bottom-5 left-1/2 -translate-x-1/2 z-[1200] w-max max-w-[calc(100vw-2rem)] rounded-full border border-line bg-surface/95 px-4 py-2.5 shadow-sm backdrop-blur-sm flex items-center gap-3 text-ink">
-      <span role="status" className="text-[13px]">Cart full · {MAX_CART_ITEMS} vehicles max<span className="sr-only">. Remove one to add another.</span></span>
+      <span role="status" className="text-[13px]">{children}</span>
       <button type="button" onClick={onOpen} className="shrink-0 text-xs font-semibold underline underline-offset-2">Open cart</button>
     </div>
+  );
+}
+
+export function CartLimitNotice({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: () => void }) {
+  return (
+    <CartToast onOpen={onOpen} onDismiss={onDismiss}>
+      Cart full · {MAX_CART_ITEMS} vehicles max<span className="sr-only">. Remove one to add another.</span>
+    </CartToast>
+  );
+}
+
+/**
+ * A vehicle went away between adding it and coming back — serviced, unlisted, or
+ * booked by someone else. It is already out of the cart by the time this shows;
+ * the toast only explains the change, it is not a decision to make.
+ */
+export function CartRemovedNotice({ count, onOpen, onDismiss }: { count: number; onOpen: () => void; onDismiss: () => void }) {
+  return (
+    <CartToast onOpen={onOpen} onDismiss={onDismiss}>
+      {count === 1 ? "1 item in your cart is" : `${count} items in your cart are`} no longer available
+    </CartToast>
   );
 }

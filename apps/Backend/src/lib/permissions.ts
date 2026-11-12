@@ -29,8 +29,11 @@ const MANAGER: readonly Permission[] = [
   "members:read",
 ];
 
+// bookings:write so the person at the counter can run the identity check,
+// hand over a vehicle and record a walk-in -- the counter's whole job.
 const STAFF: readonly Permission[] = [
   "bookings:read",
+  "bookings:write",
   "bookings:return",
   "tracking:read",
   "fleet:read",

@@ -69,6 +69,20 @@ describe("ridersService", () => {
     expect(riders.find((r: any) => r.id === rider.id)).toBeUndefined();
   });
 
+  test("a renewed licence replaces the old expiry in the rider list", async () => {
+    const user = await createUser(pool);
+    const rider = await createRider(pool, user.id, { name: "Renewed Rider" });
+    await pool.query(
+      `insert into driving_licence_verifications (rider_id, provider, licence_number, status, expires_on, verified_at)
+       values ($1, 'TEST', 'DL-OLD', 'VERIFIED', '2020-01-01', now() - interval '1 year'),
+              ($1, 'TEST', 'DL-NEW', 'VERIFIED', '2035-01-01', now())`,
+      [rider.id],
+    );
+    const riders = await listRiders(pool, user.id);
+    expect(riders).toHaveLength(1);
+    expect(riders[0].licence_expires_on).toBe("2035-01-01");
+  });
+
   test("updating name/dob does not touch the licence verification", async () => {
     const user = await createUser(pool);
     const rider = await createRider(pool, user.id, { name: "Before Name" });

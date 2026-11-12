@@ -3,7 +3,10 @@ import { z } from "zod";
 export const CreateTicketSchema = z.object({
   bookingId: z.string().uuid().optional(),
   subject: z.string().min(1).optional(),
-  firstMessage: z.string().min(1).optional(),
+  firstMessage: z.string().trim().min(1).optional(),
+  category: z.enum(["BOOKING", "APP_HELP", "OTHER"]).optional(),
+}).refine((ticket) => !ticket.category || (ticket.category === "BOOKING") === !!ticket.bookingId, {
+  message: "Choose a booking for booking support.",
 });
 
 export const PostMessageSchema = z.object({

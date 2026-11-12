@@ -31,11 +31,23 @@ export function rentalWindowFromSearch(search: string) {
 }
 
 /** Default window: Rishikesh demand is same-day, so today 10am -> today 10pm. */
+/**
+ * The window we fill in for someone who has not picked dates.
+ *
+ * It rolls to tomorrow once today's 10am has gone, which is not cosmetic: the
+ * cart stores whatever window it was added with, and the server refuses a hold
+ * whose pickup is already in the past. A fixed "today 10am" meant every default
+ * cart built after 10am carried a dead window to checkout.
+ */
 export function defaultWindow(): { pickupAt: string; returnAt: string } {
   const pickup = new Date();
   pickup.setHours(10, 0, 0, 0);
   const ret = new Date();
   ret.setHours(22, 0, 0, 0);
+  if (pickup.getTime() <= Date.now()) {
+    pickup.setDate(pickup.getDate() + 1);
+    ret.setDate(ret.getDate() + 1);
+  }
   return { pickupAt: toIsoWithOffset(pickup), returnAt: toIsoWithOffset(ret) };
 }
 

@@ -24,6 +24,7 @@ export function ShopPage() {
   const locationSearch = useLocationSearch();
   const [, navigate] = useLocation();
   const datesRef = useRef<{ openDates: () => void }>(null);
+  const reviewBookingId = new URLSearchParams(locationSearch).get("reviewBooking");
 
   const criteria = parseSearchParams(locationSearch);
   // Every vehicle on this page is at the same shop, so a distance sort inherited from Browse is redundant.
@@ -36,7 +37,9 @@ export function ShopPage() {
   // city — so refreshing or sharing the link keeps the same shop scoped.
   useEffect(() => {
     if (criteria.shopId !== shopId || criteria.sort !== sort) {
-      navigate(`/shops/${shopId}?${toSearchParams({ ...criteria, sort, shopId, city: "", page: 1 })}`, {
+      const params = new URLSearchParams(toSearchParams({ ...criteria, sort, shopId, city: "", page: 1 }));
+      if (reviewBookingId) params.set("reviewBooking", reviewBookingId);
+      navigate(`/shops/${shopId}?${params}${reviewBookingId ? "#shop-reviews" : ""}`, {
         replace: true,
       });
     }
@@ -183,7 +186,7 @@ export function ShopPage() {
           )}
         </section>
 
-        {shop && <ReviewsSection shopId={shop.shopId} shopName={shop.name} />}
+        {shop && <ReviewsSection key={shop.shopId} shopId={shop.shopId} shopName={shop.name} reviewBookingId={reviewBookingId} />}
       </div>
 
       <Footer />

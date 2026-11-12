@@ -14,6 +14,7 @@ router.post("/", validate(CreateShopSchema), controller.create);
 router.get("/:shopId", requirePermission("fleet:read"), controller.get);
 router.patch("/:shopId", requirePermission("shop:write"), validate(UpdateShopSchema), controller.update);
 router.delete("/:shopId", requirePermission("shop:delete"), controller.remove);
+router.get("/:shopId/reviews", requirePermission("fleet:read"), controller.reviews);
 router.post("/:shopId/verification", requirePermission("shop:write"), controller.submitVerification);
 router.put(
   "/:shopId/hours",

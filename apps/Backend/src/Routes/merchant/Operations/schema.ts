@@ -5,6 +5,9 @@ export const ListBookingsQuerySchema = z.object({
   status: z.enum(["HOLD", "CONFIRMED", "COMPLETED"]).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  source: z.enum(["ONLINE", "OFFLINE"]).optional(),
+  vehicleId: z.string().uuid().optional(),
+  q: z.string().trim().min(1).max(80).optional(),
 });
 
 export const CreateWalkinSchema = z.object({
@@ -16,11 +19,18 @@ export const CreateWalkinSchema = z.object({
   returnAt: z.coerce.date(),
 });
 
-export const ReturnSchema = z.object({
-  claim: z.boolean(),
-  reason: z.string().optional(),
-  amount: z.number().int().nonnegative().optional(),
-});
+// A claim must say what is damaged and how much (paise) the shop wants kept.
+// Without an amount every claim used to land as ₹0 and support settled blind.
+// The upper bound (the deposit actually held) is checked in the service.
+export const ReturnSchema = z
+  .object({
+    claim: z.boolean(),
+    reason: z.string().trim().optional(),
+    amount: z.number().int().positive().optional(),
+  })
+  .refine((b) => !b.claim || (b.reason && b.amount), {
+    message: "a claim needs a reason and an amount",
+  });
 
 /**
  * The handover identity check. Both booleans are required to be true by the

@@ -9,6 +9,7 @@ import { RiderVerification } from "../components/RiderVerification";
 import { Modal } from "../components/Modal";
 import { EmptyState, feedbackActionClass, SkeletonRows } from "../components/ContentFeedback";
 import { useCart } from "../lib/cart";
+import { istDay } from "../lib/format";
 import { usePortalSession, usePortalQuery, portalFetch, PortalApiError, type Row } from "../lib/portal";
 import { defaultWindow, toIsoWithOffset } from "../lib/searchParams";
 
@@ -17,9 +18,17 @@ import { defaultWindow, toIsoWithOffset } from "../lib/searchParams";
 type HoldResult = { groupId: string };
 
 export function Checkout() {
-  const { items, clear } = useCart();
+  const { items, clear, revalidate } = useCart();
   const { session } = usePortalSession("user");
   const [, navigate] = useLocation();
+
+  // Again here, not only on login: this is the last point before money, and the
+  // gap between the cart page and this one is long enough for a shop to take a
+  // scooter off the road. If it empties the cart the guard below bounces to
+  // /browse, with the toast explaining why.
+  useEffect(() => {
+    void revalidate();
+  }, [revalidate]);
 
   // One row per physical unit — a qty-2 cart line needs two riders, one each.
   const vehicles = items.flatMap((i) =>
@@ -70,12 +79,17 @@ export function Checkout() {
 
   const riders = ridersRes?.riders ?? [];
 
+  // Mirrors the server's rule exactly -- `expiresOn >= istDate(returnAt)`, both as
+  // YYYY-MM-DD (lib/licenceEligibility.ts). It used to parse the expiry date into a
+  // Date at *local midnight* and compare it to the return date, which blocked any
+  // licence expiring on the return day itself: the button went dead on a licence the
+  // server would have accepted, and the customer had no way to tell why.
   function riderVerified(riderId: string | null): boolean {
     const rider = riders.find((r) => r.id === riderId);
     return (
       rider?.licence_status === "VERIFIED" &&
       typeof rider.licence_expires_on === "string" &&
-      new Date(rider.licence_expires_on) >= returnDate
+      rider.licence_expires_on >= istDay(combine(returnDate, returnTime))
     );
   }
 

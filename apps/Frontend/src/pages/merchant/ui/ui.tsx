@@ -1,0 +1,410 @@
+import { useEffect, useId, useRef, type ReactNode } from "react";
+import { Link } from "wouter";
+import { X, type LucideIcon } from "lucide-react";
+import type { Tone } from "../../../lib/bookingStage";
+import { useT } from "../../../i18n";
+
+/**
+ * The merchant console's building blocks. Built for people new to software:
+ * big type, one primary action per card, an icon next to every label, and
+ * colour that always means the same thing (see TONE).
+ */
+
+/** The only place merchant tone colours are defined. green done, amber needs
+ *  you, red late/problem, blue under way, grey inactive. */
+export const TONE: Record<Tone, { chip: string; icon: string; dot: string }> = {
+  good: { chip: "bg-verified-soft text-verified", icon: "bg-verified-soft text-verified", dot: "bg-verified" },
+  attention: { chip: "bg-amber text-on-amber", icon: "bg-amber text-on-amber", dot: "bg-amber-edge" },
+  bad: { chip: "bg-danger-soft text-danger", icon: "bg-danger-soft text-danger", dot: "bg-danger" },
+  info: { chip: "bg-info-soft text-info", icon: "bg-info-soft text-info", dot: "bg-info" },
+  muted: { chip: "bg-surface-3 text-ink-2", icon: "bg-surface-3 text-ink-2", dot: "bg-ink-4" },
+};
+
+export function Chip({ tone, children, icon: Icon }: { tone: Tone; children: ReactNode; icon?: LucideIcon }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${TONE[tone].chip}`}>
+      {Icon && <Icon className="h-3.5 w-3.5" aria-hidden />}
+      {children}
+    </span>
+  );
+}
+
+export function Card({
+  title,
+  icon: Icon,
+  action,
+  children,
+  className = "",
+  scroll = false,
+}: {
+  title?: ReactNode;
+  icon?: LucideIcon;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  /** Body scrolls inside the card instead of growing the page -- for
+   *  layouts that must fit one screen. */
+  scroll?: boolean;
+}) {
+  return (
+    <section className={`bg-surface rounded-card shadow-card p-5 flex flex-col ${scroll ? "min-h-0" : ""} ${className}`}>
+      {(title || action) && (
+        <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
+          {title && (
+            <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
+              {Icon && <Icon className="h-5 w-5 text-ink-3" aria-hidden />}
+              {title}
+            </h2>
+          )}
+          {action}
+        </div>
+      )}
+      {scroll ? <div className="min-h-0 flex-1 overflow-y-auto -mx-2 px-2">{children}</div> : children}
+    </section>
+  );
+}
+
+export function StatCard({
+  icon: Icon,
+  label,
+  value,
+  caption,
+  tone,
+  href,
+  failed,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number | string | null;
+  caption?: ReactNode;
+  tone: Tone;
+  href?: string;
+  failed?: boolean;
+}) {
+  const { t } = useT();
+  const body = (
+    <div className="flex items-start gap-4">
+      <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${TONE[tone].icon}`}>
+        <Icon className="h-5 w-5" aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-ink-2">{label}</p>
+        {failed ? (
+          <p className="mt-1 text-sm text-danger">{t("common.couldntLoadShort")}</p>
+        ) : (
+          <p className="tnum text-3xl font-semibold text-ink leading-tight">{value ?? "—"}</p>
+        )}
+        {caption && <p className="text-xs text-ink-3">{caption}</p>}
+      </div>
+    </div>
+  );
+  const cls = "block bg-surface rounded-card shadow-card p-4 text-left";
+  return href ? (
+    <Link href={href} className={`${cls} transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-2 focus-visible:outline-ink`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
+  );
+}
+
+export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
+  return (
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
+      <div className="min-w-0">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-ink">{title}</h1>
+        {subtitle && <p className="mt-1 text-base text-ink-2">{subtitle}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+    </header>
+  );
+}
+
+type ButtonVariant = "primary" | "dark" | "secondary" | "ghost" | "danger";
+
+const BUTTON: Record<ButtonVariant, string> = {
+  // Amber is a fill under dark text, never text itself.
+  primary: "bg-amber text-on-amber hover:bg-amber-edge",
+  dark: "bg-ink text-surface hover:bg-ink-2",
+  secondary: "bg-surface text-ink border border-line-strong hover:bg-surface-3",
+  ghost: "text-ink-2 hover:bg-surface-3 hover:text-ink",
+  danger: "bg-danger text-surface hover:opacity-90",
+};
+
+export function Button({
+  variant = "secondary",
+  icon: Icon,
+  children,
+  size = "md",
+  className = "",
+  ...rest
+}: {
+  variant?: ButtonVariant;
+  icon?: LucideIcon;
+  size?: "md" | "lg";
+  children: ReactNode;
+} & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      {...rest}
+      className={`inline-flex items-center justify-center gap-2 rounded-2xl font-semibold transition disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
+        size === "lg" ? "min-h-14 px-6 text-base" : "min-h-11 px-4 text-sm"
+      } ${BUTTON[variant]} ${className}`}
+    >
+      {Icon && <Icon className="h-5 w-5 shrink-0" aria-hidden />}
+      {children}
+    </button>
+  );
+}
+
+export function EmptyState({ icon: Icon, text, action }: { icon: LucideIcon; text: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center text-center gap-3 py-8 px-4">
+      <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-3 text-ink-3">
+        <Icon className="h-6 w-6" aria-hidden />
+      </span>
+      <p className="text-sm text-ink-2 max-w-xs">{text}</p>
+      {action}
+    </div>
+  );
+}
+
+export function LoadingRows({ rows = 3 }: { rows?: number }) {
+  const { t } = useT();
+  return (
+    <div role="status" aria-label={t("common.loading")} className="flex flex-col gap-3">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="h-14 rounded-2xl bg-surface-3 animate-pulse" />
+      ))}
+    </div>
+  );
+}
+
+export function ErrorNote({ text, onRetry }: { text?: string; onRetry?: () => void }) {
+  const { t } = useT();
+  return (
+    <div role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger flex flex-wrap items-center gap-3">
+      <span>{text ?? t("common.couldntLoad")}</span>
+      {onRetry && (
+        <button type="button" onClick={onRetry} className="font-semibold underline underline-offset-2">
+          {t("common.retry")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A panel for one task (hand over, return, walk-in). Native <dialog> gives
+ * focus trapping, Escape-to-close and a backdrop for free. Full screen on a
+ * phone, a right-hand drawer from `sm` up.
+ */
+export function Sheet({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: ReactNode;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const { t } = useT();
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) d.showModal();
+    if (!open && d.open) d.close();
+  }, [open]);
+
+  return (
+    <dialog
+      ref={ref}
+      aria-labelledby={titleId}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === ref.current) onClose();
+      }}
+      className="m-0 ml-auto h-dvh max-h-dvh w-full max-w-full sm:max-w-lg bg-surface p-0 backdrop:bg-ink/40 open:flex flex-col"
+    >
+      {open && (
+        <>
+          <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+            <h2 id={titleId} className="text-lg font-semibold text-ink">
+              {title}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t("common.close")}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-ink-2 hover:bg-surface-3"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-5">{children}</div>
+        </>
+      )}
+    </dialog>
+  );
+}
+
+export function Tabs<K extends string>({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: { key: K; label: string; count?: number }[];
+  value: K;
+  onChange: (key: K) => void;
+}) {
+  return (
+    <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-line mb-5 -mx-1 px-1">
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          role="tab"
+          aria-selected={tab.key === value}
+          onClick={() => onChange(tab.key)}
+          className={`min-h-11 px-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px ${
+            tab.key === value ? "border-ink text-ink" : "border-transparent text-ink-3 hover:text-ink"
+          }`}
+        >
+          {tab.label}
+          {tab.count != null && <span className="tnum ml-1.5 text-ink-3">{tab.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function ViewToggle<K extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: K; label: string; icon: LucideIcon }[];
+  value: K;
+  onChange: (key: K) => void;
+}) {
+  return (
+    <div role="group" className="inline-flex rounded-2xl bg-surface-3 p-1">
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          aria-pressed={o.key === value}
+          onClick={() => onChange(o.key)}
+          className={`inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-medium ${
+            o.key === value ? "bg-surface text-ink shadow-sm" : "text-ink-2 hover:text-ink"
+          }`}
+        >
+          <o.icon className="h-4 w-4" aria-hidden />
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Two validated categorical hues (dataviz validator: all checks pass on the
+ *  light surface). Deliberately not the tone colours, which mean states. */
+export const SERIES = ["#4b5bd6", "#1b9e8a"] as const;
+
+/**
+ * Stacked columns, one per day. Bars capped at 24px, 4px rounded tops, 2px
+ * surface gap between segments, hover tooltip per column, and the numbers
+ * available as a table for anyone who can't read the bars.
+ */
+export function BarChart({
+  data,
+  series,
+  format = String,
+  tableLabel,
+  legend = true,
+  fill = false,
+}: {
+  data: { label: string; values: number[] }[];
+  series: string[];
+  format?: (n: number) => string;
+  tableLabel: string;
+  /** Off when the card already shows a keyed legend of its own. */
+  legend?: boolean;
+  /** Stretch to the parent's remaining height (parent must be a flex column). */
+  fill?: boolean;
+}) {
+  const totals = data.map((d) => d.values.reduce((a, b) => a + b, 0));
+  const max = Math.max(1, ...totals);
+  const H = 120;
+
+  return (
+    <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
+      {legend && series.length > 1 && (
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs text-ink-2">
+          {series.map((s, i) => (
+            <li key={s} className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: SERIES[i] }} aria-hidden />
+              {s}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div
+        className={`flex items-end justify-between gap-1 border-b border-line pt-6 ${fill ? "min-h-20 flex-1" : ""}`}
+        style={fill ? undefined : { height: H + 24 }}
+        aria-hidden
+      >
+        {data.map((d, col) => (
+          <div key={d.label} className="group relative flex h-full flex-1 flex-col items-center justify-end">
+            <div className="flex h-full w-full max-w-6 flex-col-reverse gap-0.5">
+              {d.values.map((v, i) =>
+                v > 0 ? (
+                  <div
+                    key={i}
+                    className={d.values.slice(i + 1).every((x) => x === 0) ? "rounded-t" : ""}
+                    style={{ height: `max(3px, ${(v / max) * 100}%)`, background: SERIES[i] }}
+                  />
+                ) : null,
+              )}
+            </div>
+            <div className="pointer-events-none absolute -top-1 hidden group-hover:block z-10 rounded-lg bg-ink px-2 py-1 text-xs text-surface whitespace-nowrap">
+              {d.label}: {format(totals[col]!)}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between gap-1 mt-1.5" aria-hidden>
+        {data.map((d) => (
+          <span key={d.label} className="flex-1 text-center text-[11px] text-ink-3">
+            {d.label}
+          </span>
+        ))}
+      </div>
+      <details className="mt-3 text-xs text-ink-3">
+        <summary className="cursor-pointer">{tableLabel}</summary>
+        <table className="mt-2 w-full text-left">
+          <tbody>
+            {data.map((d, i) => (
+              <tr key={d.label} className="border-t border-line">
+                <th className="py-1 font-normal">{d.label}</th>
+                {series.map((s, j) => (
+                  <td key={s} className="tnum py-1">
+                    {series.length > 1 && <span className="sr-only">{s}: </span>}
+                    {format(d.values[j] ?? 0)}
+                  </td>
+                ))}
+                {series.length > 1 && <td className="tnum py-1 font-medium text-ink">{format(totals[i]!)}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    </div>
+  );
+}

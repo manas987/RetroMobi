@@ -8,7 +8,8 @@ import { Checkout } from "./pages/Checkout";
 import { CheckoutPay, CheckoutReturn } from "./pages/CheckoutPay";
 
 import { CustomerLogin } from "./pages/customer/Login";
-import { CustomerProfile, CustomerSupport } from "./pages/customer/Profile";
+import { CustomerProfile } from "./pages/customer/Profile";
+import { CustomerSupport } from "./pages/customer/Support";
 import { MyBookings } from "./pages/customer/MyBookings";
 
 import { MerchantLogin } from "./pages/merchant/Login";

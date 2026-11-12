@@ -12,7 +12,13 @@ async function resolve(modelId: string): Promise<string | null> {
 
   const promise = fetch(`/api/user/search/models/${modelId}/image`)
     .then((res) => (res.ok ? res.json() : null))
-    .then((data: { url: string } | null) => data?.url ?? null)
+    .then(async (data: { url: string } | null) => {
+      if (!data?.url || data.url.startsWith("https://dev-fallback.local/")) return null;
+      const image = new Image();
+      image.src = data.url;
+      await image.decode();
+      return data.url;
+    })
     .catch(() => null)
     .finally(() => inflight.delete(modelId));
   inflight.set(modelId, promise);
@@ -25,21 +31,19 @@ async function resolve(modelId: string): Promise<string | null> {
 /** Resolves a model's stock photo to a signed URL, or null if it has none
  *  (or a fetch fails, e.g. the dev-fallback storage that doesn't resolve). */
 export function useModelImage(modelId: string | null, hasImageKey: boolean): string | null {
-  const [url, setUrl] = useState<string | null>(() => (modelId ? (cache.get(modelId) ?? null) : null));
+  const [loaded, setLoaded] = useState<{ modelId: string; url: string | null } | null>(null);
 
   useEffect(() => {
-    if (!modelId || !hasImageKey) {
-      setUrl(null);
-      return;
-    }
+    if (!modelId || !hasImageKey) return;
     let cancelled = false;
     resolve(modelId).then((u) => {
-      if (!cancelled) setUrl(u);
+      if (!cancelled) setLoaded({ modelId, url: u });
     });
     return () => {
       cancelled = true;
     };
   }, [modelId, hasImageKey]);
 
-  return url;
+  if (!modelId || !hasImageKey) return null;
+  return loaded?.modelId === modelId ? loaded.url : cache.get(modelId) ?? null;
 }

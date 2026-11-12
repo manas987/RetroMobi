@@ -45,6 +45,24 @@ export const SearchQuerySchema = z.object({
     path: ["returnAt"],
   });
 
+/**
+ * The cart, as the browser holds it. One entry per cart line, because lines can
+ * carry different windows. The caps mirror the cart's own: MAX_CART_ITEMS lines,
+ * and each line sends both its held ids and the pool it draws extra units from.
+ */
+export const CartAvailabilitySchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        vehicleIds: z.array(z.string().uuid()).min(1).max(25),
+        pickupAt: z.coerce.date(),
+        returnAt: z.coerce.date(),
+      }),
+    )
+    .min(1)
+    .max(5),
+});
+
 export const VehicleDetailParamsSchema = z.object({
   vehicleId: z.string().uuid(),
 });

@@ -44,6 +44,7 @@ export function Modal({
           <div className={sheet ? "shrink-0 relative flex items-center justify-center border-b border-line px-5 h-16" : "flex items-center justify-between mb-4"}>
             <Dialog.Title className={`font-semibold text-ink ${sheet ? "text-[17px]" : "text-base"}`}>{title}</Dialog.Title>
             <Dialog.Close
+              aria-label="Close"
               className={`w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-3 transition-colors text-ink-2 ${
                 sheet ? "absolute right-4" : ""
               }`}

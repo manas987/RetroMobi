@@ -8,6 +8,7 @@ import {
   InvalidTicketError,
   completeSignup,
   googlePrefill,
+  listSessions,
   logout,
   refreshSession,
   requestEmailOtp,
@@ -284,5 +285,32 @@ describe("sessions", () => {
 
     const notFound = await revokeSession(pool, { userId: user.id, sessionId });
     expect(notFound).toBe(false);
+  });
+
+  test("repeated logins share one device row and signing it out revokes all of its sessions", async () => {
+    const { user, refreshToken } = await signUpAndLogin();
+    const { rows: [first] } = await pool.query("select id from sessions where user_id = $1", [user.id]);
+    const { code } = await requestOtp(pool, user.phone, noopDeliver);
+    const repeat = await verifyOtp(pool, {
+      phone: user.phone, code, deviceId: DEVICE,
+      sessionDetails: { deviceName: "Mac", browserName: "Safari", loginLocation: "Dehradun, India" },
+    });
+    if (repeat.status !== "LOGIN") throw new Error("expected LOGIN");
+    await pool.query(
+      `insert into sessions (user_id, token_hash, device_id, expires_at)
+       values ($1, $2, 'another-browser', now() + interval '1 day')`,
+      [user.id, uniqueEmail()],
+    );
+
+    const devices = await listSessions(pool, user.id, first.id);
+    expect(devices).toHaveLength(2);
+    expect(devices[0]).toMatchObject({
+      is_current: true, device_name: "Mac", browser_name: "Safari", login_location: "Dehradun, India",
+    });
+    expect(devices[0]).not.toHaveProperty("device_id");
+    expect(await revokeSession(pool, { userId: user.id, sessionId: devices[0].id })).toBe(true);
+    await expect(refreshSession(pool, { deviceId: DEVICE, refreshToken })).rejects.toBeInstanceOf(InvalidSessionError);
+    await expect(refreshSession(pool, { deviceId: DEVICE, refreshToken: repeat.refreshToken })).rejects.toBeInstanceOf(InvalidSessionError);
+    expect(await listSessions(pool, user.id)).toHaveLength(1);
   });
 });

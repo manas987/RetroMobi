@@ -1,18 +1,39 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { CalendarDays, ChevronDown, Copy, X } from "lucide-react";
 import { Header } from "../../components/Header";
 import { Footer } from "../../components/Footer";
-import { usePortalSession, usePortalQuery, portalFetch, PortalApiError, type Row } from "../../lib/portal";
-import { StatusPill } from "../../components/DataTable";
+import { usePortalSession, usePortalQuery, portalFetch, type Row } from "../../lib/portal";
+import { Modal } from "../../components/Modal";
 import { ErrorBox } from "../../components/AuthFormBits";
 import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock } from "../../components/ContentFeedback";
 import { DateTimeField, combine, splitIso } from "../../components/DateTimeField";
-import { rupees } from "../../lib/format";
-import { uploadFile, UploadFailedError } from "../../lib/upload";
+import { istDay, rupees } from "../../lib/format";
+import { uploadFile } from "../../lib/upload";
+import { stockPhotos } from "../../lib/stockPhoto";
+import { startCheckout } from "../../lib/cashfree";
+import { cn } from "../../lib/cn";
 
 function fmt(iso: unknown): string {
   if (typeof iso !== "string") return "—";
-  return new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+}
+
+const primaryAction = "inline-flex min-h-10 items-center justify-center rounded-row bg-amber px-4 text-sm font-semibold text-on-amber hover:brightness-95 disabled:opacity-50";
+const secondaryAction = "inline-flex min-h-10 items-center justify-center rounded-row border border-line-strong px-4 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50";
+
+function pickupDue(booking: Row, now: Date) {
+  const pickup = new Date(String(booking.scheduled_pickup_at));
+  return Number.isFinite(pickup.getTime()) && istDay(pickup) <= istDay(now);
+}
+
+function canReview(booking: Row) {
+  return booking.status === "COMPLETED" && !!booking.actual_return_at && !booking.deleted_at && !booking.has_review;
+}
+
+function reviewLink(booking: Row) {
+  const shopId = String(booking.shop_id);
+  return `/shops/${shopId}?${new URLSearchParams({ shopId, reviewBooking: String(booking.id) })}#shop-reviews`;
 }
 
 function MyBookingsBody() {
@@ -30,10 +51,27 @@ function MyBookingsBody() {
     session?.accessToken,
   );
 
+  const [dismissedReview, setDismissedReview] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("retromobi_dismissed_booking_review"); } catch { return null; }
+  });
+  const now = new Date();
+  const active: Row[] = [];
+  const upcoming: Row[] = [];
+  const past: Row[] = [];
+  for (const booking of data?.bookings ?? []) {
+    if (booking.deleted_at || booking.actual_return_at || booking.status === "COMPLETED") past.push(booking);
+    else if (booking.status === "CONFIRMED" && (booking.actual_pickup_at || pickupDue(booking, now))) active.push(booking);
+    else upcoming.push(booking);
+  }
+  const dateOf = (booking: Row, key: string) => Date.parse(String(booking[key]));
+  const nextAction = (booking: Row) => dateOf(booking, booking.actual_pickup_at ? "scheduled_return_at" : "scheduled_pickup_at");
+  active.sort((a, b) => nextAction(a) - nextAction(b));
+  upcoming.sort((a, b) => dateOf(a, "scheduled_pickup_at") - dateOf(b, "scheduled_pickup_at"));
+  const review = past.filter(canReview).sort((a, b) => dateOf(b, "actual_return_at") - dateOf(a, "actual_return_at"))[0];
+
   return (
-    <div className="max-w-[760px] w-full mx-auto px-5 py-10 min-h-[calc(100dvh-4rem)]">
-      <h1 className="text-2xl font-semibold text-ink mb-1">My bookings</h1>
-      <p className="text-sm text-ink-3 mb-6">Every rental you've held, confirmed or completed.</p>
+    <main className="max-w-[880px] w-full mx-auto px-5 py-8 sm:py-10 flex-1">
+      <h1 className="text-2xl sm:text-3xl font-semibold text-ink mb-7">My bookings</h1>
 
       {error && <ErrorBox text={error} />}
       {!error && data === null && (
@@ -55,175 +93,211 @@ function MyBookingsBody() {
           <Link href="/browse" className={feedbackActionClass}>Find a scooter</Link>
         </EmptyState>
       )}
-      {!error && data && data.bookings.length > 0 && (
-        <div className="flex flex-col gap-4">
-          {data.bookings.map((b) => (
-            <BookingCard key={String(b.id)} booking={b} token={session!.accessToken} onChanged={() => setReloadKey((k) => k + 1)} />
+      {!error && data && session && (
+        <div className="space-y-8">
+          {[
+            { title: "Active rentals", items: active },
+            { title: "Upcoming", items: upcoming },
+            { title: "Past bookings", items: past },
+          ].filter(({ items }) => items.length).map(({ title, items }) => (
+            <section key={title} aria-label={title}>
+              <h2 className="mb-3 text-lg font-semibold text-ink">{title}</h2>
+              <div className="space-y-3">
+                {items.map((booking) => (
+                  <BookingCard key={String(booking.id)} booking={booking} token={session.accessToken}
+                    due={pickupDue(booking, now)} onChanged={() => setReloadKey((k) => k + 1)} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
-    </div>
+      {!error && review && String(review.id) !== dismissedReview && (
+        <aside aria-label="Review reminder" className="fixed bottom-4 right-4 z-30 w-[calc(100%-2rem)] max-w-[290px] rounded-panel border border-line bg-surface p-4 shadow-lg sm:bottom-6 sm:right-6">
+          <div className="flex items-start justify-between gap-3">
+            <p className="font-semibold text-ink">How was your rental?</p>
+            <button type="button" aria-label="Dismiss review reminder" className="rounded p-1 text-ink-2 hover:bg-surface-2" onClick={() => {
+              setDismissedReview(String(review.id));
+              try { sessionStorage.setItem("retromobi_dismissed_booking_review", String(review.id)); } catch { /* still dismiss in this view */ }
+            }}><X size={16} /></button>
+          </div>
+          <p className="mt-1 text-sm text-ink-2">{String(review.shop_name ?? "")}</p>
+          <Link href={reviewLink(review)} className="mt-2 inline-flex text-sm font-semibold text-ink underline underline-offset-4">Review this rental</Link>
+        </aside>
+      )}
+    </main>
   );
 }
 
-function BookingCard({ booking: b, token, onChanged }: { booking: Row; token: string; onChanged: () => void }) {
+function BookingCard({ booking: b, token, due, onChanged }: { booking: Row; token: string; due: boolean; onChanged: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [extRefresh, setExtRefresh] = useState(0);
+  const [action, setAction] = useState<"pickup" | "extend" | "cancel" | null>(null);
+  const [copyMessage, setCopyMessage] = useState("");
+  const [extensionRevision, setExtensionRevision] = useState(0);
+  const status = String(b.status);
+  const cancelled = Boolean(b.deleted_at);
+  const completed = status === "COMPLETED" || !!b.actual_return_at;
+  const collected = !!b.actual_pickup_at;
+  const canCancel = !cancelled && !completed && !collected;
+  const canConfirmPickup = !cancelled && !completed && status === "CONFIRMED" && !collected;
+  const canExtend = !cancelled && !completed && status === "CONFIRMED" && collected;
+  const unpaidHold = !cancelled && status === "HOLD" && b.payment_status !== "SUCCEEDED" && Date.parse(String(b.hold_expires_at)) > Date.now();
+  const bookingId = String(b.id);
+  const { data: extension } = usePortalQuery<Row | null>("user",
+    canExtend ? `/bookings/${bookingId}/extension?r=${extensionRevision}` : null, token);
+  const pendingExtension = extension?.status === "PENDING" ? extension : null;
+  const name = [b.make, b.model].filter(Boolean).join(" ");
+  const photo = stockPhotos(String(b.make), String(b.model))[0];
+  const shop = [b.shop_name, b.shop_city].filter(Boolean).join(" · ");
+  const total = rupees(Number(b.total_amount ?? 0));
+  const depositIssue = b.deposit_status === "CLAIMED" || b.deposit_status === "PARTIALLY_DEDUCTED";
+  const label = cancelled ? "Cancelled" : completed ? "Completed" : unpaidHold ? "Payment due" :
+    collected ? "In progress" : canConfirmPickup && due ? "Awaiting pickup" : status === "CONFIRMED" ? "Confirmed" : "Hold expired";
+  const tone = unpaidHold || (canConfirmPickup && due) ? "bg-warning-soft text-warning" :
+    collected && !cancelled && !completed ? "bg-verified-soft text-verified" : "bg-surface-2 text-ink-2";
 
   async function run(fn: () => Promise<void>) {
     setError(null);
     setBusy(true);
     try {
       await fn();
+      setAction(null);
       onChanged();
     } catch (err) {
-      if (err instanceof PortalApiError || err instanceof UploadFailedError) setError(err.message);
-      else setError("Something went wrong.");
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setBusy(false);
     }
   }
 
-  const status = String(b.status);
-  const cancelled = Boolean(b.deleted_at);
-  const canCancel = !cancelled && status !== "COMPLETED" && !b.actual_pickup_at;
-  const canConfirmPickup = !cancelled && status === "CONFIRMED" && !b.actual_pickup_at;
-  const canExtend = !cancelled && status === "CONFIRMED";
-  const canReview = !cancelled && Boolean(b.actual_pickup_at);
-
-  // A HOLD whose clock is still running and whose payment never succeeded. The
-  // way back to the payment screen for a customer who closed the tab at the
-  // gateway -- without this the hold is unreachable and quietly expires.
-  const unpaidHold =
-    !cancelled &&
-    status === "HOLD" &&
-    b.payment_status !== "SUCCEEDED" &&
-    typeof b.hold_expires_at === "string" &&
-    new Date(b.hold_expires_at) > new Date();
-
-  const cancelBooking = () =>
-    run(async () => {
-      await portalFetch("user", `/bookings/${b.id}/cancel`, { method: "POST", token });
-    });
+  function open(next: typeof action) {
+    setError(null);
+    setAction(next);
+  }
 
   return (
-    <div className={`rounded-panel border border-line p-5 ${cancelled ? "opacity-60" : ""}`}>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
-          <p className="font-semibold text-ink">
-            {String(b.make ?? "")} {String(b.model ?? "")}
-          </p>
-          <p className="text-sm text-ink-3">
-            {String(b.shop_name ?? "")}
-            {b.shop_city ? ` · ${String(b.shop_city)}` : ""}
-          </p>
+    <article className="rounded-panel border border-line bg-surface px-4 pt-4 sm:px-5 sm:pt-5">
+      <div className="flex items-start gap-3 sm:gap-4">
+        {photo && <img src={photo} alt="" className="h-12 w-14 shrink-0 rounded-row object-cover sm:h-14 sm:w-20" />}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h3 className="text-base font-semibold text-ink">{name}</h3>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>{label}</span>
+          </div>
+          <p className="mt-0.5 text-sm text-ink-2">{shop}</p>
         </div>
-        <StatusPill value={cancelled ? "CANCELLED" : b.status} />
       </div>
 
-      {error && <ErrorBox text={error} />}
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+        <BookingFact label={collected && !cancelled ? "Picked up" : "Pickup"} value={fmt(collected && !cancelled ? b.actual_pickup_at : b.scheduled_pickup_at)} />
+        <BookingFact label={b.actual_return_at ? "Returned" : collected ? "Return due" : "Return"} value={fmt(b.actual_return_at ?? b.scheduled_return_at)} />
+      </div>
 
-      {unpaidHold && (
-        <div className="rounded-row bg-surface-2 px-3 py-3 mb-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-ink-2">
-            Not paid yet — held until {fmt(b.hold_expires_at)}.
-          </p>
-          <Link
-            href={`/checkout/pay/${String(b.group_id)}`}
-            className="shrink-0 inline-flex h-9 items-center rounded-row bg-amber px-4 text-sm font-semibold text-on-amber hover:brightness-95 transition-[filter]"
-          >
-            Complete payment
-          </Link>
+      <div className="mt-3 flex items-center justify-between gap-x-3 gap-y-2 flex-wrap pb-3">
+        <p className="text-sm text-ink-2"><span className="font-semibold text-ink tnum">{total}</span> booking total</p>
+        {unpaidHold && <Link href={`/checkout/pay/${b.group_id}`} className={primaryAction}>Complete payment</Link>}
+        {canConfirmPickup && due && <button type="button" className={primaryAction} onClick={() => open("pickup")}>Confirm pickup</button>}
+        {canExtend && <button type="button" className={secondaryAction} onClick={() => open("extend")}>{pendingExtension ? "Manage extension" : "Request extension"}</button>}
+        {canReview(b) && <Link href={reviewLink(b)} className={secondaryAction}>Leave a review</Link>}
+      </div>
+      {unpaidHold && <p className="pb-3 text-xs text-warning">Held until {fmt(b.hold_expires_at)}.</p>}
+      {!cancelled && depositIssue && <DepositStatus booking={b} />}
+      {canExtend && extension && <ExtensionStatus extension={extension} />}
+
+      <details className="group border-t border-line">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-ink-2 hover:text-ink [&::-webkit-details-marker]:hidden">
+          Booking details <ChevronDown size={16} className="transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-4 pb-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-row bg-surface-2 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-xs text-ink-2">Booking ID</p>
+              <code className="block break-all text-xs text-ink">{bookingId}</code>
+            </div>
+            <button type="button" className="inline-flex items-center gap-1.5 text-sm font-medium text-ink" onClick={async () => {
+              try { await navigator.clipboard.writeText(bookingId); setCopyMessage("Copied"); }
+              catch { setCopyMessage("Select the ID to copy it"); }
+            }}><Copy size={14} aria-hidden="true" /> Copy ID</button>
+            {copyMessage && <p role="status" className="w-full text-xs text-ink-2">{copyMessage}</p>}
+            <p className="w-full text-xs text-ink-2">Use this ID when contacting support about this rental.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {b.rider_name ? <BookingFact label="Rider" value={String(b.rider_name)} /> : null}
+            {b.shop_phone ? (
+              <div><p className="text-xs text-ink-2">Shop phone</p><a className="underline underline-offset-2" href={`tel:${b.shop_phone}`}>{String(b.shop_phone)}</a></div>
+            ) : null}
+            {collected && <BookingFact label="Scheduled pickup" value={fmt(b.scheduled_pickup_at)} />}
+            {!!b.actual_return_at && <BookingFact label="Scheduled return" value={fmt(b.scheduled_return_at)} />}
+          </div>
+          <div>
+            <h4 className="mb-1 text-sm font-semibold text-ink">Price breakdown</h4>
+            <div className="divide-y divide-line text-sm">
+              <Row label="Rental" value={rupees(Number(b.rental_amount ?? 0))} />
+              <Row label="Platform fee" value={rupees(Number(b.platform_fee ?? 0))} />
+              {Number(b.discount_amount ?? 0) > 0 && <Row label="Discount" value={`− ${rupees(Number(b.discount_amount))}`} />}
+              <Row label="Refundable deposit" value={rupees(Number(b.security_deposit_amount ?? 0))} />
+              <Row label="Total" value={total} bold />
+            </div>
+            {Number(b.tax_amount ?? 0) > 0 && <p className="mt-1 text-xs text-ink-2">Includes {rupees(Number(b.tax_amount))} in tax.</p>}
+          </div>
+          {!cancelled && !depositIssue && <DepositStatus booking={b} />}
+          {cancelled && (
+            <p className="rounded-row bg-surface-2 px-3 py-2 text-sm text-ink-2">
+              {b.cancellation_reason ? String(b.cancellation_reason) : "This booking was cancelled."}{" "}
+              {b.payment_status === "SUCCEEDED" && Number(b.cancellation_refund_amount ?? 0) > 0 && `${rupees(Number(b.cancellation_refund_amount))} refund recorded.`}{" "}
+              {b.payment_status === "SUCCEEDED" && Number(b.cancellation_penalty_amount ?? 0) > 0 && `${rupees(Number(b.cancellation_penalty_amount))} cancellation fee applied.`}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {canConfirmPickup && !due && <button type="button" className={secondaryAction} onClick={() => open("pickup")}>Confirm pickup</button>}
+            {canCancel && <button type="button" className={cn(secondaryAction, "text-danger")} onClick={() => open("cancel")}>Cancel booking</button>}
+          </div>
         </div>
+      </details>
+
+      {action && (
+        <Modal open onClose={() => { if (!busy) open(null); }}
+          title={action === "pickup" ? "Confirm pickup" : action === "extend" ? "Request an extension" : "Cancel this booking?"}>
+          <p className="mb-4 text-sm text-ink-2">{name} · {shop}</p>
+          {error && <div className="mb-4"><ErrorBox text={error} /></div>}
+          {action === "pickup" && <PickupConfirm bookingId={bookingId} token={token} busy={busy} run={run} />}
+          {action === "extend" && <ExtendForm bookingId={bookingId} token={token} busy={busy} run={run}
+            currentReturnAt={String(b.scheduled_return_at)} pending={pendingExtension}
+            onPrepared={() => setExtensionRevision((value) => value + 1)} />}
+          {action === "cancel" && (
+            <div className="space-y-4">
+              <div className="rounded-row bg-warning-soft p-3 text-sm text-warning">
+                <p className="font-semibold">Cancelling releases your vehicle.</p>
+                {b.payment_status === "SUCCEEDED" ? (
+                  <>
+                    <p className="mt-1">Your deposit is refunded in full. The rental refund depends on how long until scheduled pickup.</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4">
+                      <li>More than 24 hours · 90% of the rental</li>
+                      <li>2–24 hours · 50% of the rental</li>
+                      <li>Under 2 hours · No rental refund</li>
+                    </ul>
+                    <p className="mt-2">The platform fee is excluded. Rental amounts include tax.</p>
+                  </>
+                ) : <p className="mt-1">This booking has no successful payment.</p>}
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" className={secondaryAction} disabled={busy} onClick={() => open(null)}>Keep booking</button>
+                <button type="button" className="min-h-10 rounded-row bg-danger px-4 text-sm font-semibold text-white disabled:opacity-50"
+                  disabled={busy} onClick={() => void run(async () => {
+                    await portalFetch("user", `/bookings/${bookingId}/cancel`, { method: "POST", token });
+                  })}>{busy ? "Cancelling…" : "Confirm cancellation"}</button>
+              </div>
+            </div>
+          )}
+        </Modal>
       )}
-
-      {cancelled && (
-        <p className="text-xs text-ink-3 bg-surface-2 rounded-row px-3 py-2 mb-3">
-          Cancelled{b.cancellation_reason ? ` — ${String(b.cancellation_reason)}` : ""}.{" "}
-          {Number(b.cancellation_refund_amount ?? 0) > 0 && `${rupees(Number(b.cancellation_refund_amount))} refunded.`}
-          {Number(b.cancellation_penalty_amount ?? 0) > 0 && ` ${rupees(Number(b.cancellation_penalty_amount))} cancellation fee applied.`}
-        </p>
-      )}
-
-      <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-        <div>
-          <p className="text-ink-4 text-xs mb-0.5">Scheduled pickup</p>
-          <p className="text-ink-2">{fmt(b.scheduled_pickup_at)}</p>
-        </div>
-        <div>
-          <p className="text-ink-4 text-xs mb-0.5">Scheduled return</p>
-          <p className="text-ink-2">{fmt(b.scheduled_return_at)}</p>
-        </div>
-        {b.actual_pickup_at ? (
-          <div>
-            <p className="text-ink-4 text-xs mb-0.5">Actually picked up</p>
-            <p className="text-verified">{fmt(b.actual_pickup_at)}</p>
-          </div>
-        ) : null}
-        {b.actual_return_at ? (
-          <div>
-            <p className="text-ink-4 text-xs mb-0.5">Actually returned</p>
-            <p className="text-verified">{fmt(b.actual_return_at)}</p>
-          </div>
-        ) : null}
-        {b.rider_name ? (
-          <div>
-            <p className="text-ink-4 text-xs mb-0.5">Rider</p>
-            <p className="text-ink-2">{String(b.rider_name)}</p>
-          </div>
-        ) : null}
-        {b.shop_phone ? (
-          <div>
-            <p className="text-ink-4 text-xs mb-0.5">Shop phone</p>
-            <p className="text-ink-2">{String(b.shop_phone)}</p>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="rounded-row bg-surface-2 divide-y divide-line text-sm mb-4">
-        <Row label="Rental" value={rupees(Number(b.rental_amount ?? 0))} />
-        <Row label="Platform fee" value={rupees(Number(b.platform_fee ?? 0))} />
-        <Row label="Tax" value={rupees(Number(b.tax_amount ?? 0))} />
-        {Number(b.discount_amount ?? 0) > 0 && <Row label="Discount" value={`− ${rupees(Number(b.discount_amount))}`} />}
-        <Row label="Refundable deposit" value={rupees(Number(b.security_deposit_amount ?? 0))} />
-        <Row label="Total" value={rupees(Number(b.total_amount ?? 0))} bold />
-      </div>
-
-      {!cancelled && b.deposit_status ? <DepositStatus booking={b} /> : null}
-
-      {/* ponytail: one request per CONFIRMED booking — there is no endpoint
-          returning extensions for the whole list. Fine at a handful of
-          bookings; add a joined column to listMyBookings if it grows. */}
-      {!cancelled && status === "CONFIRMED" ? (
-        <ExtensionStatus bookingId={String(b.id)} token={token} refresh={extRefresh} />
-      ) : null}
-
-      <div className="flex items-center gap-4 flex-wrap text-sm">
-        {canConfirmPickup && <PickupConfirm bookingId={String(b.id)} token={token} busy={busy} setBusy={setBusy} run={run} />}
-        {canExtend && (
-          <ExtendForm
-            bookingId={String(b.id)}
-            token={token}
-            run={run}
-            currentReturnAt={String(b.scheduled_return_at)}
-            pickupAt={String(b.scheduled_pickup_at)}
-            onRequested={() => setExtRefresh((k) => k + 1)}
-          />
-        )}
-        {canReview && (
-          <Link href={`/vehicles/${b.vehicle_id}`} className="text-ink font-medium hover:underline">
-            Leave a review
-          </Link>
-        )}
-        {canCancel && (
-          <button type="button" disabled={busy} onClick={cancelBooking} className="text-danger font-medium hover:underline disabled:opacity-40">
-            Cancel booking
-          </button>
-        )}
-      </div>
-    </div>
+    </article>
   );
+}
+
+function BookingFact({ label, value }: { label: string; value: string }) {
+  return <div><p className="text-xs text-ink-2">{label}</p><p className="mt-0.5 font-medium text-ink">{value}</p></div>;
 }
 
 /**
@@ -236,34 +310,16 @@ function BookingCard({ booking: b, token, onChanged }: { booking: Row; token: st
  * A partial unique index allows only one PENDING extension per booking, so
  * the newest row is the whole story.
  */
-function ExtensionStatus({
-  bookingId,
-  token,
-  refresh,
-}: {
-  bookingId: string;
-  token: string;
-  refresh: number;
-}) {
-  // Returns the row bare, or a plain `null` body when none exists — not a 404.
-  const { data } = usePortalQuery<Row | null>(
-    "user",
-    `/bookings/${bookingId}/extension?r=${refresh}`,
-    token,
-  );
-
-  if (!data) return null;
-
+function ExtensionStatus({ extension: data }: { extension: Row }) {
   const status = String(data.status);
-  const amount = rupees(Number(data.additional_amount ?? 0));
+  const amount = rupees(Number(data.payable_amount ?? data.additional_amount ?? 0));
 
   if (status === "PENDING") {
     return (
       <div className="text-xs bg-warning-soft text-warning rounded-row px-3 py-2 mb-4">
         <p className="font-medium">Extension to {fmt(data.new_return_at)} is awaiting payment — {amount} due.</p>
         <p className="mt-0.5">
-          Your return time is unchanged until that payment clears. The extra days are held for you meanwhile; if
-          they are taken first, you are refunded in full.
+          Keep your current return time until the extension is approved. If the extra time becomes unavailable after payment, you’ll receive a full refund.
         </p>
       </div>
     );
@@ -277,10 +333,9 @@ function ExtensionStatus({
     );
   }
 
-  // REJECTED: the window was lost during payment, which refunds in full.
   return (
     <p className="text-xs text-ink-3 mb-4">
-      Extension to {fmt(data.new_return_at)} was not applied. Anything paid for it has been refunded.
+      Extension to {fmt(data.new_return_at)} was not applied. Keep your scheduled return time.
     </p>
   );
 }
@@ -291,7 +346,17 @@ function DepositStatus({ booking: b }: { booking: Row }) {
     return <p className="text-xs text-ink-3 mb-4">Deposit held — released automatically on a clean return.</p>;
   }
   if (status === "RELEASED") {
-    return <p className="text-xs text-verified mb-4">Deposit released — {rupees(Number(b.deposit_refund_amount ?? 0))} refunded.</p>;
+    const amount = rupees(Number(b.deposit_refund_amount ?? 0));
+    // Real state, not an invented ETA: PENDING means we have sent it and the bank
+    // has it. This is what the customer checks at the shop counter before leaving,
+    // so "refunded" must not appear until the money actually landed.
+    return b.deposit_refund_status === "SUCCEEDED" ? (
+      <p className="text-xs text-verified mb-4">Deposit refunded — {amount} back on your original payment method.</p>
+    ) : (
+      <p className="text-xs text-verified mb-4">
+        Deposit released — {amount} sent to your original payment method. Your bank clears it from here.
+      </p>
+    );
   }
   if (status === "CLAIMED" || status === "PARTIALLY_DEDUCTED") {
     return (
@@ -307,137 +372,105 @@ function DepositStatus({ booking: b }: { booking: Row }) {
 
 function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
-    <div className="px-4 py-2.5 flex items-center justify-between gap-4">
+    <div className="py-2 flex items-center justify-between gap-4">
       <span className="text-ink-3">{label}</span>
       <span className={`tnum text-ink text-right ${bold ? "font-semibold" : "font-medium"}`}>{value}</span>
     </div>
   );
 }
 
-// The video IS the pickup event on the backend (confirmInspection sets
-// actual_pickup_at), so a confirm that lands with no stored file would record
-// a pickup with no condition evidence — the whole point of the step. The
-// upload helper skips the PUT when storage is unconfigured and treats a real
-// failure as fatal, so that can no longer happen silently.
-function PickupConfirm({
-  bookingId,
-  token,
-  busy,
-  setBusy,
-  run,
-}: {
-  bookingId: string;
-  token: string;
-  busy: boolean;
-  setBusy: (b: boolean) => void;
-  run: (fn: () => Promise<void>) => Promise<void>;
+function PickupConfirm({ bookingId, token, busy, run }: {
+  bookingId: string; token: string; busy: boolean; run: (fn: () => Promise<void>) => Promise<void>;
 }) {
-  const [picking, setPicking] = useState(false);
-
-  async function onFile(file: File) {
-    setBusy(true);
-    await run(async () => {
-      await uploadFile({
-        portal: "user",
-        token,
-        file,
-        presignPath: `/bookings/${bookingId}/inspection/upload`,
-        confirmPath: `/bookings/${bookingId}/inspection/confirm`,
-      });
-    });
-    setPicking(false);
-  }
-
-  if (!picking) {
-    return (
-      <button type="button" onClick={() => setPicking(true)} className="text-ink font-medium hover:underline">
-        Confirm pickup
-      </button>
-    );
-  }
+  const [video, setVideo] = useState<File | null>(null);
 
   return (
-    <div className="flex flex-col gap-1">
-      {/* The order is enforced server-side (identity check first), so say so
-          here rather than letting the customer meet a 409 with no
-          explanation. See docs/dl-verification.md, Phase 5. */}
-      <p className="text-xs text-ink-4">
-        Shop staff check your licence first — then record the vehicle.
+    <div className="space-y-4 text-sm text-ink-2">
+      <ol className="list-decimal space-y-2 pl-5">
+        <li>Show your original driving licence to shop staff and wait for their identity check.</li>
+        <li>Before riding away, record one clear video walking around the entire vehicle. Show the front, rear, both sides, mirrors, wheels, and body panels.</li>
+        <li>Get close-ups of any existing scratches, dents, or broken parts. Turn on the display and show the odometer and fuel or battery level.</li>
+        <li>Review the video, then upload it to confirm pickup.</li>
+      </ol>
+      <p className="rounded-row bg-warning-soft p-3 text-warning">
+        Keep a copy of the video. Without pickup footage, RetroMobi can’t verify pre-existing damage or guarantee a deposit refund if there’s a dispute.
       </p>
-      <label className="text-ink font-medium hover:underline cursor-pointer">
-      {busy ? "Uploading…" : "Choose a walk-around video"}
-      <input
-        type="file"
-        accept="video/*,image/*"
-        disabled={busy}
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onFile(file);
-        }}
-      />
+      <label className="block font-medium text-ink">
+        Walk-around video
+        <input type="file" accept="video/*" disabled={busy} className="mt-2 block w-full text-sm file:mr-3 file:rounded-row file:border-0 file:bg-surface-2 file:px-3 file:py-2 file:font-medium file:transition-colors enabled:file:cursor-pointer enabled:hover:file:bg-line"
+          onChange={(e) => setVideo(e.currentTarget.files?.[0] ?? null)} />
       </label>
+      <button type="button" className={primaryAction} disabled={busy || !video} onClick={() => {
+        if (!video) return;
+        void run(async () => {
+          await uploadFile({ portal: "user", token, file: video,
+            presignPath: `/bookings/${bookingId}/inspection/upload`,
+            confirmPath: `/bookings/${bookingId}/inspection/confirm` });
+        });
+      }}>{busy ? "Uploading…" : "Upload and confirm pickup"}</button>
     </div>
   );
 }
 
-function ExtendForm({
-  bookingId,
-  token,
-  run,
-  currentReturnAt,
-  pickupAt,
-  onRequested,
-}: {
-  bookingId: string;
-  token: string;
-  run: (fn: () => Promise<void>) => Promise<void>;
-  currentReturnAt: string;
-  pickupAt: string;
-  onRequested: () => void;
+function ExtendForm({ bookingId, token, busy, run, currentReturnAt, pending, onPrepared }: {
+  bookingId: string; token: string; busy: boolean; run: (fn: () => Promise<void>) => Promise<void>; currentReturnAt: string;
+  pending: Row | null; onPrepared: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const initial = splitIso(currentReturnAt);
+  const earliest = Math.max(Date.parse(currentReturnAt), Date.now());
+  const initial = splitIso(new Date(earliest + 86_400_000).toISOString());
   const [date, setDate] = useState(initial.date);
   const [time, setTime] = useState(initial.time);
-
-  const minDate = new Date(currentReturnAt);
+  const [prepared, setPrepared] = useState<{ extensionId: string; additionalAmount: number } | null>(null);
+  const intent = prepared ?? (pending ? { extensionId: String(pending.id), additionalAmount: Number(pending.payable_amount) } : null);
+  const minDate = new Date(earliest);
   minDate.setHours(0, 0, 0, 0);
+  const nextReturn = combine(date, time);
+  const [preparing, setPreparing] = useState(false);
+  const [prepareError, setPrepareError] = useState("");
 
-  // The request's own response is not kept: the pending extension is a real
-  // row, so reading it back survives a reload where local state did not.
-  const submit = () =>
-    run(async () => {
-      await portalFetch("user", `/bookings/${bookingId}/extension`, {
-        method: "POST",
-        token,
-        body: { newReturnAt: combine(date, time).toISOString() },
-      });
-      setOpen(false);
-      onRequested();
-    });
-
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} className="text-ink font-medium hover:underline">
-        Request extension
-      </button>
-    );
+  async function prepare() {
+    setPrepareError("");
+    setPreparing(true);
+    try {
+      setPrepared(await portalFetch<NonNullable<typeof prepared>>("user", `/bookings/${bookingId}/extension`, {
+        method: "POST", token, body: { newReturnAt: nextReturn.toISOString() },
+      }));
+      onPrepared();
+    } catch (error) {
+      setPrepareError(error instanceof Error ? error.message : "Couldn’t prepare the extension.");
+    } finally {
+      setPreparing(false);
+    }
   }
 
   return (
-    <div className="w-full basis-full rounded-row border border-line-strong px-3 py-2.5 flex items-center justify-between gap-3">
-      <DateTimeField
-        label="New return"
-        date={date}
-        time={time}
-        onDate={(d) => d && setDate(d)}
-        onTime={setTime}
-        disabled={(d) => d < minDate}
-      />
-      <button type="button" onClick={submit} className="shrink-0 h-9 px-4 rounded-row bg-ink text-surface font-medium text-sm hover:bg-ink-2 transition-colors">
-        Confirm
-      </button>
+    <div className="space-y-4 text-sm text-ink-2">
+      <p>Current return <strong className="text-ink">{fmt(currentReturnAt)}</strong></p>
+      <p>Choose a later return time. Keep your current return time until payment clears and the extension is approved.</p>
+      {intent ? <p>Requested return <strong className="text-ink">{fmt(prepared ? nextReturn.toISOString() : pending?.new_return_at)}</strong></p> : (
+        <div className="flex rounded-row border border-line px-3 py-2">
+          <DateTimeField label="New return" date={date} time={time}
+            onDate={(d) => { if (d && !preparing) setDate(d); }}
+            onTime={(t) => { if (!preparing) setTime(t); }}
+            disabled={(d) => d < minDate || preparing} />
+        </div>
+      )}
+      {prepareError && <ErrorBox text={prepareError} />}
+      {intent ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-semibold text-ink">Extension total {rupees(intent.additionalAmount)}</p>
+          <button type="button" className={primaryAction} disabled={busy}
+            onClick={() => void run(async () => {
+              const result = await portalFetch<{ state: "settled" } | { state: "pay"; paymentSessionId: string; mode: "sandbox" | "production" }>(
+                "user", `/bookings/${bookingId}/extension/${intent.extensionId}/payment`, { method: "POST", token },
+              );
+              if (result.state === "pay") await startCheckout(result);
+            })}>{busy ? "Opening payment…" : "Continue to payment"}</button>
+        </div>
+      ) : (
+        <button type="button" className={primaryAction} disabled={preparing || !(nextReturn.getTime() > earliest)}
+          onClick={() => void prepare()}>{preparing ? "Checking…" : "Check availability and price"}</button>
+      )}
     </div>
   );
 }

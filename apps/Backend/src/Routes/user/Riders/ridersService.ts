@@ -35,7 +35,11 @@ export async function listRiders(pool: Pool, userId: string) {
             dlv.status as licence_status,
             to_char(dlv.expires_on, 'YYYY-MM-DD') as licence_expires_on
        from riders r
-       left join driving_licence_verifications dlv on dlv.rider_id = r.id and dlv.status = 'VERIFIED'
+       left join lateral (
+         select status, expires_on from driving_licence_verifications
+          where rider_id = r.id and status = 'VERIFIED'
+          order by verified_at desc nulls last, created_at desc, id desc limit 1
+       ) dlv on true
       where r.user_id = $1 and r.deleted_at is null
       order by r.created_at`,
     [userId],

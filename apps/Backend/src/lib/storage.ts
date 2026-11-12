@@ -56,9 +56,9 @@ export async function presignDownload(key: string, expiresIn = 300): Promise<str
   return getSignedUrl(client, command, { expiresIn });
 }
 
-export async function storedContentType(key: string): Promise<string | null> {
+export async function storedContentType(key: string): Promise<string | null | undefined> {
   const config = getClient();
-  if (!config) return null;
+  if (!config) return undefined;
   const { client, bucket } = config;
   try {
     const object = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));

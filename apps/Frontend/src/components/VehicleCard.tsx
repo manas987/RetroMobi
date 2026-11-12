@@ -185,8 +185,9 @@ function VehiclePhoto({
   // floor under it — including when the upload resolves to a URL that 404s,
   // which is what the dev-fallback storage hands back.
   const uploaded = useModelImage(modelId, hasImageKey);
-  const [failed, setFailed] = useState(false);
-  const photos = (failed ? null : uploaded) ? [uploaded!] : stockPhotos(make, model);
+  const [failed, setFailed] = useState<string[]>([]);
+  const stock = stockPhotos(make, model).filter((src) => !failed.includes(src));
+  const photos = uploaded && !failed.includes(uploaded) ? [uploaded] : stock;
 
   const [i, setI] = useState(0);
   // A filter can swap which model this card shows without remounting it, so a
@@ -212,7 +213,7 @@ function VehiclePhoto({
           src={src}
           alt=""
           loading={n === 0 ? undefined : "lazy"}
-          onError={() => setFailed(true)}
+          onError={() => setFailed((urls) => [...urls, src])}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${
             n === index ? "opacity-100" : "opacity-0"
           }`}

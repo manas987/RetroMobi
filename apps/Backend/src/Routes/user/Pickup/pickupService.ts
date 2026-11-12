@@ -6,6 +6,16 @@ import { assertHandoverAllowed } from "../../merchant/Operations/identityService
 
 export class BookingNotFoundError extends Error {}
 export class AlreadyInspectedError extends Error {}
+/**
+ * The booking exists and is theirs, but is in no state to be returned -- never
+ * picked up, or already returned. Separate from BookingNotFoundError because a
+ * 404 tells shop staff nothing they can act on.
+ */
+export class BookingNotReturnableError extends Error {}
+/** A walk-in's deposit was taken in cash, outside the platform -- there is
+ *  nothing here to hold, and no customer account to tell. */
+export class WalkinClaimError extends Error {}
+export class ClaimExceedsDepositError extends Error {}
 
 // The video IS the pickup event -- confirming the upload sets actual_pickup_at.
 // No merchant fallback: if the customer never uploads, actual_pickup_at stays
@@ -90,7 +100,7 @@ export async function merchantPickup(pool: Pool, input: { merchantUserId: string
     `select b.id from bookings b
        join vehicles v on v.id = b.vehicle_id
        join shops s on s.id = v.shop_id
-      where b.id = $1 and s.merchant_user_id = $2 and b.source = 'OFFLINE' and b.deleted_at is null`,
+      where b.id = $1 and exists (select 1 from shop_members sm where sm.shop_id = s.id and sm.merchant_user_id = $2 and sm.status = 'ACTIVE' and sm.deleted_at is null) and b.source = 'OFFLINE' and b.deleted_at is null`,
     [input.bookingId, input.merchantUserId],
   );
   if (rows.length === 0) {
@@ -141,96 +151,153 @@ export async function merchantReturn(
     firstMessage?: string;
     category?: "BOOKING" | "APP_HELP" | "OTHER";
   }) => Promise<{ id: string; assignedTo: string | null }>,
-) {
-  const { rows } = await pool.query(
-    `select b.id, b.group_id, g.user_id
-       from bookings b
-       join vehicles v on v.id = b.vehicle_id
-       join shops s on s.id = v.shop_id
-       join booking_groups g on g.id = b.group_id
-      where b.id = $1 and s.merchant_user_id = $2 and b.deleted_at is null`,
-    [input.bookingId, input.merchantUserId],
-  );
-  if (rows.length === 0) throw new BookingNotFoundError(`booking ${input.bookingId} not found for this merchant`);
-  const booking = rows[0];
+): Promise<{ ticketId: string | null; depositReleased: number | null }> {
+  const client = await pool.connect();
+  let depositReleased: number | null = null;
 
-  await pool.query(
-    `update bookings set status = 'COMPLETED', actual_return_at = now(), updated_at = now() where id = $1`,
-    [input.bookingId],
-  );
+  try {
+    await client.query("BEGIN");
 
-  const { rows: depositRows } = await pool.query(
-    `select id, amount from security_deposits where booking_id = $1`,
-    [input.bookingId],
-  );
-
-  if (!input.claim) {
-    if (depositRows.length > 0) {
-      const deposit = depositRows[0];
-      const { rows: paymentRows } = await pool.query(
-        `select id from payments where booking_group_id = $1 and type = 'RENTAL' and status = 'SUCCEEDED' limit 1`,
-        [booking.group_id],
+    // `actual_return_at is null` is the whole of "a merchant cannot claim after a
+    // clean return, even if they find the damage later" -- the return is final the
+    // moment it is recorded. It also stops the two ways this used to go wrong: a
+    // second tap re-entering the refund path on an already-RELEASED deposit, and a
+    // booking that was never collected being completed, which charged a full rental
+    // for a scooter the customer never touched.
+    const { rows } = await client.query(
+      `select b.id, b.group_id, g.user_id
+         from bookings b
+         join vehicles v on v.id = b.vehicle_id
+         join shops s on s.id = v.shop_id
+         left join booking_groups g on g.id = b.group_id
+        where b.id = $1 and exists (select 1 from shop_members sm where sm.shop_id = s.id and sm.merchant_user_id = $2 and sm.status = 'ACTIVE' and sm.deleted_at is null) and b.deleted_at is null
+          and b.actual_pickup_at is not null and b.actual_return_at is null
+        for update of b`,
+      [input.bookingId, input.merchantUserId],
+    );
+    if (rows.length === 0) {
+      // Deliberately not a 404: the booking may well exist and belong to this
+      // merchant. Telling them *why* is the difference between retrying and
+      // phoning support.
+      const { rows: exists } = await client.query(
+        `select 1 from bookings b
+           join vehicles v on v.id = b.vehicle_id
+           join shops s on s.id = v.shop_id
+          where b.id = $1 and exists (select 1 from shop_members sm where sm.shop_id = s.id and sm.merchant_user_id = $2 and sm.status = 'ACTIVE' and sm.deleted_at is null) and b.deleted_at is null`,
+        [input.bookingId, input.merchantUserId],
       );
-      if (paymentRows.length > 0) {
-        const refund = await cashfree.refund({
-          orderId: `order_${booking.group_id}`,
-          refundId: `deposit_${deposit.id}`,
-          amount: Number(deposit.amount),
-        });
-        await pool.query(
-          `insert into refunds (payment_id, booking_id, amount, reason, provider_ref, status)
-           values ($1, $2, $3, 'DEPOSIT_RELEASE', $4, 'PENDING')`,
-          [paymentRows[0].id, input.bookingId, deposit.amount, refund.refundId],
+      if (exists.length > 0) {
+        throw new BookingNotReturnableError(
+          "This booking hasn't been picked up yet, or has already been returned.",
         );
-        await notify(pool, {
-          recipientType: "CUSTOMER",
-          recipientId: booking.user_id,
-          channel: "SMS",
-          template: "refund_processed",
-          payload: { bookingId: input.bookingId, refundAmount: Number(deposit.amount) },
-        });
-        await notify(pool, {
-          recipientType: "CUSTOMER",
-          recipientId: booking.user_id,
-          channel: "EMAIL",
-          template: "refund_processed",
-          payload: { bookingId: input.bookingId, refundAmount: Number(deposit.amount) },
-        });
       }
-      await pool.query(
-        `update security_deposits set status = 'RELEASED', released_at = now(), refund_amount = amount where id = $1`,
-        [deposit.id],
+      throw new BookingNotFoundError(`booking ${input.bookingId} not found for this merchant`);
+    }
+    const booking = rows[0];
+
+    await client.query(
+      `update bookings set status = 'COMPLETED', actual_return_at = now(), updated_at = now() where id = $1`,
+      [input.bookingId],
+    );
+
+    const { rows: depositRows } = await client.query(
+      `select id, amount from security_deposits where booking_id = $1`,
+      [input.bookingId],
+    );
+
+    if (!input.claim) {
+      if (depositRows.length > 0) {
+        const deposit = depositRows[0];
+        const { rows: paymentRows } = await client.query(
+          `select id from payments where booking_group_id = $1 and type = 'RENTAL' and status = 'SUCCEEDED' limit 1`,
+          [booking.group_id],
+        );
+        if (paymentRows.length > 0) {
+          // ponytail: the provider call sits inside the transaction, so a COMMIT
+          // failure after a successful refund would leave money returned but
+          // unrecorded. Same shape as cancelBooking. If that race ever bites, split
+          // it: commit a PENDING refunds row first, then call the provider from a
+          // retryable sweep keyed on provider_ref is null.
+          const refund = await cashfree.refund({
+            orderId: `order_${booking.group_id}`,
+            refundId: `deposit_${deposit.id}`,
+            amount: Number(deposit.amount),
+          });
+          await client.query(
+            `insert into refunds (payment_id, booking_id, amount, reason, provider_ref, status)
+             values ($1, $2, $3, 'DEPOSIT_RELEASE', $4, 'PENDING')`,
+            [paymentRows[0].id, input.bookingId, deposit.amount, refund.refundId],
+          );
+          await notify(client, {
+            recipientType: "CUSTOMER",
+            recipientId: booking.user_id,
+            channel: "SMS",
+            template: "refund_processed",
+            payload: { bookingId: input.bookingId, refundAmount: Number(deposit.amount) },
+          });
+          await notify(client, {
+            recipientType: "CUSTOMER",
+            recipientId: booking.user_id,
+            channel: "EMAIL",
+            template: "refund_processed",
+            payload: { bookingId: input.bookingId, refundAmount: Number(deposit.amount) },
+          });
+        }
+        await client.query(
+          `update security_deposits set status = 'RELEASED', released_at = now(), refund_amount = amount where id = $1`,
+          [deposit.id],
+        );
+        depositReleased = Number(deposit.amount);
+      }
+      await client.query("COMMIT");
+      return { ticketId: null, depositReleased };
+    }
+
+    if (!booking.group_id) {
+      throw new WalkinClaimError("a walk-in's deposit is held in cash, outside RetroMobi");
+    }
+    if (depositRows.length > 0 && (input.amount ?? 0) > Number(depositRows[0].amount)) {
+      throw new ClaimExceedsDepositError("the claim is larger than the deposit held");
+    }
+
+    if (depositRows.length > 0) {
+      // CLAIMED is what Phase 16's settleDeposit looks for -- without it, a
+      // claimed deposit would be indistinguishable from one nobody has touched.
+      await client.query(
+        `update security_deposits
+            set status = 'CLAIMED', deduction_reason = $1, deducted_amount = coalesce($2, 0)
+          where id = $3`,
+        [input.reason ?? null, input.amount ?? null, depositRows[0].id],
       );
     }
-    return { ticketId: null };
+
+    await notify(client, {
+      recipientType: "CUSTOMER",
+      recipientId: booking.user_id,
+      channel: "SMS",
+      template: "deposit_claim_raised",
+      payload: { bookingId: input.bookingId },
+    });
+    await notify(client, {
+      recipientType: "CUSTOMER",
+      recipientId: booking.user_id,
+      channel: "EMAIL",
+      template: "deposit_claim_raised",
+      payload: { bookingId: input.bookingId },
+    });
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
 
-  if (depositRows.length > 0) {
-    // CLAIMED is what Phase 16's settleDeposit looks for -- without it, a
-    // claimed deposit would be indistinguishable from one nobody has touched.
-    await pool.query(
-      `update security_deposits
-          set status = 'CLAIMED', deduction_reason = $1, deducted_amount = coalesce($2, 0)
-        where id = $3`,
-      [input.reason ?? null, input.amount ?? null, depositRows[0].id],
-    );
-  }
-
-  await notify(pool, {
-    recipientType: "CUSTOMER",
-    recipientId: booking.user_id,
-    channel: "SMS",
-    template: "deposit_claim_raised",
-    payload: { bookingId: input.bookingId },
-  });
-  await notify(pool, {
-    recipientType: "CUSTOMER",
-    recipientId: booking.user_id,
-    channel: "EMAIL",
-    template: "deposit_claim_raised",
-    payload: { bookingId: input.bookingId },
-  });
-
+  // After COMMIT, not inside it: openTicket takes a Pool and opens its own
+  // transaction, so it cannot join this one. The ordering is also the safer way
+  // round -- a ticket that failed to open is recoverable and visible; a deposit
+  // claim that rolled back after the customer was told about it is not.
   const ticket = await openTicket({
     bookingId: input.bookingId,
     openedByType: "MERCHANT",
@@ -240,5 +307,5 @@ export async function merchantReturn(
     category: "BOOKING",
   });
 
-  return { ticketId: ticket.id };
+  return { ticketId: ticket.id, depositReleased: null };
 }

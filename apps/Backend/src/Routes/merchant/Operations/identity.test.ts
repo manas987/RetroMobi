@@ -277,3 +277,25 @@ describe("the handover gate", () => {
     ).rejects.toBeInstanceOf(VerificationRequiredError);
   });
 });
+
+describe("walk-in handover", () => {
+  test("a walk-in can be handed over: it has no booking group and needs no identity check", async () => {
+    const { createBookableVehicle, insertBooking, futureWindow } = await import("../../../test/fixtures.ts");
+    const { merchantPickup } = await import("../../user/Pickup/pickupService.ts");
+    const vehicle = await createBookableVehicle(pool);
+    const { pickupAt, returnAt } = futureWindow(3100);
+    const walkin = await insertBooking(pool, {
+      vehicleId: vehicle.id,
+      pickupAt: pickupAt.toISOString(),
+      returnAt: returnAt.toISOString(),
+      source: "OFFLINE",
+    });
+    const { rows } = await pool.query(
+      `select s.merchant_user_id from vehicles v join shops s on s.id = v.shop_id where v.id = $1`,
+      [vehicle.id],
+    );
+    await merchantPickup(pool, { merchantUserId: rows[0].merchant_user_id, bookingId: walkin.id });
+    const after = await pool.query(`select actual_pickup_at from bookings where id = $1`, [walkin.id]);
+    expect(after.rows[0].actual_pickup_at).not.toBeNull();
+  });
+});

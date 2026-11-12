@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const InspectionUploadSchema = z.object({
-  contentType: z.string().min(1),
+  contentType: z.string().regex(/^video\/[\w.+-]+$/i, "Choose a video file."),
 });
 
 export const InspectionConfirmSchema = z.object({

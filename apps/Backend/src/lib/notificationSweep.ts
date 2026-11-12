@@ -80,9 +80,14 @@ function renderTemplate(template: string, payload: Record<string, unknown>): { s
       subject: "Your RetroMobi booking is confirmed",
       body: `Your booking is confirmed. Invoices: ${p.merchantInvoiceNumber ?? "-"} / ${p.platformInvoiceNumber ?? "-"}.`,
     }),
+    // "Processed" meant "submitted to Cashfree", which a customer standing at the
+    // shop counter reads as "done" -- the refunds row is written PENDING. No day
+    // count is promised: we send it the moment the rental ends and the bank is the
+    // only remaining delay, so inventing a range would be a promise we don't control.
+    // Live status is on the booking in the app.
     refund_processed: (p) => ({
-      subject: "Your RetroMobi refund has been processed",
-      body: `A refund of ₹${Number(p.refundAmount ?? 0) / 100} has been processed for booking ${p.bookingId}.`,
+      subject: "Your RetroMobi refund is on its way",
+      body: `A refund of ₹${Number(p.refundAmount ?? 0) / 100} for booking ${p.bookingId} has been sent to your original payment method. Your bank clears it from here — track it under My bookings.`,
     }),
     deposit_claim_raised: (p) => ({
       subject: "A deposit claim was raised on your RetroMobi booking",

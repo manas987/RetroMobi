@@ -132,10 +132,13 @@ export function requestOtp(
   return createOtpChallenge(pool, phone, "SMS", "LOGIN_OR_SIGNUP", deliver);
 }
 
+type SessionDetails = { deviceName: string | null; browserName: string | null; loginLocation: string | null };
+
 export interface VerifyOtpInput {
   phone: string;
   code: string;
   deviceId: string;
+  sessionDetails?: SessionDetails;
 }
 
 export interface SessionTokens {
@@ -177,7 +180,7 @@ export async function verifyOtp(pool: Pool, input: VerifyOtpInput): Promise<Veri
   const existing = existingUsers[0];
 
   if (existing) {
-    const tokens = await createSession(pool, existing.id, deviceId);
+    const tokens = await createSession(pool, existing.id, deviceId, input.sessionDetails);
     await writeAudit(pool, {
       actorType: "CUSTOMER",
       actorId: existing.id,
@@ -204,15 +207,15 @@ export async function verifyOtp(pool: Pool, input: VerifyOtpInput): Promise<Veri
   };
 }
 
-async function createSession(pool: Pool, userId: string, deviceId: string): Promise<SessionTokens> {
+async function createSession(pool: Pool, userId: string, deviceId: string, details?: SessionDetails): Promise<SessionTokens> {
   const refreshToken = generateRefreshToken();
   const tokenHash = hashRefreshToken(refreshToken);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 
   const { rows } = await pool.query(
-    `insert into sessions (user_id, token_hash, device_id, expires_at)
-     values ($1, $2, $3, $4) returning id`,
-    [userId, tokenHash, deviceId, expiresAt],
+    `insert into sessions (user_id, token_hash, device_id, expires_at, device_name, browser_name, login_location)
+     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+    [userId, tokenHash, deviceId, expiresAt, details?.deviceName ?? null, details?.browserName ?? null, details?.loginLocation ?? null],
   );
   const sessionId = rows[0].id;
 
@@ -306,6 +309,7 @@ export async function googlePrefill(
 export interface CompleteSignupInput {
   signupTicket: string;
   deviceId: string;
+  sessionDetails?: SessionDetails;
   name?: string;
   email?: string;
   emailVerificationTicket?: string;
@@ -367,7 +371,7 @@ export async function completeSignup(pool: Pool, input: CompleteSignupInput): Pr
   // signup already collected the answer to.
   await pool.query(`insert into riders (user_id, name) values ($1, $2)`, [userId, name]);
 
-  const tokens = await createSession(pool, userId, input.deviceId);
+  const tokens = await createSession(pool, userId, input.deviceId, input.sessionDetails);
   await writeAudit(pool, {
     actorType: "CUSTOMER",
     actorId: userId,
@@ -421,12 +425,13 @@ export async function refreshSession(pool: Pool, input: RefreshInput): Promise<S
   const newTokenHash = hashRefreshToken(newRefreshToken);
   const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 
-  await pool.query(
+  const rotated = await pool.query(
     `update sessions
      set token_hash = $1, expires_at = $2, last_used_at = now()
-     where id = $3`,
+     where id = $3 and revoked_at is null and expires_at > now()`,
     [newTokenHash, newExpiresAt, session.id],
   );
+  if (!rotated.rowCount) throw new InvalidSessionError("session is no longer active");
 
   return {
     accessToken: signAccessToken({ uid: session.user_id, sid: session.id }),
@@ -461,23 +466,23 @@ export interface RevokeSessionInput {
   sessionId: string;
 }
 
-/** Returns false when the session doesn't exist or isn't owned by this user — caller maps that to 404 without distinguishing the two. */
 /**
- * Signed-in devices. `token_hash` is deliberately never selected — it is the
- * refresh token's only secret and listing it would hand every device's
- * credential to any one of them.
- *
- * Expired rows are excluded rather than shown as dead entries: a session past
- * `expires_at` cannot be used, so listing it would invite someone to revoke
- * something that is already gone.
+ * Each device ID is a browser profile. Show its latest sign-in, but mark it
+ * current if the caller is using any active session from that profile.
  */
-export async function listSessions(pool: Pool, userId: string) {
+export async function listSessions(pool: Pool, userId: string, currentSessionId: string | null = null) {
   const { rows } = await pool.query(
-    `select id, device_id, created_at, last_used_at, expires_at
-       from sessions
-      where user_id = $1 and revoked_at is null and expires_at > now()
-      order by last_used_at desc`,
-    [userId],
+    `select id, created_at, last_used_at, device_name, browser_name, login_location, is_current
+       from (
+         select distinct on (device_id) id, created_at, device_name, browser_name, login_location,
+                max(last_used_at) over (partition by device_id) as last_used_at,
+                coalesce(bool_or(id = $2) over (partition by device_id), false) as is_current
+           from sessions
+          where user_id = $1 and revoked_at is null and expires_at > now()
+          order by device_id, created_at desc, id desc
+       ) devices
+      order by is_current desc, last_used_at desc, id`,
+    [userId, currentSessionId],
   );
   return rows;
 }
@@ -485,7 +490,8 @@ export async function listSessions(pool: Pool, userId: string) {
 export async function revokeSession(pool: Pool, input: RevokeSessionInput): Promise<boolean> {
   const { rowCount } = await pool.query(
     `update sessions set revoked_at = now()
-     where id = $1 and user_id = $2 and revoked_at is null`,
+     where user_id = $2 and revoked_at is null
+       and device_id = (select device_id from sessions where id = $1 and user_id = $2 and revoked_at is null)`,
     [input.sessionId, input.userId],
   );
   return (rowCount ?? 0) > 0;

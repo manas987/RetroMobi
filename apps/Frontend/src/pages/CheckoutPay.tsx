@@ -15,7 +15,7 @@ import { rupees } from "../lib/format";
  * It used to live in Checkout.tsx's React state, which meant a refresh, a back
  * button or a return from the payment gateway lost the screen -- and since
  * submitHold clears the cart, the customer was then bounced to /browse with a
- * real ten-minute hold they had no way to pay for. Everything here is read
+ * real, still-running hold they had no way to pay for. Everything here is read
  * from the server by group id instead.
  */
 

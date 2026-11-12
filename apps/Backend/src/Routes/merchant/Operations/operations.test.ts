@@ -47,6 +47,21 @@ describe("merchant walk-in rentals", () => {
     expect(payouts).toHaveLength(0);
   });
 
+  test("an unlisted (INACTIVE) vehicle can still be rented as a walk-in", async () => {
+    const vehicle = await createBookableVehicle(pool, { status: "INACTIVE" });
+    const { pickupAt, returnAt } = futureWindow(710, 1);
+    const result = await createWalkinRental(pool, {
+      merchantUserId: "00000000-0000-0000-0000-000000000000",
+      vehicleId: vehicle.id,
+      walkinName: "Counter Customer",
+      walkinPhone: uniquePhone(),
+      walkinDlNumber: "DL999",
+      pickupAt,
+      returnAt,
+    });
+    expect(result.id).toBeTruthy();
+  });
+
   test("double-booking the same vehicle window is rejected by the exclusion constraint", async () => {
     const vehicle = await createBookableVehicle(pool);
     const { pickupAt, returnAt } = futureWindow(710, 1);

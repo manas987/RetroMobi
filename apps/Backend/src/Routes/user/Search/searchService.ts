@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import { priceRental } from "../../../lib/pricing.ts";
-import { CONFIRMED_RENTAL_LICENCE, PUBLIC_LISTING_ELIGIBLE, VEHICLE_LICENCE_JOIN } from "../../../lib/vehicleBookingRules.ts";
+import { CONFIRMED_RENTAL_LICENCE, notBlocked, PUBLIC_LISTING_ELIGIBLE, VEHICLE_LICENCE_JOIN } from "../../../lib/vehicleBookingRules.ts";
 
 export class DistanceSortUnavailableError extends Error {}
 export class VehicleNotFoundError extends Error {}
@@ -56,13 +56,12 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
-const DATES_AVAILABLE = `not exists (
+const WINDOW_UNBOOKED = `not exists (
   select 1 from bookings b where b.vehicle_id = v.id and b.deleted_at is null
     and tstzrange(b.scheduled_pickup_at, b.scheduled_return_at) && tstzrange($2::timestamptz, $3::timestamptz)
-) and not exists (
-  select 1 from vehicle_unavailability u where u.vehicle_id = v.id
-    and tstzrange(u.start_at, u.end_at) && tstzrange($2::timestamptz, $3::timestamptz)
 )`;
+
+const DATES_AVAILABLE = `${WINDOW_UNBOOKED} and ${notBlocked("v.id")}`;
 
 const vehicleRowSelect = (extra = "") => `
   select v.id as vehicle_id, v.shop_id, v.model_id,
@@ -419,4 +418,37 @@ export async function getVehicleDetail(pool: Pool, vehicleId: string, window?: {
     datesAvailable: row.dates_available,
     quote,
   };
+}
+
+/**
+ * Which of these vehicles can no longer be booked for their window.
+ *
+ * Backs the cart prune: the cart lives in localStorage, so it routinely holds ids
+ * that were bookable when they were added and are not now -- taken off the road for
+ * servicing, unlisted, their shop's licence lapsed, or simply booked by someone else.
+ * Silently dropping them beats a 409 at checkout, and `createHold` enforces the same
+ * rules regardless, so this is UX and never the authority.
+ *
+ * Deliberately returns only the unavailable ids: an empty array is the common case
+ * and means "nothing to do".
+ */
+export async function findUnavailableVehicles(
+  pool: Pool,
+  lines: Array<{ vehicleIds: string[]; pickupAt: Date; returnAt: Date }>,
+): Promise<string[]> {
+  const unavailable: string[] = [];
+
+  for (const line of lines) {
+    if (line.vehicleIds.length === 0) continue;
+    const { rows } = await pool.query(
+      `select v.id from vehicles v join shops s on s.id = v.shop_id
+        ${VEHICLE_LICENCE_JOIN}
+       where v.id = any($1::uuid[]) and ${PUBLIC_LISTING_ELIGIBLE} and ${DATES_AVAILABLE}`,
+      [line.vehicleIds, line.pickupAt, line.returnAt],
+    );
+    const stillGood = new Set(rows.map((r) => r.id as string));
+    for (const id of line.vehicleIds) if (!stillGood.has(id)) unavailable.push(id);
+  }
+
+  return [...new Set(unavailable)];
 }

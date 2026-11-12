@@ -110,6 +110,10 @@ export function RiderVerification({
       { token },
     )
       .then((live) => {
+        if (live.state === "VERIFIED") {
+          forget();
+          return;
+        }
         setSessionId(saved);
         applyState(live.state, live.rejection_code, live.method === "DIGILOCKER");
       })

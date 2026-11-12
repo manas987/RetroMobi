@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CartLimitNotice } from "./CartDrawer";
-import { CartProvider, MAX_CART_ITEMS, useCart, type CartItem } from "../lib/cart";
+import { CartLimitNotice, CartRemovedNotice } from "./CartDrawer";
+import { CartProvider, MAX_CART_ITEMS, pruneCart, useCart, type CartItem } from "../lib/cart";
 
 test("cart limit message is a compact timed notice with a cart action and no close button", () => {
   const html = renderToStaticMarkup(<CartLimitNotice onOpen={() => {}} onDismiss={() => {}} />);
@@ -38,4 +38,38 @@ test("cart limit validation counts units across shops and still permits reductio
     if (original) Object.defineProperty(globalThis, "localStorage", original);
     else Reflect.deleteProperty(globalThis, "localStorage");
   }
+});
+
+test("the unavailable-item notice reads as one sentence and offers the cart", () => {
+  const one = renderToStaticMarkup(<CartRemovedNotice count={1} onOpen={() => {}} onDismiss={() => {}} />);
+  expect(one).toContain("1 item in your cart is no longer available");
+  expect(one).toContain('role="status"');
+  expect(one).toContain("Open cart");
+  // Same chrome as the limit notice -- the two must not drift apart.
+  expect(one).toContain("cart-limit-toast");
+
+  const many = renderToStaticMarkup(<CartRemovedNotice count={3} onOpen={() => {}} onDismiss={() => {}} />);
+  expect(many).toContain("3 items in your cart are no longer available");
+});
+
+test("pruning drops unavailable units from both the held ids and the refill pool", () => {
+  const line = { modelId: "a", shopId: "shop-a", make: "Test", model: "A", shopName: "A", pricePerDay: 50000 };
+  const other = { ...line, modelId: "b", shopId: "shop-b" };
+  const items: CartItem[] = [
+    { ...line, vehicleIds: ["a1", "a2"], availableVehicleIds: ["a1", "a2", "a3"] },
+    { ...other, vehicleIds: ["b1"], availableVehicleIds: ["b1", "b2"] },
+  ];
+
+  // a3 is only in the pool, never held -- but setQty promotes straight out of the
+  // pool without re-fetching, so leaving it there puts it back on the next bump.
+  const pruned = pruneCart(items, ["a2", "a3"]);
+  expect(pruned).toHaveLength(2);
+  expect(pruned[0]!.vehicleIds).toEqual(["a1"]);
+  expect(pruned[0]!.availableVehicleIds).toEqual(["a1"]);
+  expect(pruned[1]).toEqual(items[1]!);
+
+  // A line with nothing bookable left is gone, not an empty row.
+  expect(pruneCart(items, ["b1"]).map((i) => i.modelId)).toEqual(["a"]);
+  // Nothing unavailable is the common case, and must not churn the array.
+  expect(pruneCart(items, [])).toBe(items);
 });

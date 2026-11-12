@@ -2,11 +2,12 @@ import { Router } from "express";
 import { rateLimit } from "../../../middleware/rateLimit.ts";
 import { validate } from "../../../middleware/validate.ts";
 import * as controller from "./controller.ts";
-import { SearchQuerySchema } from "./schema.ts";
+import { CartAvailabilitySchema, SearchQuerySchema } from "./schema.ts";
 
 const router = Router();
 
 router.get("/", rateLimit, validate(SearchQuerySchema, "query"), controller.search);
+router.post("/availability", rateLimit, validate(CartAvailabilitySchema), controller.cartAvailability);
 router.get("/vehicle/:vehicleId", rateLimit, controller.detail);
 router.get("/models/:modelId/image", rateLimit, controller.modelImage);
 

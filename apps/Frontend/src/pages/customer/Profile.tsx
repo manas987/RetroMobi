@@ -1,799 +1,319 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Ellipsis, Laptop, MapPin, Plus, ShieldCheck, Smartphone, UserRound } from "lucide-react";
 import { useLocation } from "wouter";
 import { Header } from "../../components/Header";
 import { Footer } from "../../components/Footer";
-import { usePortalSession, usePortalQuery, portalFetch, PortalApiError, type Row } from "../../lib/portal";
+import { Modal } from "../../components/Modal";
+import { usePortalSession, usePortalQuery, portalFetch, type Row } from "../../lib/portal";
 import { DateField } from "../../components/DateTimeField";
 import { StatusPill } from "../../components/DataTable";
-import { ErrorBox, SubmitButton, TextField } from "../../components/AuthFormBits";
+import { ErrorBox, TextField } from "../../components/AuthFormBits";
 import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock, SkeletonRows } from "../../components/ContentFeedback";
-import { dateLabel, enumLabel } from "../../lib/format";
-import { uploadFile, UploadFailedError } from "../../lib/upload";
+import { SearchFailure } from "../../components/SearchFeedback";
+import { dateLabel } from "../../lib/format";
 import { RiderVerification } from "../../components/RiderVerification";
 
-function useRequireCustomer() {
-  const { session } = usePortalSession("user");
-  const [, navigate] = useLocation();
-  useEffect(() => {
-    if (!session) navigate("/login");
-  }, [session, navigate]);
-  return session;
+const primaryButton = "inline-flex min-h-10 items-center justify-center gap-2 rounded-row bg-amber px-4 text-sm font-semibold text-on-amber hover:brightness-95 disabled:opacity-50";
+const secondaryButton = "inline-flex min-h-10 items-center justify-center rounded-row border border-line-strong px-4 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50";
+const dangerButton = "inline-flex min-h-10 items-center justify-center rounded-row bg-danger px-4 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50";
+const indiaDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
+const sessionDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+
+function licenceStatus(rider: Row, today: string) {
+  if (rider.licence_status === "VERIFIED" && typeof rider.licence_expires_on === "string" && rider.licence_expires_on < today) return "EXPIRED";
+  return String(rider.licence_status ?? "UNVERIFIED");
 }
 
-// ---------- Riders & profile ----------
-
-function ProfileBody() {
-  const session = useRequireCustomer();
-  const [reloadKey, setReloadKey] = useState(0);
-  const { data, error } = usePortalQuery<{ riders: Row[] }>(
-    "user",
-    session ? `/riders?r=${reloadKey}` : null,
-    session?.accessToken,
-  );
-  const reload = () => setReloadKey((k) => k + 1);
-
+function ProfileBody({ token, onSignOut }: { token: string; onSignOut: () => void }) {
+  const [revision, setRevision] = useState(0);
+  const { data, error } = usePortalQuery<{ riders: Row[] }>("user", `/riders?r=${revision}`, token);
   const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [addError, setAddError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const reload = () => setRevision((value) => value + 1);
+  const today = indiaDay.format(new Date());
+  const riders = (data?.riders ?? []).map((rider) => ({ rider, status: licenceStatus(rider, today) }));
+  const needsAttention = riders.filter(({ status }) => status !== "VERIFIED");
+  const verified = riders.filter(({ status }) => status === "VERIFIED");
 
-  async function addRider() {
-    setAddError(null);
+  return (
+    <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-8 sm:px-6 sm:py-10">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3 sm:mb-8">
+        <div>
+          <h1 className="text-2xl font-semibold text-ink sm:text-3xl">Riders &amp; profile</h1>
+          <p className="mt-1 text-sm text-ink-2">Manage the riders and devices on your account.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className={primaryButton} onClick={() => setAdding(true)}>
+            <Plus size={17} aria-hidden="true" /> Add rider
+          </button>
+          <a href="#signed-in-devices" className="text-sm font-medium text-ink-2 underline underline-offset-4 hover:text-ink lg:hidden">Signed-in devices</a>
+        </div>
+      </div>
+
+      <div className="space-y-8 sm:space-y-10">
+        <section aria-label="Riders" className="min-w-0 space-y-6">
+          {error && <SearchFailure title="Couldn’t load your riders" onRetry={reload} retrying={false} />}
+          {!error && data === null && (
+            <LoadingSkeleton label="Loading riders" className="grid gap-3 sm:grid-cols-2">
+              {[0, 1].map((index) => (
+                <div key={index} className="space-y-3 rounded-panel border border-line p-4">
+                  <div className="flex items-center gap-3">
+                    <SkeletonBlock className="size-10 rounded-full" />
+                    <SkeletonBlock className="h-4 w-2/5" />
+                  </div>
+                  <SkeletonBlock className="h-4 w-1/2" />
+                </div>
+              ))}
+            </LoadingSkeleton>
+          )}
+          {data && !riders.length && (
+            <EmptyState title="No riders added yet" description="Add a rider to verify their driving licence.">
+              <button type="button" className={feedbackActionClass} onClick={() => setAdding(true)}>Add a rider</button>
+            </EmptyState>
+          )}
+          {[
+            { title: "Needs attention", entries: needsAttention, attention: true },
+            { title: "Verified riders", entries: verified, attention: false },
+          ].filter(({ entries }) => entries.length).map(({ title, entries, attention }) => (
+            <section key={title} aria-label={title}>
+              <h2 className="mb-3 text-lg font-semibold text-ink">{title}</h2>
+              <div className={`grid gap-3 ${attention ? "" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
+                {entries.map(({ rider, status }) => (
+                  <RiderCard key={String(rider.id)} rider={rider} status={status} token={token} onChanged={reload} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </section>
+
+        <SignedInDevices token={token} onSignOut={onSignOut} />
+      </div>
+
+      {adding && <RiderForm token={token} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); reload(); }} />}
+    </main>
+  );
+}
+
+function RiderCard({ rider, status, token, onChanged }: { rider: Row; status: string; token: string; onChanged: () => void }) {
+  const [action, setAction] = useState<"edit" | "remove" | "verify" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const name = String(rider.name ?? "");
+  const initials = name.trim().split(/\s+/).slice(0, 2).map((part) => Array.from(part)[0] ?? "").join("").toLocaleUpperCase();
+  const verified = status === "VERIFIED";
+  const menuItem = "flex cursor-pointer items-center rounded-row px-3 py-2 text-sm font-medium outline-none data-[highlighted]:bg-surface-2";
+
+  async function remove() {
     setBusy(true);
+    setError("");
     try {
-      await portalFetch("user", "/riders", { method: "POST", token: session!.accessToken, body: { name } });
-      setName("");
-      setAdding(false);
-      reload();
+      await portalFetch("user", `/riders/${rider.id}`, { method: "DELETE", token });
+      setAction(null);
+      onChanged();
     } catch (err) {
-      setAddError(err instanceof PortalApiError ? err.message : "Couldn't add that rider.");
+      setError(err instanceof Error ? err.message : "Couldn’t remove that rider.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="max-w-[760px] w-full mx-auto px-5 py-10 min-h-[calc(100dvh-4rem)]">
-      <div className="flex items-start justify-between gap-3 mb-1">
-        <h1 className="text-2xl font-semibold text-ink">Riders & profile</h1>
-        {!adding && (error || (data && data.riders.length > 0)) && (
-          <button type="button" onClick={() => setAdding(true)} className="text-sm text-ink font-medium hover:underline shrink-0">
-            + Add rider
+    <article className={`min-w-0 rounded-panel border p-4 ${verified ? "border-line bg-surface" : "border-warning/20 bg-warning-soft/40"}`}>
+      <div className="flex items-start gap-3">
+        <span aria-hidden="true" className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold ${verified ? "bg-verified-soft text-verified" : "bg-warning-soft text-warning"}`}>
+          {initials || <UserRound size={17} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="break-words text-base font-semibold leading-snug text-ink">{name}</h3>
+          <p className="mt-0.5 text-xs text-ink-2">{rider.dob ? `Born ${dateLabel(rider.dob)}` : "Date of birth missing"}</p>
+        </div>
+        <DropdownMenu.Root modal={false}>
+          <DropdownMenu.Trigger asChild>
+            <button type="button" aria-label={`Manage ${name}`} className="grid size-9 shrink-0 place-items-center rounded-row text-ink-2 hover:bg-surface-3 focus-visible:outline">
+              <Ellipsis size={19} aria-hidden="true" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content align="end" sideOffset={5} className="z-50 min-w-36 rounded-row border border-line bg-surface p-1 shadow-lg">
+              <DropdownMenu.Item className={`${menuItem} text-ink`} onSelect={() => setAction("edit")}>Edit rider</DropdownMenu.Item>
+              <DropdownMenu.Item className={`${menuItem} text-danger`} onSelect={() => { setError(""); setAction("remove"); }}>Remove rider</DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line pt-3">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <StatusPill value={status} />
+          {rider.licence_expires_on && (verified || status === "EXPIRED") ? (
+            <span className="text-xs text-ink-2">{verified ? "Valid until " : ""}{dateLabel(rider.licence_expires_on)}</span>
+          ) : null}
+        </div>
+        {!verified && (
+          <button type="button" onClick={() => setAction("verify")} className="inline-flex min-h-9 items-center gap-1.5 rounded-row border border-line-strong bg-surface px-3 text-sm font-medium text-ink hover:bg-surface-3">
+            <ShieldCheck size={15} aria-hidden="true" /> {status === "EXPIRED" ? "Verify renewed licence" : "Verify licence"}
           </button>
         )}
       </div>
-      <p className="text-sm text-ink-3 mb-6">Everyone verified to ride under this account.</p>
 
-      {error && <ErrorBox text={error} />}
-
-      {adding && (
-        <div className="rounded-panel border border-line p-5 mb-5">
-          <h2 className="font-semibold text-ink mb-3">New rider</h2>
-          {addError && <ErrorBox text={addError} />}
-          <TextField label="Name" value={name} onChange={setName} autoFocus />
-          <div className="flex items-center gap-3 mt-1">
-            <SubmitButton busy={busy} disabled={!name} onClick={addRider}>
-              Add rider
-            </SubmitButton>
-            <button type="button" onClick={() => setAdding(false)} className="text-sm text-ink-3 hover:text-ink">
-              Cancel
-            </button>
+      {action === "edit" && <RiderForm rider={rider} token={token} onClose={() => setAction(null)} onSaved={() => { setAction(null); onChanged(); }} />}
+      {action === "verify" && (
+        <Modal open title="Verify driving licence" onClose={() => setAction(null)}>
+          <RiderVerification riderId={String(rider.id)} riderName={name} token={token}
+            onDone={() => { setAction(null); onChanged(); }} onCancel={() => setAction(null)} />
+        </Modal>
+      )}
+      {action === "remove" && (
+        <Modal open title="Remove this rider?" onClose={() => { if (!busy) setAction(null); }}>
+          <p className="text-sm text-ink-2"><strong className="text-ink">{name}</strong> will be removed from your rider list and won’t be available for future bookings.</p>
+          {error && <div className="mt-3"><ErrorBox text={error} /></div>}
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <button type="button" className={secondaryButton} disabled={busy} onClick={() => setAction(null)}>Keep rider</button>
+            <button type="button" className={dangerButton} disabled={busy} onClick={() => void remove()}>{busy ? "Removing…" : "Remove rider"}</button>
           </div>
-        </div>
+        </Modal>
       )}
-
-      {!error && data === null && (
-        <LoadingSkeleton label="Loading riders" className="space-y-3">
-          {[0, 1].map((index) => (
-            <div key={index} className="space-y-3 rounded-panel border border-line p-5">
-              <div className="flex justify-between gap-4">
-                <SkeletonBlock className="h-5 w-2/5" />
-                <SkeletonBlock className="h-5 w-20 rounded-full" />
-              </div>
-              <SkeletonBlock className="h-4 w-1/2" />
-              <SkeletonBlock className="h-8 w-28 rounded-row" />
-            </div>
-          ))}
-        </LoadingSkeleton>
-      )}
-      {!error && data && data.riders.length === 0 && !adding && (
-        <EmptyState title="No riders added yet" description="Add a rider to start verifying their driving licence.">
-          <button type="button" className={feedbackActionClass} onClick={() => setAdding(true)}>Add a rider</button>
-        </EmptyState>
-      )}
-      {!error && data && data.riders.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {data.riders.map((r) => (
-            <RiderCard key={String(r.id)} rider={r} token={session!.accessToken} onChanged={reload} />
-          ))}
-        </div>
-      )}
-
-      {session && <SignedInDevices token={session.accessToken} />}
-    </div>
+    </article>
   );
 }
 
-/**
- * Where this account is signed in, and how to cut one off. Everything
- * returned is live — the server filters out revoked and expired sessions, so
- * nothing listed here is already dead.
- */
-function SignedInDevices({ token }: { token: string }) {
-  const [reloadKey, setReloadKey] = useState(0);
-  const { data, error } = usePortalQuery<{ sessions: Row[]; currentSessionId: string | null }>(
-    "user",
-    `/auth/sessions?r=${reloadKey}`,
-    token,
-  );
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+function RiderForm({ rider, token, onClose, onSaved }: { rider?: Row; token: string; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(String(rider?.name ?? ""));
+  const [dob, setDob] = useState(String(rider?.dob ?? "").slice(0, 10));
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  async function revoke(sessionId: string, isCurrent: boolean) {
-    if (
-      !window.confirm(
-        isCurrent
-          ? "This is the device you're using. Revoking it signs you out here."
-          : "Sign this device out of your account?",
-      )
-    ) {
-      return;
-    }
-    setBusyId(sessionId);
-    setActionError(null);
+  async function save() {
+    setError("");
+    setBusy(true);
     try {
-      await portalFetch("user", `/auth/sessions/${sessionId}`, { method: "DELETE", token });
-      // Revoking the current session leaves this tab holding a dead refresh
-      // token, so send it to a clean sign-in rather than letting the next
-      // request fail on its own.
-      if (isCurrent) window.location.assign("/login");
-      else setReloadKey((k) => k + 1);
+      await portalFetch("user", rider ? `/riders/${rider.id}` : "/riders", {
+        method: rider ? "PATCH" : "POST", token, body: { name: name.trim(), dob: dob || undefined },
+      });
+      onSaved();
     } catch (err) {
-      setActionError(err instanceof PortalApiError ? err.message : "Couldn't sign that device out.");
+      setError(err instanceof Error ? err.message : "Couldn’t save the rider.");
     } finally {
-      setBusyId(null);
+      setBusy(false);
     }
   }
 
-  const sessions = data?.sessions ?? [];
+  return (
+    <Modal open title={rider ? "Edit rider" : "Add a rider"} onClose={() => { if (!busy) onClose(); }}>
+      <form onSubmit={(event) => { event.preventDefault(); if (!busy && name.trim()) void save(); }}>
+        {error && <div className="mb-3"><ErrorBox text={error} /></div>}
+        <TextField label="Full name" value={name} onChange={setName} autoFocus />
+        <DateField label="Date of birth (optional)" value={dob} onChange={setDob} fromYear={1920} toDate={new Date()} />
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" className={secondaryButton} disabled={busy} onClick={onClose}>Cancel</button>
+          <button type="submit" className={primaryButton} disabled={busy || !name.trim()}>
+            {busy ? "Saving…" : rider ? "Save changes" : "Add rider"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+type Device = { id: string; is_current: boolean; device_name: string | null; browser_name: string | null; login_location: string | null; created_at: string; last_used_at: string };
+const deviceName = (device: Device) => device.device_name ?? (device.is_current ? "Current browser" : "Unidentified device");
+
+function SignedInDevices({ token, onSignOut }: { token: string; onSignOut: () => void }) {
+  const [revision, setRevision] = useState(0);
+  const { data, error } = usePortalQuery<{ sessions: Device[] }>("user", `/auth/sessions?r=${revision}`, token);
+  const [selected, setSelected] = useState<Device | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const reload = () => setRevision((value) => value + 1);
+
+  async function signOut(device: Device) {
+    setBusy(true);
+    setActionError("");
+    try {
+      await portalFetch("user", `/auth/sessions/${device.id}`, { method: "DELETE", token });
+      setSelected(null);
+      if (device.is_current) onSignOut();
+      else reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Couldn’t sign that device out.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <section className="mt-10">
-      <h2 className="font-semibold text-ink mb-1">Signed-in devices</h2>
-      <p className="text-sm text-ink-3 mb-4">Sign out anywhere you don't recognise.</p>
-
-      {error && <ErrorBox text={error} />}
-      {actionError && <ErrorBox text={actionError} />}
-
+    <section id="signed-in-devices" aria-label="Signed-in devices" className="min-w-0 scroll-mt-24">
+      <h2 className="mb-3 text-lg font-semibold text-ink">Signed-in devices</h2>
+      {error && <SearchFailure title="Couldn’t load your devices" onRetry={reload} retrying={false} />}
       {!error && data === null && <SkeletonRows label="Loading signed-in devices" detail />}
-      {!error && data && sessions.length === 0 && (
-        <EmptyState title="No other active sessions" />
-      )}
-
-      {sessions.length > 0 && (
-        <div className="rounded-panel border border-line divide-y divide-line">
-          {sessions.map((sess) => {
-            const id = String(sess.id);
-            const isCurrent = id === data?.currentSessionId;
+      {data?.sessions.length === 0 && <EmptyState title="No active sessions" />}
+      {!!data?.sessions.length && (
+        <ul className="divide-y divide-line overflow-hidden rounded-panel border border-line bg-surface">
+          {data.sessions.map((device) => {
+            const Icon = /iPhone|iPad|Android/i.test(device.device_name ?? "") ? Smartphone : Laptop;
             return (
-              <div key={id} className="px-4 py-3 flex items-center justify-between gap-4 text-sm">
-                <span className="min-w-0">
-                  <span className="block text-ink">
-                    {isCurrent ? "This device" : "Another device"}
-                    <span className="text-ink-4 font-normal"> · {String(sess.device_id).slice(0, 8)}</span>
+              <li key={device.id} className={`grid items-center gap-x-5 gap-y-3 p-4 md:grid-cols-[minmax(160px,0.8fr)_minmax(0,1.6fr)_auto] md:px-5 ${device.is_current ? "bg-surface-2" : ""}`}>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-row border border-line bg-surface text-ink-2">
+                    <Icon size={17} aria-hidden="true" />
                   </span>
-                  <span className="block text-xs text-ink-3">
-                    Last used {fmtDate(sess.last_used_at)} · signed in {fmtDate(sess.created_at)}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  disabled={busyId === id}
-                  onClick={() => revoke(id, isCurrent)}
-                  className="text-xs text-danger font-medium hover:underline disabled:opacity-40 shrink-0"
-                >
-                  {isCurrent ? "Sign out here" : "Sign out"}
-                </button>
-              </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <h3 className="text-sm font-semibold text-ink">{deviceName(device)}</h3>
+                      {device.is_current && <span className="rounded-full bg-verified-soft px-2 py-0.5 text-xs font-medium text-verified">This device</span>}
+                    </div>
+                    {device.browser_name && <p className="text-xs text-ink-2">{device.browser_name}</p>}
+                  </div>
+                </div>
+                <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 text-xs text-ink-2">
+                  <div>
+                    <dt>Last sign-in</dt>
+                    <dd className="mt-0.5 font-medium text-ink"><time dateTime={device.created_at}>{sessionDate.format(new Date(device.created_at))}</time></dd>
+                  </div>
+                  <div>
+                    <dt>Last active</dt>
+                    <dd className="mt-0.5 font-medium text-ink"><time dateTime={device.last_used_at}>{sessionDate.format(new Date(device.last_used_at))}</time></dd>
+                  </div>
+                  <div className="col-span-2 flex items-start gap-1.5">
+                    <MapPin size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
+                    <dt className="sr-only">Last sign-in location</dt>
+                    <dd className="break-words">{device.login_location ? `${device.login_location} (approx.)` : "Sign-in location unavailable"}</dd>
+                  </div>
+                </dl>
+                <button type="button" className="min-h-9 justify-self-start rounded-row border border-line-strong bg-surface px-3 text-xs font-medium text-ink hover:bg-surface-3 md:justify-self-end"
+                  onClick={() => { setActionError(""); setSelected(device); }}>{device.is_current ? "Sign out here" : "Sign out"}</button>
+              </li>
             );
           })}
-        </div>
+        </ul>
+      )}
+      {selected && (
+        <Modal open title={selected.is_current ? "Sign out here?" : "Sign out this device?"} onClose={() => { if (!busy) setSelected(null); }}>
+          <p className="text-sm text-ink-2">
+            {selected.is_current ? "You’ll need to sign in again to manage your account." : `All sign-ins for ${deviceName(selected)} in this browser profile will be revoked.`}
+          </p>
+          {actionError && <div className="mt-3"><ErrorBox text={actionError} /></div>}
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <button type="button" className={secondaryButton} disabled={busy} onClick={() => setSelected(null)}>Cancel</button>
+            <button type="button" className={dangerButton} disabled={busy} onClick={() => void signOut(selected)}>{busy ? "Signing out…" : "Sign out"}</button>
+          </div>
+        </Modal>
       )}
     </section>
   );
 }
 
-function RiderCard({ rider: r, token, onChanged }: { rider: Row; token: string; onChanged: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [editName, setEditName] = useState(String(r.name ?? ""));
-  const [editDob, setEditDob] = useState(String(r.dob ?? "").slice(0, 10));
-  const [verifying, setVerifying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  /** Name and date of birth only. The licence verification records are
-   *  immutable and an edit never touches them, so a verified rider stays
-   *  verified — correcting a typo does not send them back through KYC. */
-  async function saveEdit() {
-    setError(null);
-    setBusy(true);
-    try {
-      await portalFetch("user", `/riders/${r.id}`, {
-        method: "PATCH",
-        token,
-        body: { name: editName.trim(), dob: editDob || undefined },
-      });
-      setEditing(false);
-      onChanged();
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't save those changes.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    setError(null);
-    setBusy(true);
-    try {
-      await portalFetch("user", `/riders/${r.id}`, { method: "DELETE", token });
-      onChanged();
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't remove that rider.");
-      setBusy(false);
-    }
-  }
-
-  const verified = r.licence_status === "VERIFIED";
-
-  return (
-    <div className="rounded-panel border border-line p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-medium text-ink">{String(r.name)}</p>
-          <p className="text-xs text-ink-3">
-            {r.dob ? `Born ${dateLabel(r.dob)}` : "No date of birth on file"}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <StatusPill value={r.licence_status ?? "UNVERIFIED"} />
-          {!verified && !verifying && (
-            <button type="button" onClick={() => setVerifying(true)} className="text-sm text-ink font-medium hover:underline">
-              Verify licence
-            </button>
-          )}
-          {!editing && (
-            <button
-              type="button"
-              onClick={() => {
-                setEditName(String(r.name ?? ""));
-                setEditDob(String(r.dob ?? "").slice(0, 10));
-                setEditing(true);
-              }}
-              className="text-sm text-ink font-medium hover:underline"
-            >
-              Edit
-            </button>
-          )}
-          <button type="button" disabled={busy} onClick={remove} className="text-sm text-danger hover:underline disabled:opacity-40">
-            Remove
-          </button>
-        </div>
-      </div>
-      {verified && r.licence_expires_on ? (
-        <p className="text-xs text-ink-4 mt-1">Licence valid until {dateLabel(r.licence_expires_on)}</p>
-      ) : null}
-
-      {error && <div className="mt-3"><ErrorBox text={error} /></div>}
-
-      {editing && (
-        <div className="mt-3 pt-3 border-t border-line">
-          <div className="flex items-end gap-3 flex-wrap">
-            <TextField label="Name" value={editName} onChange={setEditName} autoFocus />
-            <DateField label="Date of birth" value={editDob} onChange={setEditDob} fromYear={1920} toDate={new Date()} />
-            <button
-              type="button"
-              disabled={busy || !editName.trim()}
-              onClick={saveEdit}
-              className="h-10 px-4 rounded-row bg-ink text-surface font-medium text-sm disabled:opacity-40 hover:bg-ink-2 transition-colors mb-4"
-            >
-              {busy ? "Saving…" : "Save"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="h-10 px-2 text-sm text-ink-3 hover:text-ink mb-4"
-            >
-              Cancel
-            </button>
-          </div>
-          {verified && (
-            <p className="text-xs text-ink-4 -mt-1">
-              This rider stays verified — correcting a name or date of birth does not re-run licence checks.
-            </p>
-          )}
-        </div>
-      )}
-
-      {verifying && (
-        <div className="mt-3 pt-3 border-t border-line">
-          <RiderVerification
-            riderId={String(r.id)}
-            riderName={String(r.name ?? "")}
-            token={token}
-            onDone={() => {
-              setVerifying(false);
-              onChanged();
-            }}
-            onCancel={() => setVerifying(false)}
-          />
-        </div>
-      )}
-
-    </div>
-  );
-}
-
 export function CustomerProfile() {
+  const { session, setTokens } = usePortalSession("user");
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    if (!session) navigate("/login?next=%2Faccount%2Fprofile");
+  }, [session, navigate]);
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <ProfileBody />
-      <Footer />
-    </div>
-  );
-}
-
-// ---------- Support ----------
-
-type TriageStep = "closed" | "ask-booking" | "pick-booking" | "compose";
-
-function SupportBody() {
-  const session = useRequireCustomer();
-  const token = session?.accessToken;
-  const [reloadKey, setReloadKey] = useState(0);
-  const { data, error } = usePortalQuery<{ tickets: Row[] }>(
-    "user",
-    token ? `/tickets?r=${reloadKey}` : null,
-    token,
-  );
-  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
-  const [step, setStep] = useState<TriageStep>("closed");
-
-  return (
-    <div className="max-w-[760px] w-full mx-auto px-5 py-10 min-h-[calc(100dvh-4rem)]">
-      <h1 className="text-2xl font-semibold text-ink mb-1">Support</h1>
-      <p className="text-sm text-ink-3 mb-6">Chat with us about a booking, or anything else.</p>
-
-      {error && <ErrorBox text={error} />}
-
-      {activeTicketId ? (
-        <TicketChat
-          ticketId={activeTicketId}
-          token={token!}
-          onBack={() => {
-            setActiveTicketId(null);
-            setReloadKey((k) => k + 1);
-          }}
-        />
-      ) : (
-        <>
-          {step === "closed" ? (
-            <button
-              type="button"
-              onClick={() => setStep("ask-booking")}
-              className="w-full h-11 rounded-row bg-ink text-surface font-semibold text-sm mb-6 hover:bg-ink-2 transition-colors"
-            >
-              Start a new conversation
-            </button>
-          ) : (
-            <NewTicket
-              step={step}
-              setStep={setStep}
-              token={token!}
-              onCreated={(id) => {
-                setStep("closed");
-                setActiveTicketId(id);
-              }}
-            />
-          )}
-
-          {!error && data === null && <SkeletonRows label="Loading support conversations" count={3} />}
-          {!error && data && data.tickets.length === 0 && (
-            <EmptyState title="No conversations yet" description="Start a conversation whenever you need help." />
-          )}
-          {!error && data && data.tickets.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {data.tickets.map((t) => (
-                <button
-                  key={String(t.id)}
-                  type="button"
-                  onClick={() => setActiveTicketId(String(t.id))}
-                  className="flex items-center justify-between gap-3 rounded-row border border-line px-4 py-3 text-left hover:bg-surface-2 transition-colors"
-                >
-                  <span className="text-sm text-ink font-medium">
-                    {t.subject ? String(t.subject) : t.category ? enumLabel(t.category) : "Conversation"}
-                  </span>
-                  <span className="flex items-center gap-3">
-                    <span className="text-xs text-ink-4">{fmtDate(t.created_at)}</span>
-                    <StatusPill value={t.status} />
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function fmtDate(iso: unknown): string {
-  if (typeof iso !== "string") return "";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-}
-
-function NewTicket({
-  step,
-  setStep,
-  token,
-  onCreated,
-}: {
-  step: TriageStep;
-  setStep: (s: TriageStep) => void;
-  token: string;
-  onCreated: (ticketId: string) => void;
-}) {
-  const { data: bookingsRes, error: bookingsError } = usePortalQuery<{ bookings: Row[] }>(
-    "user",
-    step === "pick-booking" ? "/bookings" : null,
-    token,
-  );
-  const [bookingId, setBookingId] = useState<string | null>(null);
-  const [firstMessage, setFirstMessage] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function create(category: "BOOKING" | "APP_HELP" | "OTHER") {
-    setError(null);
-    setBusy(true);
-    try {
-      const ticket = await portalFetch<{ id: string }>("user", "/tickets", {
-        method: "POST",
-        token,
-        body: { bookingId: category === "BOOKING" ? bookingId! : undefined, firstMessage: firstMessage || undefined },
-      });
-      await portalFetch("user", `/tickets/${ticket.id}/category`, {
-        method: "POST",
-        token,
-        body: category === "BOOKING" ? { category, bookingId } : { category },
-      });
-      onCreated(ticket.id);
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't open that ticket.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="rounded-panel border border-line p-5 mb-6">
-      {error && <ErrorBox text={error} />}
-
-      {step === "ask-booking" && (
-        <>
-          <p className="text-sm font-medium text-ink mb-3">Is this about a booking?</p>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => setStep("pick-booking")}
-              className="h-10 px-4 rounded-row border border-line-strong text-sm font-medium hover:bg-surface-3"
-            >
-              Yes, a booking
-            </button>
-            <button
-              type="button"
-              onClick={() => setStep("compose")}
-              className="h-10 px-4 rounded-row border border-line-strong text-sm font-medium hover:bg-surface-3"
-            >
-              No, something else
-            </button>
-          </div>
-        </>
-      )}
-
-      {step === "pick-booking" && (
-        <>
-          <p className="text-sm font-medium text-ink mb-3">Which booking?</p>
-          {bookingsError && <ErrorBox text="We couldn’t load your bookings." />}
-          {!bookingsError && bookingsRes === null && <SkeletonRows label="Loading bookings to choose from" />}
-          {bookingsRes && bookingsRes.bookings.length === 0 && (
-            <EmptyState title="No bookings to choose from" />
-          )}
-          <div className="flex flex-col gap-2 mb-4">
-            {bookingsRes?.bookings.map((b) => (
-              <label
-                key={String(b.id)}
-                className="flex items-center gap-3 rounded-row border border-line-strong px-3 py-2.5 cursor-pointer has-[:checked]:border-ink"
-              >
-                <input type="radio" name="booking" checked={bookingId === b.id} onChange={() => setBookingId(String(b.id))} />
-                <span className="text-sm text-ink">
-                  {String(b.make)} {String(b.model)} — {String(b.shop_name)}
-                </span>
-              </label>
-            ))}
-          </div>
-          {bookingId && (
-            <>
-              <TextField label="What's going on? (optional)" value={firstMessage} onChange={setFirstMessage} />
-              <SubmitButton busy={busy} onClick={() => create("BOOKING")}>
-                Start conversation
-              </SubmitButton>
-            </>
-          )}
-          {!bookingId && (
-            <button type="button" className={feedbackActionClass} onClick={() => setStep("compose")}>Continue without a booking</button>
-          )}
-        </>
-      )}
-
-      {step === "compose" && (
-        <>
-          <p className="text-sm font-medium text-ink mb-3">What's it about?</p>
-          <div className="flex gap-3 mb-4">
-            <button
-              type="button"
-              onClick={() => create("APP_HELP")}
-              disabled={busy}
-              className="h-10 px-4 rounded-row border border-line-strong text-sm font-medium hover:bg-surface-3 disabled:opacity-40"
-            >
-              Using the app
-            </button>
-            <button
-              type="button"
-              onClick={() => create("OTHER")}
-              disabled={busy}
-              className="h-10 px-4 rounded-row border border-line-strong text-sm font-medium hover:bg-surface-3 disabled:opacity-40"
-            >
-              Something else
-            </button>
-          </div>
-          <TextField label="Tell us more (optional)" value={firstMessage} onChange={setFirstMessage} />
-        </>
-      )}
-    </div>
-  );
-}
-
-function TicketChat({ ticketId, token, onBack }: { ticketId: string; token: string; onBack: () => void }) {
-  // The chat used to be a bare message stream under a back link — no subject,
-  // category, status or linked booking anywhere on screen.
-  const { data: ticket } = usePortalQuery<Row>("user", `/tickets/${ticketId}`, token);
-  const [messages, setMessages] = useState<Row[] | null>(null);
-  const [messagesError, setMessagesError] = useState<string | null>(null);
-  const [body, setBody] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-
-    async function poll() {
-      try {
-        const sinceId = messages && messages.length > 0 ? String(messages[messages.length - 1]!.id) : undefined;
-        const res = await portalFetch<{ messages: Row[] }>(
-          "user",
-          `/tickets/${ticketId}/messages${sinceId ? `?since=${sinceId}` : ""}`,
-          { token },
-        );
-        if (cancelled) return;
-        setMessagesError(null);
-        if (sinceId) {
-          if (res.messages.length > 0) setMessages((prev) => [...(prev ?? []), ...res.messages]);
-        } else {
-          setMessages(res.messages);
-        }
-      } catch (err) {
-        if (!cancelled) setMessagesError(err instanceof PortalApiError ? err.message : "Couldn't load messages.");
-      } finally {
-        if (!cancelled) timer = setTimeout(poll, 4000);
-      }
-    }
-    poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticketId]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "nearest" });
-  }, [messages?.length]);
-
-  async function send() {
-    if (!body.trim()) return;
-    setSending(true);
-    setError(null);
-    try {
-      const msg = await portalFetch<Row>("user", `/tickets/${ticketId}/messages`, {
-        method: "POST",
-        token,
-        body: { body },
-      });
-      setMessages((prev) => [...(prev ?? []), { ...msg, attachments: [] }]);
-      setBody("");
-    } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : "Couldn't send that.");
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function sendFile(file: File) {
-    setSending(true);
-    setError(null);
-    try {
-      const msg = await portalFetch<Row>("user", `/tickets/${ticketId}/messages`, {
-        method: "POST",
-        token,
-        body: { body: body.trim() || `📎 ${file.name}` },
-      });
-      const attachment = await uploadFile<Row>({
-        portal: "user",
-        token,
-        file,
-        presignPath: `/tickets/${ticketId}/messages/${msg.id}/attachments/upload`,
-        confirmPath: `/tickets/${ticketId}/messages/${msg.id}/attachments/confirm`,
-        confirmBody: { fileName: file.name, sizeBytes: file.size },
-      });
-      setMessages((prev) => [...(prev ?? []), { ...msg, attachments: [attachment] }]);
-      setBody("");
-    } catch (err) {
-      if (err instanceof PortalApiError || err instanceof UploadFailedError) setError(err.message);
-      else setError("Couldn't send that attachment.");
-    } finally {
-      setSending(false);
-    }
-  }
-
-  return (
-    <div className="rounded-panel border border-line flex flex-col h-[520px]">
-      <div className="px-4 py-3 border-b border-line">
-        <div className="flex items-center justify-between gap-3">
-          <button type="button" onClick={onBack} className="text-sm text-ink-3 hover:text-ink">
-            ← All conversations
-          </button>
-          {ticket ? <StatusPill value={ticket.status} /> : null}
-        </div>
-        {ticket ? (
-          <div className="mt-1.5">
-            <p className="text-sm font-medium text-ink">
-              {ticket.subject ? String(ticket.subject) : enumLabel(ticket.category)}
-            </p>
-            <p className="text-xs text-ink-3">
-              Opened {fmtDate(ticket.created_at)}
-              {ticket.category ? ` · ${enumLabel(ticket.category)}` : ""}
-              {ticket.booking_id ? " · about a booking" : ""}
-            </p>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
-        {messages === null && !messagesError && (
-          <LoadingSkeleton label="Loading messages" className="flex flex-col gap-3">
-            <SkeletonBlock className="h-12 w-2/3 self-start rounded-panel" />
-            <SkeletonBlock className="h-10 w-1/2 self-end rounded-panel" />
-            <SkeletonBlock className="h-12 w-3/5 self-start rounded-panel" />
-          </LoadingSkeleton>
-        )}
-        {messages?.length === 0 && !messagesError && <EmptyState title="No messages yet" description="Send a message to tell us how we can help." />}
-        {messages?.map((m) => <MessageBubble key={String(m.id)} message={m} ticketId={ticketId} token={token} />)}
-        <div ref={bottomRef} />
-      </div>
-
-      {messagesError && <div className="px-4"><ErrorBox text={messagesError} /></div>}
-      {error && <div className="px-4"><ErrorBox text={error} /></div>}
-
-      <div className="flex items-center gap-2 p-3 border-t border-line">
-        <label className="shrink-0 h-10 w-10 rounded-row border border-line-strong flex items-center justify-center text-ink-3 hover:text-ink hover:bg-surface-3 transition-colors cursor-pointer">
-          📎
-          <input
-            type="file"
-            disabled={sending}
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) sendFile(file);
-            }}
-          />
-        </label>
-        <input
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") send();
-          }}
-          placeholder="Type a message…"
-          className="flex-1 rounded-row border border-line-strong px-3 py-2 text-sm outline-none focus:border-ink"
-        />
-        <button
-          type="button"
-          disabled={sending || !body.trim()}
-          onClick={send}
-          className="h-10 px-4 rounded-row bg-ink text-surface font-medium text-sm disabled:opacity-40 hover:bg-ink-2 transition-colors"
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function MessageBubble({ message: m, ticketId, token }: { message: Row; ticketId: string; token: string }) {
-  const senderType = String(m.sender_type ?? "");
-  const isSystem = senderType === "SYSTEM";
-  const isMine = senderType === "CUSTOMER";
-  const attachments = Array.isArray(m.attachments) ? (m.attachments as Row[]) : [];
-
-  if (isSystem) {
-    return <p className="text-xs text-ink-4 text-center my-1">{String(m.body)}</p>;
-  }
-
-  return (
-    <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[80%] rounded-row px-3 py-2 text-sm ${
-          isMine ? "bg-ink text-surface" : "bg-surface-2 text-ink"
-        }`}
-      >
-        {!isMine && <p className="text-[10px] uppercase tracking-wide opacity-60 mb-0.5">{senderType}</p>}
-        {String(m.body)}
-        {attachments.map((a) => (
-          <AttachmentLink key={String(a.id)} attachment={a} ticketId={ticketId} token={token} isMine={isMine} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AttachmentLink({ attachment: a, ticketId, token, isMine }: { attachment: Row; ticketId: string; token: string; isMine: boolean }) {
-  const [busy, setBusy] = useState(false);
-
-  async function open() {
-    setBusy(true);
-    try {
-      const { downloadUrl } = await portalFetch<{ downloadUrl: string }>(
-        "user",
-        `/tickets/${ticketId}/attachments/${a.id}/download`,
-        { token },
-      );
-      window.open(downloadUrl, "_blank", "noopener");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={open}
-      disabled={busy}
-      className={`mt-1 flex items-center gap-1.5 text-xs underline underline-offset-2 ${isMine ? "text-surface" : "text-ink"} opacity-90 hover:opacity-100 disabled:opacity-40`}
-    >
-      📎 {String(a.file_name ?? "Attachment")}
-    </button>
-  );
-}
-
-export function CustomerSupport() {
-  return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      <SupportBody />
+      {session ? <ProfileBody token={session.accessToken} onSignOut={() => setTokens(null)} /> : <main className="flex-1" />}
       <Footer />
     </div>
   );

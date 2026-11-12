@@ -56,7 +56,7 @@ and never taxed.
 
 Built and callable today: phone-OTP auth (no passwords), availability-aware search grouped by
 scooter model, rider management, driving-licence verification via Cashfree Secure ID and DigiLocker,
-booking holds (10 minutes), Cashfree payments, pickup video upload, support tickets, shop-level
+booking holds (15 minutes), Cashfree payments, pickup video upload, support tickets, shop-level
 reviews.
 
 Hard constraints:
@@ -110,7 +110,7 @@ no published terms behind it.
 2. **State the price completely and state who holds the money.** The deposit is the most-disputed number in the category; it is disclosed with its amount, its holder, and its return condition together.
 3. **Licensing is a gate, not a label.** A scooter that cannot lawfully be rented does not appear.
 4. **Verification is an asset, not a toll booth.** A rider verifies once and is verified thereafter.
-5. **Never manufacture urgency.** The only countdown that exists is the real ten-minute hold.
+5. **Never manufacture urgency.** The only countdown that exists is the real fifteen-minute hold.
 
 ## Accessibility & Inclusion
 

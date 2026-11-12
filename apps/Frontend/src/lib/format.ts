@@ -9,6 +9,22 @@ export function rupees(paise: number): string {
   return inr.format(Math.round(paise / 100));
 }
 
+const istDayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
+
+/**
+ * The IST calendar date of an instant, as `YYYY-MM-DD` — the same thing the
+ * backend's `istDate()` produces, and directly comparable as a string to the
+ * `date` columns that arrive already in this shape (licence expiry, and so on).
+ *
+ * Every rule in this system is in IST calendar days, so anything comparing a
+ * date column against a moment has to come through here. Doing it with `Date`
+ * objects compares a local midnight against a real time of day and is wrong by
+ * up to a day.
+ */
+export function istDay(at: Date): string {
+  return istDayFormat.format(at);
+}
+
 export function km(value: number | null): string | null {
   if (value == null) return null;
   return value < 1 ? `${Math.round(value * 1000)} m` : `${value.toFixed(1)} km`;

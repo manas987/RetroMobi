@@ -48,6 +48,15 @@ export async function openTicket(
   try {
     await client.query("BEGIN");
 
+    if (input.openedByType === "CUSTOMER" && input.bookingId) {
+      const { rowCount } = await client.query(
+        `select 1 from bookings b join booking_groups g on g.id = b.group_id
+          where b.id = $1 and g.user_id = $2`,
+        [input.bookingId, input.openedById],
+      );
+      if (!rowCount) throw new TicketNotAboutBookingError("Choose one of your bookings.");
+    }
+
     const assignedTo = await pickAssignee(client);
 
     const { rows } = await client.query(
@@ -93,11 +102,7 @@ export async function openTicket(
       );
     }
 
-    // Every new ticket gets this triage question, regardless of who opened it
-    // or whether they also sent a first message. sender_id is NOT NULL with no
-    // FK (the column is polymorphic on sender_type), so SYSTEM uses this nil
-    // UUID sentinel rather than a real party id that doesn't exist.
-    await client.query(
+    if (!input.category) await client.query(
       `insert into ticket_messages (ticket_id, sender_type, sender_id, body)
        values ($1, 'SYSTEM', $2, $3)`,
       [
@@ -136,6 +141,38 @@ export async function listTickets(
       where p.party_type = $1 and p.party_id = $2
       order by t.created_at desc`,
     [participant.partyType, participant.partyId],
+  );
+  return rows;
+}
+
+export async function listCustomerConversations(pool: Pool, userId: string) {
+  const { rows } = await pool.query(
+    `select t.id, t.subject, t.status, t.category, t.created_at, t.resolution,
+            b.id as booking_id, b.scheduled_pickup_at as booking_pickup_at,
+            m.make as booking_make, m.model as booking_model, s.name as booking_shop,
+            first_message.body as first_message, latest.body as latest_message,
+            latest.sender_type as latest_sender_type, latest.sender_id = $1 as latest_is_mine,
+            latest.created_at as latest_message_at
+       from ticket_participants p
+       join tickets t on t.id = p.ticket_id
+       left join bookings b on b.id = t.booking_id
+         and exists (select 1 from booking_groups g where g.id = b.group_id and g.user_id = $1)
+       left join vehicles v on v.id = b.vehicle_id
+       left join vehicle_models m on m.id = v.model_id
+       left join shops s on s.id = v.shop_id
+       left join lateral (
+         select left(body, 240) as body from ticket_messages
+          where ticket_id = t.id and sender_type <> 'SYSTEM' and nullif(btrim(body), '') is not null
+          order by created_at, id limit 1
+       ) first_message on true
+       left join lateral (
+         select left(body, 240) as body, sender_type, sender_id, created_at from ticket_messages
+          where ticket_id = t.id and sender_type <> 'SYSTEM' and nullif(btrim(body), '') is not null
+          order by created_at desc, id desc limit 1
+       ) latest on true
+      where p.party_type = 'CUSTOMER' and p.party_id = $1
+      order by coalesce(latest.created_at, t.created_at) desc, t.id`,
+    [userId],
   );
   return rows;
 }

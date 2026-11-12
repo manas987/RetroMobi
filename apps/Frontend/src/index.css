@@ -35,8 +35,17 @@
 
   --font-sans: "Airbnb Cereal", "Anek Devanagari", ui-sans-serif, system-ui, sans-serif;
 
+  /* Merchant console. "In progress / on ride" needs a hue of its own so the
+     colour code stays one-meaning-per-colour: green done, amber needs you,
+     red late, blue under way, grey inactive. */
+  --color-info: #1f5fbf;
+  --color-info-soft: #e9f1fc;
+  --color-canvas: #f3f4ef;
+
   --radius-row: 10px;
   --radius-panel: 14px;
+  --radius-card: 20px;
+  --shadow-card: 0 1px 2px rgb(18 22 26 / 0.04), 0 4px 16px rgb(18 22 26 / 0.05);
 }
 
 @layer base {

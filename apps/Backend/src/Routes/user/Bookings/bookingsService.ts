@@ -2,13 +2,14 @@ import type { Pool, PoolClient } from "pg";
 import { composeTotal, priceRental, refundForCancellation } from "../../../lib/pricing.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import { notify } from "../../../lib/notify.ts";
-import { PUBLIC_LISTING_ELIGIBLE, VEHICLE_LICENCE_JOIN } from "../../../lib/vehicleBookingRules.ts";
+import { extensionWindowAvailable, notBlocked, PUBLIC_LISTING_ELIGIBLE, VEHICLE_LICENCE_JOIN } from "../../../lib/vehicleBookingRules.ts";
 import {
   evaluateRiderForVehicle,
   flagSessionForReview,
   istDate,
 } from "../../../lib/licenceGate.ts";
-import type { CashfreeClient } from "../../../providers/cashfree.ts";
+import { appBaseUrl, cashfreeMode, type CashfreeClient } from "../../../providers/cashfree.ts";
+import { handleExtensionPaymentSuccess } from "../Payments/paymentsService.ts";
 
 export class VehicleUnavailableError extends Error {}
 export class TooManyVehiclesError extends Error {}
@@ -24,11 +25,15 @@ export class LicenceReviewRequiredError extends Error {}
 export class CouponInvalidError extends Error {}
 export class BookingNotCancellableError extends Error {}
 export class ExtensionPendingError extends Error {}
+export class BookingNotExtendableError extends Error {}
 export class RiderUnavailableError extends Error {}
 export class DuplicateRiderError extends Error {}
 
 const EXCLUSION_VIOLATION = "23P01";
 const UNIQUE_VIOLATION = "23505";
+
+/** Device clocks drift. Two minutes absorbs that without admitting a real past window. */
+const PAST_PICKUP_GRACE_MS = 2 * 60 * 1000;
 
 function getMoneyConfig() {
   return {
@@ -108,6 +113,13 @@ export async function createHold(
 
   if (items.length > 5) throw new TooManyVehiclesError("at most 5 vehicles per checkout");
   if (returnAt.getTime() <= pickupAt.getTime()) throw new InvalidDurationError("return must be after pickup");
+  // A pickup that has already happened is not a rental anyone can collect. The
+  // realistic way to reach it is not abuse but delay: the customer picks today
+  // 2pm, verifies a rider's licence, and submits at 2:40. PAST_PICKUP_GRACE_MS
+  // is for device clock skew, nothing else.
+  if (pickupAt.getTime() < Date.now() - PAST_PICKUP_GRACE_MS) {
+    throw new InvalidDurationError("That pickup time has passed. Choose a later one.");
+  }
   // One rider can't ride two scooters in the same window -- the exclusion
   // constraint below also catches this, but failing fast here skips a wasted
   // round of pricing/insert work for the obviously-invalid case.
@@ -159,7 +171,7 @@ export async function createHold(
 
     const groupResult = await client.query(
       `insert into booking_groups (user_id, coupon_id, hold_expires_at)
-       values ($1, $2, now() + interval '10 minutes')
+       values ($1, $2, now() + interval '15 minutes')
        returning id, hold_expires_at`,
       [userId, coupon?.id ?? null],
     );
@@ -175,9 +187,16 @@ export async function createHold(
     let groupTotalAmount = 0;
 
     for (const item of items) {
+      // `notBlocked` is not decoration: the exclusion constraint below arbitrates
+      // booking-vs-booking only, so without it a shop could take a scooter off the
+      // road for servicing and still have it booked and paid for -- the customer
+      // finding out at the counter. Search has always filtered on it; this path
+      // never did, and a cart in localStorage is the ordinary way a stale
+      // vehicleId arrives here.
       const vehicleCheck = await client.query(
         `select v.id from vehicles v join shops s on s.id = v.shop_id
-          ${VEHICLE_LICENCE_JOIN} where v.id = $1 and ${PUBLIC_LISTING_ELIGIBLE}`,
+          ${VEHICLE_LICENCE_JOIN} where v.id = $1 and ${PUBLIC_LISTING_ELIGIBLE}
+          and ${notBlocked("v.id")}`,
         [item.vehicleId, pickupAt, returnAt],
       );
       if (vehicleCheck.rows.length === 0) {
@@ -440,7 +459,7 @@ export async function requestExtension(
   pool: Pool,
   input: { userId: string; bookingId: string; newReturnAt: Date },
   cashfree: CashfreeClient,
-): Promise<{ extensionId: string; orderId: string; paymentSessionId: string; additionalAmount: number }> {
+): Promise<{ extensionId: string; orderId: string; paymentSessionId: string; additionalAmount: number; mode: "sandbox" | "production" }> {
   const { platformFeePct, gstRate } = getMoneyConfig();
 
   const client = await pool.connect();
@@ -448,22 +467,25 @@ export async function requestExtension(
     await client.query("BEGIN");
 
     const { rows } = await client.query(
-      `select b.id, b.vehicle_id, b.group_id, b.scheduled_pickup_at, b.scheduled_return_at,
+      `select b.id, b.vehicle_id, b.group_id, b.scheduled_return_at,
               u.phone, u.name
          from bookings b
          join booking_groups g on g.id = b.group_id
          join users u on u.id = g.user_id
-        where b.id = $1 and g.user_id = $2 and b.status = 'CONFIRMED' and b.deleted_at is null`,
+        where b.id = $1 and g.user_id = $2 and b.status = 'CONFIRMED' and b.deleted_at is null
+          and b.actual_pickup_at is not null and b.actual_return_at is null`,
       [input.bookingId, input.userId],
     );
-    if (rows.length === 0) throw new Error("booking not found");
+    if (rows.length === 0) throw new BookingNotExtendableError("You can only extend a rental after pickup and before return.");
     const booking = rows[0];
 
     const oldReturnAt = new Date(booking.scheduled_return_at);
-    const pickupAt = new Date(booking.scheduled_pickup_at);
 
-    if (input.newReturnAt.getTime() <= oldReturnAt.getTime()) {
-      throw new InvalidDurationError("shortening is not an extension");
+    if (input.newReturnAt.getTime() <= Math.max(oldReturnAt.getTime(), Date.now())) {
+      throw new InvalidDurationError("Choose a future return time after your scheduled return.");
+    }
+    if (!(await extensionWindowAvailable(client, input.bookingId, oldReturnAt, input.newReturnAt))) {
+      throw new VehicleUnavailableError("This extension window is unavailable. Try an earlier return time.");
     }
 
     // Price only the extra days, at current rates. Zero deposit -- the
@@ -499,6 +521,7 @@ export async function requestExtension(
     }
 
     const orderId = `ext_${extensionId}`;
+    const appUrl = appBaseUrl();
     const order = await cashfree.createOrder({
       orderId,
       amount: extraTotals.totalAmount,
@@ -506,8 +529,7 @@ export async function requestExtension(
       customerId: `cust_${input.userId.replace(/-/g, "")}`,
       customerPhone: booking.phone,
       customerName: booking.name ?? undefined,
-      // No return_url: an extension is paid from inside the app's own booking
-      // page, not from a fresh checkout, so there is nothing to come back to.
+      returnUrl: appUrl ? `${appUrl}/account/bookings` : undefined,
     });
 
     const { rows: paymentRows } = await client.query(
@@ -535,6 +557,7 @@ export async function requestExtension(
       orderId: order.orderId,
       paymentSessionId: order.paymentSessionId,
       additionalAmount: extraTotals.totalAmount,
+      mode: cashfreeMode(),
     };
   } catch (err) {
     await client.query("ROLLBACK");
@@ -560,6 +583,13 @@ export async function listMyBookings(pool: Pool, userId: string) {
               order by p.created_at desc limit 1) as payment_status,
             sd.status as deposit_status, sd.deducted_amount as deposit_deducted_amount,
             sd.deduction_reason as deposit_deduction_reason, sd.refund_amount as deposit_refund_amount,
+            -- Real state, not a guess: the row is written PENDING and flips to
+            -- SUCCEEDED on Cashfree's REFUND_SUCCESS webhook. It is the only honest
+            -- answer to "where is my deposit", which is asked at the shop counter
+            -- with the customer's phone already out.
+            (select r.status from refunds r
+              where r.booking_id = b.id and r.reason in ('DEPOSIT_RELEASE', 'DEPOSIT_SETTLEMENT')
+              order by r.created_at desc limit 1) as deposit_refund_status,
             c.refund_amount as cancellation_refund_amount, c.penalty_amount as cancellation_penalty_amount,
             c.cancelled_by, c.reason as cancellation_reason
        from bookings b
@@ -579,12 +609,50 @@ export async function listMyBookings(pool: Pool, userId: string) {
 
 export async function getExtension(pool: Pool, userId: string, bookingId: string) {
   const { rows } = await pool.query(
-    `select e.* from booking_extensions e
+    `select e.*, coalesce(p.amount, e.additional_amount) as payable_amount
+       from booking_extensions e
        join bookings b on b.id = e.booking_id
        join booking_groups g on g.id = b.group_id
+       left join payments p on p.id = e.payment_id
       where e.booking_id = $1 and g.user_id = $2
       order by e.requested_at desc limit 1`,
     [bookingId, userId],
   );
   return rows[0] ?? null;
+}
+
+export async function getExtensionPayment(pool: Pool, userId: string, bookingId: string, extensionId: string, cashfree: CashfreeClient) {
+  const { rows: [payment] } = await pool.query(
+    `select p.id, p.booking_group_id, p.amount, p.provider_order_id, e.id as extension_id,
+            e.old_return_at, e.new_return_at
+       from booking_extensions e
+       join bookings b on b.id = e.booking_id
+       join booking_groups g on g.id = b.group_id
+       join payments p on p.id = e.payment_id
+      where e.booking_id = $1 and g.user_id = $2 and e.id::text = $3 and e.status = 'PENDING'`,
+    [bookingId, userId, extensionId],
+  );
+  if (!payment) return { state: "settled" } as const;
+  const order = await cashfree.getOrder(payment.provider_order_id);
+  if (order?.orderStatus === "PAID") {
+    await handleExtensionPaymentSuccess(pool, payment, null, cashfree);
+    return { state: "settled" } as const;
+  }
+  if (order?.orderStatus === "ACTIVE" && order.paymentSessionId) {
+    if (!(await extensionWindowAvailable(pool, bookingId, payment.old_return_at, payment.new_return_at))) {
+      throw new VehicleUnavailableError("This extension window is no longer available. Keep your scheduled return time.");
+    }
+    return { state: "pay", paymentSessionId: order.paymentSessionId, mode: cashfreeMode() } as const;
+  }
+  if (order?.orderStatus === "EXPIRED" || order?.orderStatus === "TERMINATED") {
+    await pool.query(
+      `with expired as (
+         update booking_extensions set status = 'REJECTED' where id = $1 and status = 'PENDING' returning payment_id
+       )
+       update payments set status = 'CANCELLED', updated_at = now() where id in (select payment_id from expired)`,
+      [payment.extension_id],
+    );
+    return { state: "settled" } as const;
+  }
+  throw new BookingNotExtendableError("This extension payment isn’t available right now. Keep your scheduled return time.");
 }

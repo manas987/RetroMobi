@@ -39,6 +39,7 @@ router.patch(
   controller.update,
 );
 router.delete("/vehicles/:vehicleId", requirePermission("fleet:write"), controller.remove);
+router.post("/vehicles/:vehicleId/verification", requirePermission("fleet:write"), controller.submitVerification);
 router.get("/vehicles/:vehicleId/registration", requirePermission("fleet:read"), controller.getRegistration);
 router.put(
   "/vehicles/:vehicleId/registration",

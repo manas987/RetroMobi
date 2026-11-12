@@ -1,0 +1,18 @@
+export default {
+  groupToday: "Today",
+  groupWork: "Daily work",
+  groupMoney: "Money",
+  groupShop: "Your shop",
+  overview: "Home",
+  bookings: "Bookings",
+  fleet: "Vehicles",
+  support: "Help & chats",
+  earnings: "Earnings",
+  reports: "Reports",
+  branches: "Shop details",
+  documents: "Licence & papers",
+  staff: "Staff",
+  activity: "Activity log",
+  collapse: "Make menu smaller",
+  expand: "Make menu bigger",
+};

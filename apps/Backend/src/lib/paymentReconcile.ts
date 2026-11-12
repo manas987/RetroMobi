@@ -5,7 +5,7 @@ import { confirmPaidOrder } from "../Routes/user/Payments/paymentsService.ts";
 /**
  * The webhook is the fast path, not the only one. A dropped delivery used to
  * mean: payment SUCCEEDED at Cashfree, `payments` row stuck PENDING,
- * `sweepExpiredHolds` deletes the HOLD bookings ten minutes later, and the
+ * `sweepExpiredHolds` deletes the HOLD bookings fifteen minutes later, and the
  * customer has paid for nothing until a human notices.
  *
  * So every tick, ask Cashfree about the payments we have not resolved. Same

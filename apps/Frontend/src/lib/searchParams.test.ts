@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { activeFilters, bodyTypeLabel, CLEAR_SEARCH_FILTERS, parseSearchParams, toSearchParams } from "./searchParams";
+import { activeFilters, bodyTypeLabel, CLEAR_SEARCH_FILTERS, defaultWindow, parseSearchParams, toSearchParams } from "./searchParams";
 
 test("bodyType survives a URL round trip", () => {
   const criteria = parseSearchParams("?city=Dehradun&bodyType=SCOOTER,MOTORCYCLE");
@@ -37,4 +37,13 @@ test("bodyTypeLabel formats values it was never told about", () => {
   expect(bodyTypeLabel("MOTORCYCLE")).toBe("Motorcycle");
   expect(bodyTypeLabel("QUADRICYCLE")).toBe("Quadricycle");
   expect(bodyTypeLabel("E_RICKSHAW")).toBe("E rickshaw");
+});
+
+// The server refuses a hold whose pickup has already passed, and the cart stores
+// whatever window it was built with -- so a default of "today 10am" meant every
+// cart assembled after 10am carried a dead window to checkout.
+test("the default window is never in the past", () => {
+  const { pickupAt, returnAt } = defaultWindow();
+  expect(Date.parse(pickupAt)).toBeGreaterThan(Date.now());
+  expect(Date.parse(returnAt)).toBeGreaterThan(Date.parse(pickupAt));
 });

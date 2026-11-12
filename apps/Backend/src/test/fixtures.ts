@@ -150,6 +150,12 @@ export async function createShop(
       gstin,
     ],
   );
+  // The real createShop always makes its creator an OWNER member; services
+  // authorise on that membership, so a fixture shop without it isn't real.
+  await pool.query(
+    `insert into shop_members (shop_id, merchant_user_id, role, status) values ($1, $2, 'OWNER', 'ACTIVE')`,
+    [rows[0].id, merchantUserId],
+  );
   return rows[0];
 }
 

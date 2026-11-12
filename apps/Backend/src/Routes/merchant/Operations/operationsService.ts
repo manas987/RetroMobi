@@ -28,33 +28,49 @@ const BOOKING_SELECT = `
   select b.*,
          v.registration_number, m.make, m.model,
          r.name as rider_name,
-         u.name as customer_name, u.phone as customer_phone
+         u.name as customer_name, u.phone as customer_phone,
+         sd.status as deposit_status, sd.amount as deposit_amount
     from bookings b
     join vehicles v on v.id = b.vehicle_id
     join vehicle_models m on m.id = v.model_id
     left join riders r on r.id = b.rider_id
     left join booking_groups g on g.id = b.group_id
-    left join users u on u.id = g.user_id`;
+    left join users u on u.id = g.user_id
+    left join security_deposits sd on sd.booking_id = b.id`;
 
-export async function listBookings(
-  pool: Pool,
-  shopId: string,
-  filters: { status?: string; from?: Date; to?: Date },
-) {
+export interface ListBookingsFilters {
+  status?: string;
+  from?: Date;
+  to?: Date;
+  source?: "ONLINE" | "OFFLINE";
+  vehicleId?: string;
+  /** Name, phone, plate, or the start of a booking id. */
+  q?: string;
+}
+
+export async function listBookings(pool: Pool, shopId: string, filters: ListBookingsFilters) {
   const conditions = ["v.shop_id = $1", "b.deleted_at is null"];
   const values: unknown[] = [shopId];
+  const add = (sql: (n: string) => string, value: unknown) => {
+    values.push(value);
+    conditions.push(sql(`$${values.length}`));
+  };
 
-  if (filters.status) {
-    values.push(filters.status);
-    conditions.push(`b.status = $${values.length}`);
-  }
-  if (filters.from) {
-    values.push(filters.from);
-    conditions.push(`b.scheduled_pickup_at >= $${values.length}`);
-  }
-  if (filters.to) {
-    values.push(filters.to);
-    conditions.push(`b.scheduled_pickup_at <= $${values.length}`);
+  if (filters.status) add((n) => `b.status = ${n}`, filters.status);
+  // A range returns every booking that OVERLAPS it, not only those starting in
+  // it -- a calendar month must show the ride that began on the 28th.
+  if (filters.from) add((n) => `coalesce(b.actual_return_at, b.scheduled_return_at) >= ${n}`, filters.from);
+  if (filters.to) add((n) => `b.scheduled_pickup_at <= ${n}`, filters.to);
+  if (filters.source) add((n) => `b.source = ${n}`, filters.source);
+  if (filters.vehicleId) add((n) => `b.vehicle_id = ${n}`, filters.vehicleId);
+  if (filters.q) {
+    add(
+      (n) => `(b.walkin_name ilike ${n} or b.walkin_phone ilike ${n} or r.name ilike ${n}
+               or u.name ilike ${n} or u.phone ilike ${n}
+               or replace(v.registration_number, ' ', '') ilike replace(${n}, ' ', '')
+               or b.id::text ilike ${n}::text || '%')`,
+      `%${filters.q.replace(/[\\%_]/g, "\\$&")}%`,
+    );
   }
 
   const { rows } = await pool.query(
@@ -128,8 +144,11 @@ export async function createWalkinRental(
   try {
     await client.query("BEGIN");
 
+    // Not `status = 'ACTIVE'`: that column is the marketplace listing switch.
+    // A shop rents its unlisted vehicles at the counter too -- the fleet is
+    // useful whether or not it's on RetroMobi.
     const vehicleCheck = await client.query(
-      `select id from vehicles where id = $1 and status = 'ACTIVE' and deleted_at is null`,
+      `select id from vehicles where id = $1 and deleted_at is null`,
       [input.vehicleId],
     );
     if (vehicleCheck.rows.length === 0) {

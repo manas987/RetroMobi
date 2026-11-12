@@ -23,14 +23,14 @@ export type Permission =
   | "shop:write"
   | "shop:delete";
 
-const STAFF: readonly Permission[] = ["fleet:read", "bookings:read", "bookings:return", "tracking:read"];
+// bookings:write: the counter runs the identity check, hands over and records walk-ins.
+const STAFF: readonly Permission[] = ["fleet:read", "bookings:read", "bookings:write", "bookings:return", "tracking:read"];
 
 const MANAGER: readonly Permission[] = [
   ...STAFF,
   "fleet:write",
   "pricing:read",
   "pricing:write",
-  "bookings:write",
   "members:read",
   "shop:write",
 ];

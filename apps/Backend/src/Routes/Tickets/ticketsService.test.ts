@@ -5,8 +5,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pg from "pg";
 import { applyMigrations } from "../../DB/migrate.ts";
-import { createUser } from "../../test/fixtures.ts";
-import { getMessages, openTicket, postMessage } from "./ticketsService.ts";
+import { createBookableVehicle, createRider, createUser, futureWindow, insertBooking } from "../../test/fixtures.ts";
+import { getMessages, listCustomerConversations, openTicket, postMessage, TicketNotAboutBookingError } from "./ticketsService.ts";
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -61,4 +61,34 @@ describe("message cursor", () => {
     expect(after).toHaveLength(1);
     expect(after[0]!.body).toBe("second");
   });
+});
+
+test("the customer inbox includes owned booking context and human message previews", async () => {
+  const user = await createUser(pool);
+  const other = await createUser(pool);
+  const rider = await createRider(pool, user.id);
+  const vehicle = await createBookableVehicle(pool);
+  const group = await pool.query("insert into booking_groups (user_id) values ($1) returning id", [user.id]);
+  const window = futureWindow();
+  const booking = await insertBooking(pool, {
+    vehicleId: vehicle.id, groupId: group.rows[0].id, riderId: rider.id,
+    pickupAt: window.pickupAt.toISOString(), returnAt: window.returnAt.toISOString(),
+  });
+
+  await expect(openTicket(pool, { openedByType: "CUSTOMER", openedById: other.id, bookingId: booking.id }))
+    .rejects.toBeInstanceOf(TicketNotAboutBookingError);
+  const linked = await openTicket(pool, {
+    openedByType: "CUSTOMER", openedById: user.id, bookingId: booking.id, category: "BOOKING", firstMessage: "Pickup question",
+  });
+  const general = await openTicket(pool, {
+    openedByType: "CUSTOMER", openedById: user.id, firstMessage: "The app keeps closing",
+  });
+  const inbox = await listCustomerConversations(pool, user.id);
+  expect(inbox.find((ticket) => ticket.id === linked.id)).toMatchObject({
+    booking_id: booking.id, booking_make: "Honda", first_message: "Pickup question", latest_message: "Pickup question",
+  });
+  expect(inbox.find((ticket) => ticket.id === general.id)).toMatchObject({
+    booking_id: null, first_message: "The app keeps closing", latest_message: "The app keeps closing", latest_is_mine: true,
+  });
+  expect(await listCustomerConversations(pool, other.id)).toEqual([]);
 });

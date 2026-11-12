@@ -13,6 +13,7 @@ import { PaymentsUnavailableError } from "../providers/cashfree.ts";
 import { PaymentGroupNotFoundError } from "../Routes/user/Payments/paymentsService.ts";
 import {
   BookingNotCancellableError,
+  BookingNotExtendableError,
   CouponInvalidError,
   DuplicateRiderError,
   ExtensionPendingError,
@@ -41,6 +42,7 @@ import { IllegalTransitionError } from "../lib/verificationStateMachine.ts";
 import { NotReviewableError } from "../Routes/admin/Verification/verificationService.ts";
 import {
   AlreadyCheckedError,
+  BookingNotFoundError as IdentityBookingNotFoundError,
   IdentityCheckFailedError,
   IdentityCheckMissingError,
   VerificationRequiredError,
@@ -48,6 +50,9 @@ import {
 import {
   AlreadyInspectedError,
   BookingNotFoundError,
+  BookingNotReturnableError,
+  ClaimExceedsDepositError,
+  WalkinClaimError,
 } from "../Routes/user/Pickup/pickupService.ts";
 import {
   TicketCategoryAlreadySetError,
@@ -287,12 +292,24 @@ export function errorHandler(
     res.status(503).json({ error: "payments_unavailable", message: err.message });
     return;
   }
-  if (err instanceof BookingNotFoundError || err instanceof TicketNotFoundError) {
+  if (err instanceof BookingNotFoundError || err instanceof IdentityBookingNotFoundError || err instanceof TicketNotFoundError) {
     res.status(404).json({ error: "not_found", message: err.message });
     return;
   }
   if (err instanceof AlreadyInspectedError) {
     res.status(409).json({ error: "already_inspected", message: err.message });
+    return;
+  }
+  if (err instanceof WalkinClaimError) {
+    res.status(400).json({ error: "walkin_no_claim", message: err.message });
+    return;
+  }
+  if (err instanceof ClaimExceedsDepositError) {
+    res.status(400).json({ error: "claim_exceeds_deposit", message: err.message });
+    return;
+  }
+  if (err instanceof BookingNotReturnableError) {
+    res.status(409).json({ error: "booking_not_returnable", message: err.message });
     return;
   }
   if (err instanceof BookingNotCancellableError) {
@@ -301,6 +318,10 @@ export function errorHandler(
   }
   if (err instanceof ExtensionPendingError) {
     res.status(409).json({ error: "extension_pending", message: err.message });
+    return;
+  }
+  if (err instanceof BookingNotExtendableError) {
+    res.status(409).json({ error: "booking_not_extendable", message: err.message });
     return;
   }
   if (err instanceof TicketCategoryAlreadySetError) {

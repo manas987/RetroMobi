@@ -9,7 +9,7 @@ import * as operationsService from "./operationsService.ts";
 import * as identityService from "./identityService.ts";
 
 export async function list(req: Request, res: Response) {
-  const query = req.validatedQuery as { status?: string; from?: Date; to?: Date };
+  const query = req.validatedQuery as operationsService.ListBookingsFilters;
   const bookings = await operationsService.listBookings(pool, pathParam(req, "shopId"), query);
   res.status(200).json({ bookings });
 }

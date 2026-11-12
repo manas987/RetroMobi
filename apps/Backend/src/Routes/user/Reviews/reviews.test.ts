@@ -41,12 +41,12 @@ async function pickedUpBooking(vehicleId: string) {
     riderId: rider.id,
     groupId: rows[0].id,
   });
-  await pool.query(`update bookings set actual_pickup_at = now() where id = $1`, [booking.id]);
+  await pool.query(`update bookings set status = 'COMPLETED', actual_pickup_at = now(), actual_return_at = now() where id = $1`, [booking.id]);
   return { userId: user.id, bookingId: booking.id };
 }
 
 describe("reviews and shop rating", () => {
-  test("reviewing without a pickup is refused", async () => {
+  test("reviewing before the rental is completed is refused", async () => {
     const vehicle = await createBookableVehicle(pool);
     const user = await createUser(pool);
     const rider = await createRider(pool, user.id);
@@ -60,6 +60,9 @@ describe("reviews and shop rating", () => {
     await expect(
       createReview(pool, user.id, { bookingId: booking.id, rating: 5 }),
     ).rejects.toBeInstanceOf(ReviewNotAllowedError);
+    await pool.query("update bookings set actual_pickup_at = now() where id = $1", [booking.id]);
+    await expect(createReview(pool, user.id, { bookingId: booking.id, rating: 5 }))
+      .rejects.toBeInstanceOf(ReviewNotAllowedError);
   });
 
   test("a review recomputes shops.rating, a second review on the same booking is rejected, and deleting the only review resets it to null", async () => {

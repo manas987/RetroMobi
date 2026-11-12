@@ -87,6 +87,18 @@ export async function createVehicle(
   }
 }
 
+/** UNVERIFIED/REJECTED -> PENDING, mirroring the shop's own submit. */
+export async function submitVehicleForVerification(pool: Pool, vehicleId: string) {
+  const { rows } = await pool.query(
+    `update vehicles set verification_status = 'PENDING', updated_at = now()
+      where id = $1 and deleted_at is null and verification_status in ('UNVERIFIED', 'REJECTED')
+      returning id, verification_status`,
+    [vehicleId],
+  );
+  if (rows.length === 0) throw new VehicleNotFoundError(`vehicle ${vehicleId} not found or not eligible`);
+  return rows[0];
+}
+
 export async function updateVehicle(
   pool: Pool,
   merchantUserId: string,

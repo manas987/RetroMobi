@@ -42,3 +42,8 @@ export async function logout(req: Request, res: Response) {
   await merchantAuthService.merchantLogout(pool, { merchantUserId: req.merchantUserId!, refreshToken });
   res.status(204).send();
 }
+
+export async function me(req: Request, res: Response) {
+  const profile = await merchantAuthService.getMerchantProfile(pool, req.merchantUserId!);
+  res.status(200).json(profile);
+}

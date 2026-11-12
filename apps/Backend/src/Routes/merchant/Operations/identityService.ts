@@ -53,7 +53,7 @@ export async function getIdentityForPickup(
        left join verification_photos p
               on p.rider_id = r.id and p.deleted_at is null
        left join pickup_identity_checks c on c.booking_id = b.id
-      where b.id = $1 and sh.merchant_user_id = $2 and b.deleted_at is null
+      where b.id = $1 and exists (select 1 from shop_members sm where sm.shop_id = sh.id and sm.merchant_user_id = $2 and sm.status = 'ACTIVE' and sm.deleted_at is null) and b.deleted_at is null
       order by dlv.verified_at desc nulls last, p.created_at desc
       limit 1`,
     [bookingId, merchantUserId],
@@ -99,7 +99,8 @@ async function assertHandoverAllowed(
             s.state as verification_state,
             (select 1 from pickup_identity_checks c where c.booking_id = b.id) as checked
        from bookings b
-       join booking_groups g on g.id = b.group_id
+       -- left: a walk-in has no group, and must reach the exemption below
+       left join booking_groups g on g.id = b.group_id
        left join driving_licence_verifications dlv
               on dlv.rider_id = b.rider_id and dlv.status = 'VERIFIED'
        left join rider_verification_sessions s on s.id = dlv.session_id
@@ -169,7 +170,7 @@ export async function recordIdentityCheck(
        join shops sh on sh.id = v.shop_id
        left join driving_licence_verifications dlv
               on dlv.rider_id = b.rider_id and dlv.status = 'VERIFIED'
-      where b.id = $1 and sh.merchant_user_id = $2 and b.deleted_at is null
+      where b.id = $1 and exists (select 1 from shop_members sm where sm.shop_id = sh.id and sm.merchant_user_id = $2 and sm.status = 'ACTIVE' and sm.deleted_at is null) and b.deleted_at is null
       order by dlv.verified_at desc nulls last
       limit 1`,
     [bookingId, merchantUserId],

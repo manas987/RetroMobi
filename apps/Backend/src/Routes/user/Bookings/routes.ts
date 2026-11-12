@@ -12,5 +12,6 @@ router.get("/", controller.list);
 router.post("/:id/cancel", controller.cancelBooking);
 router.post("/:id/extension", validate(RequestExtensionSchema), controller.requestExtension);
 router.get("/:id/extension", controller.getExtension);
+router.post("/:id/extension/:extensionId/payment", controller.getExtensionPayment);
 
 export default router;

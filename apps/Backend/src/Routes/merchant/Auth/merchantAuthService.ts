@@ -311,3 +311,11 @@ export async function merchantLogout(
     entityId: null,
   });
 }
+
+export async function getMerchantProfile(pool: Pool, merchantUserId: string) {
+  const { rows } = await pool.query(
+    `select id, name, phone, email from merchant_users where id = $1`,
+    [merchantUserId],
+  );
+  return rows[0] ?? null;
+}

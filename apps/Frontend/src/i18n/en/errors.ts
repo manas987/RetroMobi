@@ -1,0 +1,15 @@
+export default {
+  generic: "Something went wrong. Try again.",
+  forbidden: "Your role can't do this. Ask the shop owner.",
+  invalid_request: "Some details are missing or wrong. Check and try again.",
+  vehicle_unavailable: "This vehicle can't be booked for that time. It may already be booked, or it has no daily price yet.",
+  invalid_duration: "Check the pickup and return times.",
+  booking_not_returnable: "This booking can't be marked returned right now. Refresh and check.",
+  identity_already_checked: "ID has already been checked for this booking.",
+  identity_check_missing: "Check the customer's ID first.",
+  verification_required: "This customer's driving licence isn't verified yet. Don't hand over the vehicle.",
+  walkin_no_claim: "A walk-in's deposit is cash you hold yourself, so it can't be claimed through RetroMobi.",
+  claim_exceeds_deposit: "That's more than the deposit held on this booking.",
+  identity_check_failed: "The ID didn't match. Don't hand over the vehicle.",
+  rate_limited: "Too many tries. Wait a minute and try again.",
+};

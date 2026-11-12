@@ -8,6 +8,7 @@ import {
 import { writeAudit } from "../../../lib/audit.ts";
 import { notify } from "../../../lib/notify.ts";
 import { composeTotal, extractTax } from "../../../lib/pricing.ts";
+import { extensionWindowAvailable } from "../../../lib/vehicleBookingRules.ts";
 
 /** A group that is not this user's, or does not exist. 404, not 403. */
 export class PaymentGroupNotFoundError extends Error {}
@@ -176,34 +177,37 @@ const EXCLUSION_VIOLATION = "23P01";
 // someone else took while the customer was paying -- and it can only arbitrate
 // at the moment of the write, which is now AFTER the money has moved. Losing
 // that race means a refund, not a failed request.
-async function handleExtensionPaymentSuccess(
+export async function handleExtensionPaymentSuccess(
   pool: Pool,
   payment: { id: string; booking_group_id: string; amount: number },
-  webhookEventId: string,
+  webhookEventId: string | null,
   cashfree: CashfreeClient,
 ): Promise<void> {
-  const { rows: extRows } = await pool.query(
-    `select e.id, e.booking_id, e.old_return_at, e.new_return_at, e.additional_amount, b.vehicle_id
-       from booking_extensions e
-       join bookings b on b.id = e.booking_id
-      where e.payment_id = $1 and e.status = 'PENDING'`,
-    [payment.id],
-  );
-  if (extRows.length === 0) throw new Error(`no pending extension found for payment ${payment.id}`);
-  const ext = extRows[0];
-
-  const { platformFeePct, gstRate } = getMoneyConfigForExtension();
-  const totals = composeTotal({
-    rentalAmount: Number(ext.additional_amount),
-    securityDepositAmount: 0,
-    platformFeePct,
-    gstRate,
-    discountAmount: 0,
-  });
-
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const { rows: extRows } = await client.query(
+      `select id, booking_id, old_return_at, new_return_at, additional_amount
+         from booking_extensions where payment_id = $1 and status = 'PENDING'
+         for update`,
+      [payment.id],
+    );
+    const ext = extRows[0];
+    if (!ext) {
+      if (webhookEventId) await client.query("update webhook_events set processed_at = now() where id = $1", [webhookEventId]);
+      await client.query("COMMIT");
+      return;
+    }
+
+    const { platformFeePct, gstRate } = getMoneyConfigForExtension();
+    const totals = composeTotal({
+      rentalAmount: Number(ext.additional_amount),
+      securityDepositAmount: 0,
+      platformFeePct,
+      gstRate,
+      discountAmount: 0,
+    });
+
     await client.query(`update payments set status = 'SUCCEEDED', updated_at = now() where id = $1`, [payment.id]);
 
     // A SAVEPOINT, not a bare try/catch: Postgres aborts the whole transaction
@@ -211,7 +215,11 @@ async function handleExtensionPaymentSuccess(
     // (still inside the same outer transaction) needs an explicit rollback
     // point rather than just catching the exception in JS.
     await client.query("SAVEPOINT extend_attempt");
+    const unavailable = new Error("Booking is no longer eligible for this extension");
     try {
+      if (!(await extensionWindowAvailable(client, ext.booking_id, ext.old_return_at, ext.new_return_at))) {
+        throw unavailable;
+      }
       const { rowCount } = await client.query(
         `update bookings
             set scheduled_return_at = $1,
@@ -220,10 +228,11 @@ async function handleExtensionPaymentSuccess(
                 tax_amount = tax_amount + $4,
                 total_amount = total_amount + $5,
                 updated_at = now()
-          where id = $6`,
-        [ext.new_return_at, totals.rentalAmount, totals.platformFee, totals.taxAmount, totals.totalAmount, ext.booking_id],
+          where id = $6 and status = 'CONFIRMED' and deleted_at is null
+            and actual_pickup_at is not null and actual_return_at is null and scheduled_return_at = $7`,
+        [ext.new_return_at, totals.rentalAmount, totals.platformFee, totals.taxAmount, totals.totalAmount, ext.booking_id, ext.old_return_at],
       );
-      if (rowCount === 0) throw new Error(`booking ${ext.booking_id} not found`);
+      if (rowCount === 0) throw unavailable;
 
       await client.query(
         `update booking_extensions set status = 'APPROVED', approved_at = now() where id = $1`,
@@ -240,7 +249,7 @@ async function handleExtensionPaymentSuccess(
         after: { scheduledReturnAt: ext.new_return_at, additionalAmount: totals.totalAmount },
       });
     } catch (err: any) {
-      if (err.code !== EXCLUSION_VIOLATION) throw err;
+      if (err !== unavailable && err.code !== EXCLUSION_VIOLATION) throw err;
       await client.query("ROLLBACK TO SAVEPOINT extend_attempt");
 
       // Someone else took the window while the customer was paying. The booking
@@ -273,7 +282,7 @@ async function handleExtensionPaymentSuccess(
       });
     }
 
-    await client.query(`update webhook_events set processed_at = now() where id = $1`, [webhookEventId]);
+    if (webhookEventId) await client.query("update webhook_events set processed_at = now() where id = $1", [webhookEventId]);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");

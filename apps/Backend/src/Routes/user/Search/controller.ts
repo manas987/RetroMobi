@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { pool } from "../../../DB/client.ts";
 import { presignDownload } from "../../../lib/storage.ts";
 import { pathParam } from "../../../lib/pathParam.ts";
-import { getVehicleDetail, searchVehicles, VehicleNotFoundError } from "./searchService.ts";
+import { findUnavailableVehicles, getVehicleDetail, searchVehicles, VehicleNotFoundError } from "./searchService.ts";
 import { VehicleDetailParamsSchema, VehicleDetailWindowSchema, type SearchQuerySchema } from "./schema.ts";
 import type { z } from "zod";
 
@@ -24,6 +24,13 @@ export async function modelImage(req: Request, res: Response) {
   }
   const url = await presignDownload(imageKey, 3600);
   res.status(200).json({ url });
+}
+
+// Public, like search itself: a cart exists before anyone logs in, and this
+// reveals nothing a search of the same window would not.
+export async function cartAvailability(req: Request, res: Response) {
+  const unavailable = await findUnavailableVehicles(pool, req.body.lines);
+  res.status(200).json({ unavailable });
 }
 
 export async function detail(req: Request, res: Response) {

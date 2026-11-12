@@ -39,3 +39,9 @@ export async function getExtension(req: Request, res: Response) {
   const extension = await bookingsService.getExtension(pool, req.userId!, pathParam(req, "id"));
   res.status(200).json(extension);
 }
+
+export async function getExtensionPayment(req: Request, res: Response) {
+  res.status(200).json(await bookingsService.getExtensionPayment(
+    pool, req.userId!, pathParam(req, "id"), pathParam(req, "extensionId"), cashfreeClient,
+  ));
+}

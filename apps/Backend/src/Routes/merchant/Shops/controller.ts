@@ -51,3 +51,8 @@ export async function setHours(req: Request, res: Response) {
   );
   res.status(200).json(shop);
 }
+
+export async function reviews(req: Request, res: Response) {
+  const result = await shopsService.listShopReviews(pool, pathParam(req, "shopId"));
+  res.status(200).json(result);
+}
