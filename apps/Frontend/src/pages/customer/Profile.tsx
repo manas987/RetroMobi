@@ -52,7 +52,7 @@ function ProfileBody() {
   }
 
   return (
-    <div className="max-w-[760px] w-full mx-auto px-5 py-10 flex-1">
+    <div className="max-w-[760px] w-full mx-auto px-5 py-10 min-h-[calc(100dvh-4rem)]">
       <div className="flex items-start justify-between gap-3 mb-1">
         <h1 className="text-2xl font-semibold text-ink">Riders & profile</h1>
         {!adding && (
@@ -345,7 +345,7 @@ function SupportBody() {
   const [step, setStep] = useState<TriageStep>("closed");
 
   return (
-    <div className="max-w-[760px] w-full mx-auto px-5 py-10 flex-1">
+    <div className="max-w-[760px] w-full mx-auto px-5 py-10 min-h-[calc(100dvh-4rem)]">
       <h1 className="text-2xl font-semibold text-ink mb-1">Support</h1>
       <p className="text-sm text-ink-3 mb-6">Chat with us about a booking, or anything else.</p>
 

@@ -170,42 +170,37 @@ export function Home() {
             <p className="text-ink-3">Quick answers to what riders ask us most.</p>
           </div>
 
-          {/* items-start, so each card is only as tall as its own answer —
-              equal heights would read as a table rather than as notes on a
-              board. The tint lives on the inner div, not the li: below xl the
-              li has no box of its own so that div *is* the flat card, and at
-              xl the li becomes the white paper the note is pinned to. One DOM,
-              no branch. */}
           <div className="relative">
             <div
               aria-hidden="true"
-              className="hidden xl:flex absolute -inset-x-5 inset-y-0 flex-col justify-between pointer-events-none"
-            >
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <span key={i} className="border-t border-dashed border-line" />
-              ))}
-            </div>
+              className="hidden xl:block absolute -inset-x-4 -top-10 h-[54px] rounded-[50%] border-[3px] border-[#a78862] [clip-path:inset(50%_0_0)] pointer-events-none"
+            />
 
-            <ul className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 xl:flex xl:items-start xl:gap-0 xl:justify-center">
-              {FAQS.map((f, i) => {
-                const p = PINBOARD[i]!;
-                return (
-                  <li
-                    key={f.q}
-                    style={{ zIndex: i }}
-                    className={`relative rounded-panel xl:w-[22%] xl:shrink-0 xl:-ml-10 xl:first:ml-0 xl:bg-surface xl:rounded-[18px] xl:shadow-[0_14px_34px_-16px_rgba(18,22,26,0.3)] ${p.frame} ${p.tilt} ${i % 2 ? "xl:mt-14" : ""}`}
-                  >
-                    <Pin at={p.pin} color={p.color} />
-                    <div className={`h-full xl:h-auto rounded-panel p-5 ${f.tint}`}>
-                      <span className="tnum text-sm font-semibold text-[#8a5d00]">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <h3 className="font-medium text-ink mt-2 text-balance">{f.q}</h3>
-                      <p className="text-sm text-ink-2 leading-relaxed mt-2 text-pretty">{f.a}</p>
-                    </div>
-                  </li>
-                );
-              })}
+            <ul className="relative isolate grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 xl:flex xl:items-start xl:gap-0 xl:justify-center">
+              {FAQS.map((f, i) => (
+                <li
+                  key={f.q}
+                  tabIndex={0}
+                  className={`relative rounded-panel hover:z-10 focus-visible:z-20
+                    motion-safe:transition-[scale,rotate] motion-safe:duration-200 motion-safe:ease-out
+                    motion-safe:hover:scale-[1.04] motion-safe:focus-visible:scale-[1.04]
+                    xl:origin-[50%_-8px] xl:motion-safe:hover:rotate-0 xl:motion-safe:focus-visible:rotate-0
+                    xl:w-[22%] xl:shrink-0 xl:-ml-10 xl:first:ml-0 xl:bg-surface xl:p-3 xl:pb-6 xl:rounded-[18px] xl:shadow-[0_14px_34px_-16px_rgba(18,22,26,0.3)]
+                    ${HANGING_POSITIONS[i]}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="hidden xl:block absolute -top-4 left-1/2 h-6 w-3 -translate-x-1/2 rounded-[3px] border border-[#ac875d] bg-[#d5b48b] shadow-sm after:absolute after:inset-x-px after:top-2 after:border-t after:border-[#ac875d]"
+                  />
+                  <div className={`h-full xl:h-auto rounded-panel p-5 ${f.tint}`}>
+                    <span className="tnum text-sm font-semibold text-[#8a5d00]">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <h3 className="font-medium text-ink mt-2 text-balance">{f.q}</h3>
+                    <p className="text-sm text-ink-2 leading-relaxed mt-2 text-pretty">{f.a}</p>
+                  </div>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
@@ -243,33 +238,14 @@ const STEPS = [
   },
 ];
 
-// Hand-set, not computed: an even -2/+2/-2 alternation reads as a pattern,
-// which is the opposite of looking pinned up by a person. The uneven frame
-// padding is what makes the white border sit differently on each note. Tilts
-// stay at or under 2deg so the text underneath stays crisp.
-const PINBOARD = [
-  { tilt: "xl:-rotate-2", frame: "xl:p-3 xl:pb-7", pin: "xl:left-[27%]", color: "#e8a93a" },
-  { tilt: "xl:rotate-[1.4deg]", frame: "xl:p-3 xl:pt-8", pin: "xl:left-[18%]", color: "#5f9c76" },
-  { tilt: "xl:-rotate-1", frame: "xl:p-3 xl:pb-6", pin: "xl:left-[62%]", color: "#6f93c4" },
-  { tilt: "xl:rotate-2", frame: "xl:p-3 xl:pt-7", pin: "xl:left-[34%]", color: "#c98a94" },
-  { tilt: "xl:rotate-[-1.4deg]", frame: "xl:p-3 xl:pb-8", pin: "xl:left-[58%]", color: "#a8a096" },
+// Match each clip to the sag of the rope above it.
+const HANGING_POSITIONS = [
+  "xl:mt-3 xl:-rotate-2",
+  "xl:mt-5 xl:rotate-1",
+  "xl:mt-5.5 xl:-rotate-1",
+  "xl:mt-5 xl:rotate-2",
+  "xl:mt-3 xl:rotate-[-1.4deg]",
 ];
-
-function Pin({ at, color }: { at: string; color: string }) {
-  return (
-    <svg
-      width="20"
-      height="28"
-      viewBox="0 0 20 28"
-      aria-hidden="true"
-      className={`hidden xl:block absolute -top-3.5 ${at} drop-shadow-[0_3px_4px_rgba(18,22,26,0.22)]`}
-    >
-      <path d="M10 11.5v15" stroke="#9aa0a6" strokeWidth="1.4" strokeLinecap="round" />
-      <circle cx="10" cy="7" r="6.5" fill={color} />
-      <circle cx="7.6" cy="4.8" r="2" fill="#ffffff" opacity="0.45" />
-    </svg>
-  );
-}
 
 const FAQS = [
   {

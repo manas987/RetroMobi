@@ -30,7 +30,7 @@ function MyBookingsBody() {
   );
 
   return (
-    <div className="max-w-[760px] w-full mx-auto px-5 py-10 flex-1">
+    <div className="max-w-[760px] w-full mx-auto px-5 py-10 min-h-[calc(100dvh-4rem)]">
       <h1 className="text-2xl font-semibold text-ink mb-1">My bookings</h1>
       <p className="text-sm text-ink-3 mb-6">Every rental you've held, confirmed or completed.</p>
 

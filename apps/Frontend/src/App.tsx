@@ -1,4 +1,5 @@
-import { Route, Switch } from "wouter";
+import { useLayoutEffect, useRef } from "react";
+import { Route, Switch, useLocation } from "wouter";
 import { Home } from "./pages/Home";
 import { Browse } from "./pages/Browse";
 import { ShopPage } from "./pages/ShopPage";
@@ -37,6 +38,16 @@ import { AdminMerchants } from "./pages/admin/Merchants";
 import "./index.css";
 
 export function App() {
+  const [path] = useLocation();
+  const previousPath = useRef(path);
+
+  useLayoutEffect(() => {
+    if (previousPath.current === path) return;
+    previousPath.current = path;
+    // Let in-page links such as How it works scroll to their own target.
+    if (!window.location.hash) window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [path]);
+
   return (
     <Switch>
       <Route path="/" component={Home} />

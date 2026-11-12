@@ -5,6 +5,7 @@ import { CITIES } from "./SearchCapsule";
 import { DEFAULT_CITY, defaultWindow, toSearchParams } from "../lib/searchParams";
 
 const WINDOW = defaultWindow();
+const headingClass = "text-xs font-medium uppercase tracking-wide text-[#8a5d00]";
 
 function cityHref(city: string): string {
   return `/browse?${toSearchParams({ city, pickupAt: WINDOW.pickupAt, returnAt: WINDOW.returnAt, sort: "price", page: 1 })}`;
@@ -55,7 +56,7 @@ export function Footer({ onBrowse }: { onBrowse?: () => void }) {
 
         <nav className="flex-[2] min-w-[300px] grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-8 text-sm">
           <div className="flex flex-col gap-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-3">Marketplace</div>
+            <div className={headingClass}>Marketplace</div>
             <a href="#" onClick={goHowItWorks} className="text-ink-2 hover:text-ink transition-colors">
               How it works
             </a>
@@ -65,7 +66,7 @@ export function Footer({ onBrowse }: { onBrowse?: () => void }) {
           </div>
 
           <div className="flex flex-col gap-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-3">Cities</div>
+            <div className={headingClass}>Cities</div>
             {CITIES.map((city) => (
               <Link
                 key={city}
@@ -80,7 +81,7 @@ export function Footer({ onBrowse }: { onBrowse?: () => void }) {
           </div>
 
           <div className="flex flex-col gap-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-3">Support</div>
+            <div className={headingClass}>Support</div>
             {/* Name/designation/contact aren't filled in yet — India's
                 consumer-protection rules require a named grievance officer,
                 not just a link, so this stays a visible placeholder rather
@@ -93,7 +94,7 @@ export function Footer({ onBrowse }: { onBrowse?: () => void }) {
           </div>
 
           <div className="flex flex-col gap-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-3">Policies</div>
+            <div className={headingClass}>Policies</div>
             <span className="text-ink-2">Privacy notice</span>
             <span className="text-ink-2">User agreement</span>
             <span className="text-ink-2">Cancellation policy</span>
