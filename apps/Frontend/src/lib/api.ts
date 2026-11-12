@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toSearchParams } from "./searchParams";
 import type { SearchCriteria, SearchResult, ShopProfile, VehicleDetail } from "./types";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,

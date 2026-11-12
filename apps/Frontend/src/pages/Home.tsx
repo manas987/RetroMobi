@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
+import { RideFaqs } from "../components/RideFaqs";
 import { SearchCapsule, type SearchCapsuleValue, type SearchCapsuleHandle } from "../components/SearchCapsule";
 import heroHimalaya from "../assets/hero-himalaya.jpg";
 import howSearch from "../assets/how-search.jpg";
@@ -160,51 +161,7 @@ export function Home() {
         </div>
       </section>
 
-      <section className="px-5 pb-20 sm:pb-30">
-        <div className="max-w-[1299px] w-full mx-auto">
-          <div className="flex flex-col items-center text-center gap-3 mb-12">
-            <span className="text-xs font-medium text-ink-3 tracking-wide uppercase">First time in the hills?</span>
-            <h2 className="text-2xl sm:text-[2.1rem] font-semibold text-ink tracking-tight text-balance">
-              Before your first ride
-            </h2>
-            <p className="text-ink-3">Quick answers to what riders ask us most.</p>
-          </div>
-
-          <div className="relative">
-            <div
-              aria-hidden="true"
-              className="hidden xl:block absolute -inset-x-4 -top-10 h-[54px] rounded-[50%] border-[3px] border-[#a78862] [clip-path:inset(50%_0_0)] pointer-events-none"
-            />
-
-            <ul className="relative isolate grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 xl:flex xl:items-start xl:gap-0 xl:justify-center">
-              {FAQS.map((f, i) => (
-                <li
-                  key={f.q}
-                  tabIndex={0}
-                  className={`relative rounded-panel hover:z-10 focus-visible:z-20
-                    motion-safe:transition-[scale,rotate] motion-safe:duration-200 motion-safe:ease-out
-                    motion-safe:hover:scale-[1.04] motion-safe:focus-visible:scale-[1.04]
-                    xl:origin-[50%_-8px] xl:motion-safe:hover:rotate-0 xl:motion-safe:focus-visible:rotate-0
-                    xl:w-[22%] xl:shrink-0 xl:-ml-10 xl:first:ml-0 xl:bg-surface xl:p-3 xl:pb-6 xl:rounded-[18px] xl:shadow-[0_14px_34px_-16px_rgba(18,22,26,0.3)]
-                    ${HANGING_POSITIONS[i]}`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="hidden xl:block absolute -top-4 left-1/2 h-6 w-3 -translate-x-1/2 rounded-[3px] border border-[#ac875d] bg-[#d5b48b] shadow-sm after:absolute after:inset-x-px after:top-2 after:border-t after:border-[#ac875d]"
-                  />
-                  <div className={`h-full xl:h-auto rounded-panel p-5 ${f.tint}`}>
-                    <span className="tnum text-sm font-semibold text-[#8a5d00]">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <h3 className="font-medium text-ink mt-2 text-balance">{f.q}</h3>
-                    <p className="text-sm text-ink-2 leading-relaxed mt-2 text-pretty">{f.a}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
+      <RideFaqs />
 
       <Footer onBrowse={() => setReturningToSearch(true)} />
     </div>
@@ -235,43 +192,6 @@ const STEPS = [
     title: "Record. Ride. Return.",
     body: "Record a pickup video to document your scooter's condition. Ride with confidence, then return it with a clear record that helps resolve any questions.",
     img: howRide,
-  },
-];
-
-// Match each clip to the sag of the rope above it.
-const HANGING_POSITIONS = [
-  "xl:mt-3 xl:-rotate-2",
-  "xl:mt-5 xl:rotate-1",
-  "xl:mt-5.5 xl:-rotate-1",
-  "xl:mt-5 xl:rotate-2",
-  "xl:mt-3 xl:rotate-[-1.4deg]",
-];
-
-const FAQS = [
-  {
-    q: "Are helmets included?",
-    a: "Each listing says how many helmets come with the vehicle and whether there is a charge. A helmet is required for both rider and pillion.",
-    tint: "bg-amber-soft",
-  },
-  {
-    q: "What documents do I need?",
-    a: "A valid driving licence for the vehicle class and a government photo ID. You upload the licence once, at the booking step.",
-    tint: "bg-verified-soft",
-  },
-  {
-    q: "How does fuel work?",
-    a: "The listing states the fuel policy — usually return it at the level you collected it. Photograph the fuel gauge with your pickup photos.",
-    tint: "bg-[#eef2f6]",
-  },
-  {
-    q: "Can I ride after dark?",
-    a: "Check the listing — some shops restrict hill roads after sunset. Roads towards Mussoorie and beyond Rishikesh are narrow and unlit in places.",
-    tint: "bg-[#f7eef0]",
-  },
-  {
-    q: "What if it breaks down?",
-    a: "Call the shop's number on your booking first. If it isn't resolved, raise it with our grievance officer from your booking page.",
-    tint: "bg-surface-3",
   },
 ];
 

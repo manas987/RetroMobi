@@ -7,6 +7,7 @@ import { DateRangeField } from "../components/DateRangeField";
 import { ErrorBox, SubmitButton, TextField } from "../components/AuthFormBits";
 import { RiderVerification } from "../components/RiderVerification";
 import { Modal } from "../components/Modal";
+import { EmptyState, feedbackActionClass, SkeletonRows } from "../components/ContentFeedback";
 import { useCart } from "../lib/cart";
 import { usePortalSession, usePortalQuery, portalFetch, PortalApiError, type Row } from "../lib/portal";
 import { defaultWindow, toIsoWithOffset } from "../lib/searchParams";
@@ -145,8 +146,10 @@ export function Checkout() {
                 pickupTime={pickupTime}
                 returnDate={returnDate}
                 returnTime={returnTime}
-                onPickupDate={setPickupDate}
-                onReturnDate={setReturnDate}
+                onDatesChange={(from, to) => {
+                  setPickupDate(from);
+                  setReturnDate(to);
+                }}
                 onPickupTime={setPickupTime}
                 onReturnTime={setReturnTime}
               />
@@ -163,64 +166,67 @@ export function Checkout() {
                     <p className="text-sm font-medium text-ink mb-2">
                       {item.make} {item.model} <span className="text-ink-3 font-normal">— {item.shopName}</span>
                     </p>
-                    {riders.length > 0 ? (
-                      <div className="flex flex-col gap-2">
-                        {riders.map((r) => {
-                          // One person can't ride two scooters at once -- a rider already
-                          // assigned to a different vehicle in this checkout can't be picked again.
-                          const takenElsewhere = Object.entries(riderByVehicle).some(
-                            ([vehicleId, riderId]) => vehicleId !== item.vehicleId && riderId === r.id,
-                          );
-                          return (
-                            <label
-                              key={String(r.id)}
-                              className={`flex items-center justify-between gap-3 rounded-row border border-line-strong px-3 py-2.5 has-[:checked]:border-ink ${
-                                takenElsewhere ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
-                              }`}
-                            >
-                              <span className="flex items-center gap-2">
-                                <input
-                                  type="radio"
-                                  name={`rider-${item.vehicleId}`}
-                                  checked={riderByVehicle[item.vehicleId] === r.id}
-                                  disabled={takenElsewhere}
-                                  onChange={() =>
-                                    setRiderByVehicle((prev) => ({ ...prev, [item.vehicleId]: String(r.id) }))
-                                  }
-                                />
-                                <span className="text-sm text-ink font-medium">{String(r.name)}</span>
-                              </span>
-                              {takenElsewhere ? (
-                                <span className="text-xs text-ink-4">Riding another scooter</span>
-                              ) : r.licence_status === "VERIFIED" ? (
-                                <span className="text-xs text-verified font-medium">Licence verified</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setVerifyingRiderId(String(r.id))}
-                                  className="text-xs text-amber-edge font-medium hover:underline"
-                                >
-                                  Verify licence
-                                </button>
-                              )}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-ink-3">Add a rider below to assign one.</p>
-                    )}
+                    {riders.length > 0 && <div className="flex flex-col gap-2">
+                      {riders.map((r) => {
+                        // One person can't ride two scooters at once -- a rider already
+                        // assigned to a different vehicle in this checkout can't be picked again.
+                        const takenElsewhere = Object.entries(riderByVehicle).some(
+                          ([vehicleId, riderId]) => vehicleId !== item.vehicleId && riderId === r.id,
+                        );
+                        return (
+                          <label
+                            key={String(r.id)}
+                            className={`flex items-center justify-between gap-3 rounded-row border border-line-strong px-3 py-2.5 has-[:checked]:border-ink ${
+                              takenElsewhere ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name={`rider-${item.vehicleId}`}
+                                checked={riderByVehicle[item.vehicleId] === r.id}
+                                disabled={takenElsewhere}
+                                onChange={() =>
+                                  setRiderByVehicle((prev) => ({ ...prev, [item.vehicleId]: String(r.id) }))
+                                }
+                              />
+                              <span className="text-sm text-ink font-medium">{String(r.name)}</span>
+                            </span>
+                            {takenElsewhere ? (
+                              <span className="text-xs text-ink-4">Riding another scooter</span>
+                            ) : r.licence_status === "VERIFIED" ? (
+                              <span className="text-xs text-verified font-medium">Licence verified</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setVerifyingRiderId(String(r.id))}
+                                className="text-xs text-amber-edge font-medium hover:underline"
+                              >
+                                Verify licence
+                              </button>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>}
                   </div>
                 ))}
               </div>
 
-              <button
+              {!ridersError && !ridersRes && <SkeletonRows label="Loading riders" />}
+              {ridersRes && riders.length === 0 && (
+                <EmptyState title="No riders added yet" description="Add the person who will ride so you can assign them to a vehicle.">
+                  <button type="button" onClick={() => setAddingRider(true)} className={feedbackActionClass}>Add a rider</button>
+                </EmptyState>
+              )}
+
+              {riders.length > 0 && <button
                 type="button"
                 onClick={() => setAddingRider(true)}
                 className="text-sm text-ink-2 hover:text-ink font-medium mt-4"
               >
                 + Add a rider
-              </button>
+              </button>}
 
               <Modal
                 open={Boolean(verifyingRiderId)}
@@ -262,7 +268,7 @@ export function Checkout() {
             >
               {busy ? "Working…" : "Continue to payment"}
             </button>
-            {!allAssignedAndVerified && (
+            {ridersRes && !allAssignedAndVerified && (
               <p className="mt-2 text-xs text-warning text-center">
                 Every scooter needs a rider with a verified licence (covering the full return date) before booking.
               </p>

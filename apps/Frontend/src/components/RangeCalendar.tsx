@@ -18,8 +18,7 @@ export function RangeCalendar({
   pickupTime,
   returnDate,
   returnTime,
-  onPickupDate,
-  onReturnDate,
+  onDatesChange,
   onPickupTime,
   onReturnTime,
   onEnter,
@@ -30,8 +29,7 @@ export function RangeCalendar({
   pickupTime: string;
   returnDate: Date | null;
   returnTime: string;
-  onPickupDate: (d: Date) => void;
-  onReturnDate: (d: Date) => void;
+  onDatesChange: (pickup: Date, returnDate: Date) => void;
   onPickupTime: (t: string) => void;
   onReturnTime: (t: string) => void;
   /** Enter on a finished range — "done picking, go". Omit and Enter stays the
@@ -69,8 +67,7 @@ export function RangeCalendar({
     setPendingFrom(result.pending);
     if (result.commit) {
       setHovered(null);
-      onPickupDate(result.commit.from);
-      onReturnDate(result.commit.to);
+      onDatesChange(result.commit.from, result.commit.to);
     }
   }
 

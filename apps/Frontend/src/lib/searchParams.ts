@@ -2,6 +2,22 @@ import type { SearchCriteria, SortKey } from "./types";
 
 const SORTS: SortKey[] = ["price", "distance", "rating"];
 
+export const CLEAR_SEARCH_FILTERS: Partial<SearchCriteria> = {
+  shopId: undefined,
+  modelId: undefined,
+  bodyType: undefined,
+  fuelType: undefined,
+  make: undefined,
+  minPrice: undefined,
+  maxPrice: undefined,
+  minEngineCc: undefined,
+  maxEngineCc: undefined,
+  maxDistanceKm: undefined,
+  minRating: undefined,
+  fullyVerified: undefined,
+  seatingCapacity: undefined,
+};
+
 /** Launch city shown when a page is reached with no city in the URL (e.g. the
  *  header's bare "Browse scooters" link). */
 export const DEFAULT_CITY = "Dehradun";

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EmptyState, SkeletonRows } from "./ContentFeedback";
+import { SearchFailure } from "./SearchFeedback";
 import { usePortalSession, usePortalQuery, portalFetch, decodeJwtSubject, PortalApiError, type Row } from "../lib/portal";
 
 async function fetchShopReviews(shopId: string): Promise<{ reviews: Row[] }> {
@@ -27,10 +29,11 @@ export function ReviewsSection({
 }) {
   const queryClient = useQueryClient();
   const queryKey = ["shop-reviews", shopId];
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey,
     queryFn: () => fetchShopReviews(shopId),
   });
+  const { data } = query;
   const reviews = data?.reviews ?? [];
   const refetch = () => queryClient.invalidateQueries({ queryKey });
 
@@ -50,11 +53,12 @@ export function ReviewsSection({
         <StarIcon /> Reviews for {shopName}
       </h2>
 
-      {reviews.length === 0 ? (
-        <p className="text-sm text-ink-3 bg-surface-2 rounded-panel px-5 py-4">
-          No reviews yet — this shop hasn't had one written about it.
-        </p>
-      ) : (
+      {query.isPending && <SkeletonRows label="Loading reviews" detail />}
+      {!data && query.isError && (
+        <SearchFailure title="We couldn’t load reviews" onRetry={() => void query.refetch({ cancelRefetch: false })} retrying={query.isFetching} />
+      )}
+      {data && reviews.length === 0 && <EmptyState title="No reviews yet" />}
+      {reviews.length > 0 && (
         <div className="rounded-panel border border-line divide-y divide-line">
           {reviews.map((r) =>
             r.id === myReview?.id && session ? (
@@ -76,7 +80,7 @@ export function ReviewsSection({
         </div>
       )}
 
-      {session && eligibleBooking && !myReview && (
+      {data && session && eligibleBooking && !myReview && (
         <LeaveReviewForm bookingId={String(eligibleBooking.id)} token={session.accessToken} onPosted={refetch} />
       )}
     </section>

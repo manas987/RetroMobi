@@ -36,6 +36,7 @@ function splitOrBlank(iso: string, fallbackTime: string): { date: Date | null; t
 
 export interface SearchCapsuleHandle {
   openMissingField: () => void;
+  openDates: () => void;
 }
 
 export function SearchCapsule({
@@ -77,6 +78,7 @@ export function SearchCapsule({
   const [active, setActive] = useState<Field | null>(null);
 
   useImperativeHandle(ref, () => ({
+    openDates: () => setActive("when"),
     openMissingField() {
       const field = missingSearchField(city, pickupDate, returnDate);
       if (field) setActive(field);
@@ -169,8 +171,10 @@ export function SearchCapsule({
       pickupTime={pickupTime}
       returnDate={returnDate}
       returnTime={returnTime}
-      onPickupDate={setPickupDate}
-      onReturnDate={setReturnDate}
+      onDatesChange={(pickup, returnDate) => {
+        setPickupDate(pickup);
+        setReturnDate(returnDate);
+      }}
       onPickupTime={setPickupTime}
       onReturnTime={setReturnTime}
       onEnter={runSearch}

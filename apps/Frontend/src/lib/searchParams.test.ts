@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { activeFilters, bodyTypeLabel, parseSearchParams, toSearchParams } from "./searchParams";
+import { activeFilters, bodyTypeLabel, CLEAR_SEARCH_FILTERS, parseSearchParams, toSearchParams } from "./searchParams";
 
 test("bodyType survives a URL round trip", () => {
   const criteria = parseSearchParams("?city=Dehradun&bodyType=SCOOTER,MOTORCYCLE");
@@ -18,6 +18,19 @@ test("clearing one bodyType chip keeps the others", () => {
   const chip = activeFilters(criteria).find((f) => f.key === "bodyType:SCOOTER");
   expect(chip?.label).toBe("Scooter");
   expect(chip?.clear.bodyType).toEqual(["MOTORCYCLE"]);
+});
+
+test("clearing Browse filters keeps the city, rental window and sort", () => {
+  const criteria = parseSearchParams(
+    "?city=Dehradun&pickupAt=2026-12-01T10:00:00Z&returnAt=2026-12-02T10:00:00Z&sort=rating&minRating=4&make=Honda&minPrice=100",
+  );
+  const cleared = new URLSearchParams(toSearchParams({ ...criteria, ...CLEAR_SEARCH_FILTERS }));
+  expect(Object.fromEntries(cleared)).toEqual({
+    city: criteria.city,
+    pickupAt: criteria.pickupAt,
+    returnAt: criteria.returnAt,
+    sort: "rating",
+  });
 });
 
 test("bodyTypeLabel formats values it was never told about", () => {

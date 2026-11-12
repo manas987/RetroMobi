@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useImperativeHandle, useState, type Ref } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Modal } from "./Modal";
 import { RangeCalendar } from "./RangeCalendar";
@@ -10,23 +10,23 @@ import { useMediaQuery } from "../lib/useMediaQuery";
  *  dual-month calendar, click start then end (Airbnb-style), instead of two
  *  separate single-date pickers. */
 export function DateRangeField({
+  ref,
   label = "Dates",
   pickupDate,
   pickupTime,
   returnDate,
   returnTime,
-  onPickupDate,
-  onReturnDate,
+  onDatesChange,
   onPickupTime,
   onReturnTime,
 }: {
+  ref?: Ref<{ openDates: () => void }>;
   label?: string;
   pickupDate: Date;
   pickupTime: string;
   returnDate: Date;
   returnTime: string;
-  onPickupDate: (d: Date) => void;
-  onReturnDate: (d: Date) => void;
+  onDatesChange: (pickup: Date, returnDate: Date) => void;
   onPickupTime: (t: string) => void;
   onReturnTime: (t: string) => void;
 }) {
@@ -36,8 +36,8 @@ export function DateRangeField({
   // search capsule itself stacks at, this opens as a real modal instead; at
   // and above it, the popover is untouched from how it always worked.
   const isDesktop = useMediaQuery("(min-width: 900px)");
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [desktopOpen, setDesktopOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  useImperativeHandle(ref, () => ({ openDates: () => setOpen(true) }), []);
 
   const day = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
@@ -50,8 +50,7 @@ export function DateRangeField({
       pickupTime={pickupTime}
       returnDate={returnDate}
       returnTime={returnTime}
-      onPickupDate={onPickupDate}
-      onReturnDate={onReturnDate}
+      onDatesChange={onDatesChange}
       onPickupTime={onPickupTime}
       onReturnTime={onReturnTime}
     />
@@ -84,14 +83,14 @@ export function DateRangeField({
     <div className="flex-1 min-w-0 flex flex-col gap-0.5">
       {label && <span className="text-[11px] uppercase tracking-wide text-ink-3">{label}</span>}
       {isDesktop ? (
-        <Popover open={desktopOpen} onOpenChange={setDesktopOpen}>
+        <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>{trigger}</PopoverTrigger>
           <PopoverContent align="center">{calendarBody}</PopoverContent>
         </Popover>
       ) : (
         <>
-          <div onClick={() => setMobileOpen(true)}>{trigger}</div>
-          <Modal open={mobileOpen} onClose={() => setMobileOpen(false)} title="Dates">
+          <div onClick={() => setOpen(true)}>{trigger}</div>
+          <Modal open={open} onClose={() => setOpen(false)} title="Dates">
             {calendarBody}
           </Modal>
         </>

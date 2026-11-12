@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation, useParams, useSearch as useLocationSearch } from "wouter";
 import { Phone, MapPin, ShieldCheck, Star, Clock, ArrowLeft } from "lucide-react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { VehicleCard } from "../components/VehicleCard";
+import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock } from "../components/ContentFeedback";
+import { SearchFailure, VehicleSkeletons } from "../components/SearchFeedback";
 import { ShopLocationMap } from "../components/ShopLocationMap";
 import { ReviewsSection } from "../components/ReviewsSection";
 import { DateRangeField } from "../components/DateRangeField";
@@ -11,6 +13,7 @@ import { combine, splitIso } from "../components/DateTimeField";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { useSearch, useShopProfile } from "../lib/api";
 import { useGeolocation } from "../lib/useGeolocation";
+import { searchPresentation } from "../lib/searchPresentation";
 import { bodyTypeLabel, parseSearchParams, toIsoWithOffset, toSearchParams } from "../lib/searchParams";
 import type { SearchCriteria, ShopProfile, SortKey } from "../lib/types";
 
@@ -20,24 +23,31 @@ export function ShopPage() {
   const { shopId } = useParams<{ shopId: string }>();
   const locationSearch = useLocationSearch();
   const [, navigate] = useLocation();
+  const datesRef = useRef<{ openDates: () => void }>(null);
 
   const criteria = parseSearchParams(locationSearch);
+  // Every vehicle on this page is at the same shop, so a distance sort inherited from Browse is redundant.
+  const sort = criteria.sort === "distance" ? "price" : criteria.sort;
+  const selectedTypes = criteria.bodyType ?? [];
   const geo = useGeolocation();
   const coords = geo.status === "granted" ? { lat: geo.lat, lng: geo.lng } : null;
 
   // Pin this page's shopId into the URL the same way Browse seeds a default
   // city — so refreshing or sharing the link keeps the same shop scoped.
   useEffect(() => {
-    if (criteria.shopId !== shopId) {
-      navigate(`/shops/${shopId}?${toSearchParams({ ...criteria, shopId, city: "", page: 1 })}`, {
+    if (criteria.shopId !== shopId || criteria.sort !== sort) {
+      navigate(`/shops/${shopId}?${toSearchParams({ ...criteria, sort, shopId, city: "", page: 1 })}`, {
         replace: true,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shopId, criteria.shopId]);
+  }, [shopId, criteria.shopId, criteria.sort, sort]);
 
-  const { data: shop, isLoading: shopLoading, isError: shopError } = useShopProfile(shopId);
-  const { data, isLoading, isError } = useSearch(criteria, coords);
+  const shopQuery = useShopProfile(shopId);
+  const { data: shop, isLoading: shopLoading, isError: shopError } = shopQuery;
+  const inventory = useSearch({ ...criteria, sort, shopId, city: "" }, coords);
+  const { data } = inventory;
+  const { loading, failed, skeletonCount } = searchPresentation(inventory);
 
   function update(patch: Partial<SearchCriteria>) {
     navigate(`/shops/${shopId}?${toSearchParams({ ...criteria, ...patch, shopId, city: "", page: 1 })}`, {
@@ -61,13 +71,26 @@ export function ShopPage() {
           <ArrowLeft className="h-3.5 w-3.5" /> Back to browse
         </button>
 
-        {shopError && (
-          <p className="mt-6 text-sm text-danger bg-danger-soft rounded-panel px-4 py-3">
-            Couldn't load this shop.
-          </p>
+        {!shop && shopError && (
+          <div className="mt-6">
+            <SearchFailure title="We couldn’t load this shop" onRetry={() => void shopQuery.refetch({ cancelRefetch: false })} retrying={shopQuery.isFetching} />
+          </div>
         )}
 
-        {shopLoading && <div className="mt-6 h-40 rounded-panel bg-surface-2 animate-pulse" />}
+        {shopLoading && (
+          <LoadingSkeleton label="Loading shop details" className="mt-4 grid gap-6 lg:grid-cols-[1fr_320px]">
+            <div className="space-y-3">
+              <SkeletonBlock className="h-8 w-2/5" />
+              <SkeletonBlock className="h-4 w-3/5" />
+              <div className="mt-5 space-y-5 rounded-panel border border-line p-4">
+                <SkeletonBlock className="h-5 w-4/5" />
+                <SkeletonBlock className="h-5 w-2/3" />
+                <SkeletonBlock className="h-5 w-1/2" />
+              </div>
+            </div>
+            <SkeletonBlock className="h-44 rounded-panel" />
+          </LoadingSkeleton>
+        )}
 
         {shop && <ShopHeader shop={shop} />}
 
@@ -78,26 +101,29 @@ export function ShopPage() {
                 Vehicles at {shop?.name ?? "this shop"}
               </h2>
               <p className="text-sm text-ink-3 mt-0.5">
-                {isLoading
+                {loading
                   ? "Checking availability…"
-                  : `${data?.total ?? 0} available for these dates`}
+                  : !failed && data ? `${data.total} available for these dates` : null}
               </p>
             </div>
             <div className="flex items-center gap-3">
               <div className="rounded-row border border-line-strong px-3 py-2 flex min-w-0">
                 <DateRangeField
+                  ref={datesRef}
                   label="Dates"
                   pickupDate={pickup.date}
                   pickupTime={pickup.time}
                   returnDate={ret.date}
                   returnTime={ret.time}
-                  onPickupDate={(d) => update({ pickupAt: toIsoWithOffset(combine(d, pickup.time)) })}
-                  onReturnDate={(d) => update({ returnAt: toIsoWithOffset(combine(d, ret.time)) })}
+                  onDatesChange={(from, to) => update({
+                    pickupAt: toIsoWithOffset(combine(from, pickup.time)),
+                    returnAt: toIsoWithOffset(combine(to, ret.time)),
+                  })}
                   onPickupTime={(t) => update({ pickupAt: toIsoWithOffset(combine(pickup.date, t)) })}
                   onReturnTime={(t) => update({ returnAt: toIsoWithOffset(combine(ret.date, t)) })}
                 />
               </div>
-              <Select value={criteria.sort} onValueChange={(v) => update({ sort: v as SortKey })}>
+              <Select value={sort} onValueChange={(v) => update({ sort: v as SortKey })}>
                 <SelectTrigger className="min-w-[150px]">
                   <SelectValue />
                 </SelectTrigger>
@@ -116,33 +142,39 @@ export function ShopPage() {
             <div className="flex flex-wrap gap-2 mb-5">
               <TypeChip
                 label="All"
-                active={!criteria.bodyType?.length}
+                active={selectedTypes.length === 0}
                 onClick={() => update({ bodyType: undefined })}
               />
               {shop.bodyTypes.map((bodyType) => (
                 <TypeChip
                   key={bodyType}
                   label={bodyTypeLabel(bodyType)}
-                  active={criteria.bodyType?.includes(bodyType) ?? false}
-                  onClick={() => update({ bodyType: [bodyType] })}
+                  active={selectedTypes.includes(bodyType)}
+                  onClick={() => update({
+                    bodyType: selectedTypes.includes(bodyType)
+                      ? selectedTypes.filter((type) => type !== bodyType)
+                      : [...selectedTypes, bodyType],
+                  })}
                 />
               ))}
             </div>
           )}
 
-          {isError && (
-            <p className="text-sm text-danger bg-danger-soft rounded-panel px-4 py-3">
-              Couldn't reach the API. Is the backend running?
-            </p>
+          {loading && (
+            <>
+              <span role="status" className="sr-only">Loading shop vehicles</span>
+              <VehicleSkeletons count={skeletonCount} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5" />
+            </>
+          )}
+          {failed && <SearchFailure onRetry={() => void inventory.refetch({ cancelRefetch: false })} retrying={inventory.isFetching} />}
+
+          {!failed && !loading && data?.results.length === 0 && (
+            <EmptyState title="No vehicles available for these dates" description="Try a different pickup and return window at this shop.">
+              <button type="button" className={feedbackActionClass} onClick={() => datesRef.current?.openDates()}>Change dates</button>
+            </EmptyState>
           )}
 
-          {!isError && !isLoading && data?.results.length === 0 && (
-            <p className="text-sm text-ink-3 py-16 text-center bg-surface-2 rounded-panel">
-              Nothing available at this shop for these dates. Try a different window.
-            </p>
-          )}
-
-          {!isLoading && data && data.results.length > 0 && (
+          {!failed && !loading && data && data.results.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
               {data.results.map((r) => (
                 <VehicleCard key={`${r.model.id}:${r.primaryOffer.shopId}`} result={r} />

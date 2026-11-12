@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import type { SearchCriteria, SearchResult } from "../lib/types";
-import { bodyTypeLabel } from "../lib/searchParams";
+import { bodyTypeLabel, CLEAR_SEARCH_FILTERS } from "../lib/searchParams";
 import { RangeSlider, MaxSlider } from "./RangeSlider";
 import { Modal } from "./Modal";
-import type { GeolocationState } from "../lib/useGeolocation";
+import { LocationHelp } from "./MapLocationControl";
+import type { GeolocationController } from "../lib/useGeolocation";
 
 const MAX_PRICE_RUPEES = 5000;
 const MAX_ENGINE_CC = 1000;
@@ -43,7 +45,7 @@ export function FilterSheet({
   onChange: (patch: Partial<SearchCriteria>) => void;
   results: SearchResult[];
   priceHistogram: number[];
-  geo: GeolocationState;
+  geo: GeolocationController;
   /** Matches across every page, not just this one — what the footer button
    *  promises to show. */
   total: number;
@@ -52,7 +54,31 @@ export function FilterSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const makes = Array.from(new Set(results.map((r) => r.model.make))).sort();
+  const [locationHelpOpen, setLocationHelpOpen] = useState(false);
+
+  useEffect(() => {
+    if (open && locationHelpOpen && geo.status === "granted") {
+      setLocationHelpOpen(false);
+      onChange({ sort: "distance" });
+    }
+  }, [open, locationHelpOpen, geo.status, onChange]);
+
+  function close() {
+    setLocationHelpOpen(false);
+    onOpenChange(false);
+  }
+
+  function selectSort(sort: SearchCriteria["sort"]) {
+    if (sort === "distance" && geo.status !== "granted") {
+      setLocationHelpOpen(true);
+      void geo.requestLocation();
+      return;
+    }
+    setLocationHelpOpen(false);
+    onChange({ sort });
+  }
+
+  const makes = Array.from(new Set([...(criteria.make ?? []), ...results.map((r) => r.model.make)])).sort();
   // Once a brand is selected, `results` only ever contains that one brand —
   // without this, the group (and its only way to clear the filter) would
   // vanish the instant you picked one.
@@ -61,7 +87,7 @@ export function FilterSheet({
   // Same "don't let the group vanish once you pick one" rule as Brand: a
   // selected type narrows `results` to that type alone.
   const bodyTypes = Array.from(
-    new Set(results.map((r) => r.model.bodyType).filter((b): b is string => !!b)),
+    new Set([...(criteria.bodyType ?? []), ...results.flatMap((r) => r.model.bodyType ? [r.model.bodyType] : [])]),
   ).sort();
   const showBodyTypeGroup = bodyTypes.length > 1 || (criteria.bodyType?.length ?? 0) > 0;
 
@@ -89,25 +115,13 @@ export function FilterSheet({
   // incremental (they drop *one* body type), so merging them would leave a
   // multi-value filter half set.
   function clearAll() {
-    onChange({
-      bodyType: undefined,
-      fuelType: undefined,
-      make: undefined,
-      minPrice: undefined,
-      maxPrice: undefined,
-      minEngineCc: undefined,
-      maxEngineCc: undefined,
-      maxDistanceKm: undefined,
-      minRating: undefined,
-      fullyVerified: undefined,
-      seatingCapacity: undefined,
-    });
+    onChange(CLEAR_SEARCH_FILTERS);
   }
 
   return (
     <Modal
       open={open}
-      onClose={() => onOpenChange(false)}
+      onClose={close}
       title="Filters"
       size="lg"
       footer={
@@ -121,7 +135,7 @@ export function FilterSheet({
           </button>
           <button
             type="button"
-            onClick={() => onOpenChange(false)}
+            onClick={close}
             className="h-11 px-6 rounded-full bg-ink text-surface text-sm font-semibold hover:bg-ink-2 transition-colors"
           >
             Show {total} {total === 1 ? "vehicle" : "vehicles"}
@@ -133,16 +147,23 @@ export function FilterSheet({
           segmented track — a chip row would not say "pick exactly one". */}
       <Section title="Sort">
         <Segmented
-          value={criteria.sort}
-          onChange={(sort) => onChange({ sort: sort as SearchCriteria["sort"] })}
+          value={criteria.sort === "distance" && geo.status !== "granted" ? "price" : criteria.sort}
+          onChange={selectSort}
           options={[
             { value: "price", label: "Price" },
             { value: "rating", label: "Rating" },
-            // Hidden, not disabled: same gate as the Distance filter below,
-            // and an option you cannot pick is noise in a sheet you scroll.
-            ...(geo.status === "granted" ? [{ value: "distance", label: "Distance" }] : []),
+            { value: "distance", label: "Distance" },
           ]}
         />
+        {locationHelpOpen && geo.status !== "granted" && (
+          <div className="mt-3 rounded-panel border border-line bg-surface-2">
+            <LocationHelp
+              state={geo}
+              onRetry={() => void geo.requestLocation()}
+              onDismiss={() => setLocationHelpOpen(false)}
+            />
+          </div>
+        )}
       </Section>
 
       <Section title="Verification">
@@ -241,9 +262,7 @@ export function FilterSheet({
             <Chip
               key={r}
               label={`${r}★ and up`}
-              // "X and up" tiers nest — checking 3.5 already covers 4 and 4.5,
-              // so a lower selected tier shows every tier above it selected too.
-              selected={criteria.minRating != null && r >= criteria.minRating}
+              selected={criteria.minRating === r}
               onClick={() => onChange({ minRating: criteria.minRating === r ? undefined : r })}
             />
           ))}
@@ -288,9 +307,9 @@ function Segmented({
   value,
   onChange,
 }: {
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (v: string) => void;
+  options: { value: SearchCriteria["sort"]; label: string }[];
+  value: SearchCriteria["sort"];
+  onChange: (v: SearchCriteria["sort"]) => void;
 }) {
   return (
     <div className="flex bg-surface-3 rounded-full p-1">

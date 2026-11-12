@@ -6,6 +6,7 @@ import { usePortalSession, usePortalQuery, portalFetch, PortalApiError, type Row
 import { DateField } from "../../components/DateTimeField";
 import { StatusPill } from "../../components/DataTable";
 import { ErrorBox, SubmitButton, TextField } from "../../components/AuthFormBits";
+import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock, SkeletonRows } from "../../components/ContentFeedback";
 import { dateLabel, enumLabel } from "../../lib/format";
 import { uploadFile, UploadFailedError } from "../../lib/upload";
 import { RiderVerification } from "../../components/RiderVerification";
@@ -55,7 +56,7 @@ function ProfileBody() {
     <div className="max-w-[760px] w-full mx-auto px-5 py-10 min-h-[calc(100dvh-4rem)]">
       <div className="flex items-start justify-between gap-3 mb-1">
         <h1 className="text-2xl font-semibold text-ink">Riders & profile</h1>
-        {!adding && (
+        {!adding && (error || (data && data.riders.length > 0)) && (
           <button type="button" onClick={() => setAdding(true)} className="text-sm text-ink font-medium hover:underline shrink-0">
             + Add rider
           </button>
@@ -81,9 +82,24 @@ function ProfileBody() {
         </div>
       )}
 
-      {!error && data === null && <p className="text-sm text-ink-3">Loading…</p>}
+      {!error && data === null && (
+        <LoadingSkeleton label="Loading riders" className="space-y-3">
+          {[0, 1].map((index) => (
+            <div key={index} className="space-y-3 rounded-panel border border-line p-5">
+              <div className="flex justify-between gap-4">
+                <SkeletonBlock className="h-5 w-2/5" />
+                <SkeletonBlock className="h-5 w-20 rounded-full" />
+              </div>
+              <SkeletonBlock className="h-4 w-1/2" />
+              <SkeletonBlock className="h-8 w-28 rounded-row" />
+            </div>
+          ))}
+        </LoadingSkeleton>
+      )}
       {!error && data && data.riders.length === 0 && !adding && (
-        <p className="text-sm text-ink-3 py-10 text-center bg-surface-2 rounded-panel">No riders added yet.</p>
+        <EmptyState title="No riders added yet" description="Add a rider to start verifying their driving licence.">
+          <button type="button" className={feedbackActionClass} onClick={() => setAdding(true)}>Add a rider</button>
+        </EmptyState>
       )}
       {!error && data && data.riders.length > 0 && (
         <div className="flex flex-col gap-3">
@@ -149,9 +165,9 @@ function SignedInDevices({ token }: { token: string }) {
       {error && <ErrorBox text={error} />}
       {actionError && <ErrorBox text={actionError} />}
 
-      {!error && data === null && <p className="text-sm text-ink-3">Loading…</p>}
+      {!error && data === null && <SkeletonRows label="Loading signed-in devices" detail />}
       {!error && data && sessions.length === 0 && (
-        <p className="text-sm text-ink-3">No other active sessions.</p>
+        <EmptyState title="No other active sessions" />
       )}
 
       {sessions.length > 0 && (
@@ -382,9 +398,9 @@ function SupportBody() {
             />
           )}
 
-          {!error && data === null && <p className="text-sm text-ink-3">Loading…</p>}
+          {!error && data === null && <SkeletonRows label="Loading support conversations" count={3} />}
           {!error && data && data.tickets.length === 0 && (
-            <p className="text-sm text-ink-3 py-10 text-center bg-surface-2 rounded-panel">No support tickets yet.</p>
+            <EmptyState title="No conversations yet" description="Start a conversation whenever you need help." />
           )}
           {!error && data && data.tickets.length > 0 && (
             <div className="flex flex-col gap-2">
@@ -428,7 +444,7 @@ function NewTicket({
   token: string;
   onCreated: (ticketId: string) => void;
 }) {
-  const { data: bookingsRes } = usePortalQuery<{ bookings: Row[] }>(
+  const { data: bookingsRes, error: bookingsError } = usePortalQuery<{ bookings: Row[] }>(
     "user",
     step === "pick-booking" ? "/bookings" : null,
     token,
@@ -489,9 +505,10 @@ function NewTicket({
       {step === "pick-booking" && (
         <>
           <p className="text-sm font-medium text-ink mb-3">Which booking?</p>
-          {bookingsRes === null && <p className="text-sm text-ink-3">Loading…</p>}
+          {bookingsError && <ErrorBox text="We couldn’t load your bookings." />}
+          {!bookingsError && bookingsRes === null && <SkeletonRows label="Loading bookings to choose from" />}
           {bookingsRes && bookingsRes.bookings.length === 0 && (
-            <p className="text-sm text-ink-3">No bookings to pick from.</p>
+            <EmptyState title="No bookings to choose from" />
           )}
           <div className="flex flex-col gap-2 mb-4">
             {bookingsRes?.bookings.map((b) => (
@@ -513,6 +530,9 @@ function NewTicket({
                 Start conversation
               </SubmitButton>
             </>
+          )}
+          {!bookingId && (
+            <button type="button" className={feedbackActionClass} onClick={() => setStep("compose")}>Continue without a booking</button>
           )}
         </>
       )}
@@ -550,6 +570,7 @@ function TicketChat({ ticketId, token, onBack }: { ticketId: string; token: stri
   // category, status or linked booking anywhere on screen.
   const { data: ticket } = usePortalQuery<Row>("user", `/tickets/${ticketId}`, token);
   const [messages, setMessages] = useState<Row[] | null>(null);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -568,13 +589,14 @@ function TicketChat({ ticketId, token, onBack }: { ticketId: string; token: stri
           { token },
         );
         if (cancelled) return;
+        setMessagesError(null);
         if (sinceId) {
           if (res.messages.length > 0) setMessages((prev) => [...(prev ?? []), ...res.messages]);
         } else {
           setMessages(res.messages);
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof PortalApiError ? err.message : "Couldn't load messages.");
+        if (!cancelled) setMessagesError(err instanceof PortalApiError ? err.message : "Couldn't load messages.");
       } finally {
         if (!cancelled) timer = setTimeout(poll, 4000);
       }
@@ -661,12 +683,19 @@ function TicketChat({ ticketId, token, onBack }: { ticketId: string; token: stri
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
-        {messages === null && <p className="text-sm text-ink-3">Loading…</p>}
-        {messages?.length === 0 && <p className="text-sm text-ink-3">No messages yet — say what you need.</p>}
+        {messages === null && !messagesError && (
+          <LoadingSkeleton label="Loading messages" className="flex flex-col gap-3">
+            <SkeletonBlock className="h-12 w-2/3 self-start rounded-panel" />
+            <SkeletonBlock className="h-10 w-1/2 self-end rounded-panel" />
+            <SkeletonBlock className="h-12 w-3/5 self-start rounded-panel" />
+          </LoadingSkeleton>
+        )}
+        {messages?.length === 0 && !messagesError && <EmptyState title="No messages yet" description="Send a message to tell us how we can help." />}
         {messages?.map((m) => <MessageBubble key={String(m.id)} message={m} ticketId={ticketId} token={token} />)}
         <div ref={bottomRef} />
       </div>
 
+      {messagesError && <div className="px-4"><ErrorBox text={messagesError} /></div>}
       {error && <div className="px-4"><ErrorBox text={error} /></div>}
 
       <div className="flex items-center gap-2 p-3 border-t border-line">

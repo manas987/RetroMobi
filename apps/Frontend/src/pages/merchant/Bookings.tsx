@@ -444,8 +444,10 @@ function WalkinForm({ token, shopId, onCreated, onCancel }: { token: string; sho
           pickupTime={pickupTime}
           returnDate={returnDate}
           returnTime={returnTime}
-          onPickupDate={setPickupDate}
-          onReturnDate={setReturnDate}
+          onDatesChange={(from, to) => {
+            setPickupDate(from);
+            setReturnDate(to);
+          }}
           onPickupTime={setPickupTime}
           onReturnTime={setReturnTime}
         />

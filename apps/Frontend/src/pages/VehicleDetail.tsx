@@ -2,16 +2,20 @@ import { Link, useParams } from "wouter";
 import { ArrowUpRight, Check } from "lucide-react";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
+import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock } from "../components/ContentFeedback";
+import { SearchFailure } from "../components/SearchFeedback";
 import { ShopLocationMap } from "../components/ShopLocationMap";
 import { ReviewsSection } from "../components/ReviewsSection";
 import { ShareButton } from "../components/ShareButton";
-import { useVehicleDetail } from "../lib/api";
+import { ApiError, useVehicleDetail } from "../lib/api";
 import { useCart } from "../lib/cart";
 import { rupees } from "../lib/format";
 
 export function VehicleDetail() {
   const { id } = useParams<{ id: string }>();
-  const { data: v, isLoading, isError } = useVehicleDetail(id);
+  const query = useVehicleDetail(id);
+  const { data: v, isLoading, error } = query;
+  const unavailable = error instanceof ApiError && error.status === 404;
   const { qtyFor, setQty, openDrawer } = useCart();
   const inCart = v ? qtyFor(v.modelId, v.shopId) > 0 : false;
 
@@ -20,22 +24,43 @@ export function VehicleDetail() {
       <Header />
 
       <div className="max-w-[1180px] w-full mx-auto px-5 py-8 flex-1">
-        <Link href="/browse" className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink transition-colors">
+        {!unavailable && <Link href="/browse" className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink transition-colors">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           Back to browse
-        </Link>
+        </Link>}
 
-        {isLoading && <p className="mt-8 text-sm text-ink-3">Loading…</p>}
-
-        {isError && (
-          <p className="mt-8 text-sm text-danger bg-danger-soft rounded-panel px-4 py-3">
-            Couldn't load this listing. It may have been removed.
-          </p>
+        {isLoading && (
+          <LoadingSkeleton label="Loading vehicle details" className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-10 items-start">
+            <div className="space-y-4">
+              <SkeletonBlock className="aspect-[16/10] rounded-panel" />
+              <SkeletonBlock className="h-8 w-2/5" />
+              <SkeletonBlock className="h-4 w-3/5" />
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[0, 1, 2, 3].map((index) => <SkeletonBlock key={index} className="h-14 rounded-panel" />)}
+              </div>
+            </div>
+            <div className="space-y-4 rounded-panel border border-line p-5">
+              <SkeletonBlock className="h-8 w-1/3" />
+              <SkeletonBlock className="h-16 rounded-row" />
+              <SkeletonBlock className="h-11 rounded-row" />
+            </div>
+          </LoadingSkeleton>
         )}
 
-        {v && (
+        {unavailable && (
+          <EmptyState title="Listing unavailable" description="This vehicle is no longer listed. Browse for another ride." className="mt-6">
+            <Link href="/browse" className={feedbackActionClass}>Back to browse</Link>
+          </EmptyState>
+        )}
+        {!v && error && !unavailable && (
+          <div className="mt-6">
+            <SearchFailure title="We couldn’t load this listing" onRetry={() => void query.refetch({ cancelRefetch: false })} retrying={query.isFetching} />
+          </div>
+        )}
+
+        {v && !unavailable && (
           <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-10 items-start">
             <div>
               <div className="relative aspect-[16/10] rounded-panel bg-surface-3 flex flex-col items-center justify-center gap-2 text-ink-4 mb-6 overflow-hidden">

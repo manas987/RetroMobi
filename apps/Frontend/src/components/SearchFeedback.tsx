@@ -1,6 +1,6 @@
-export function VehicleSkeletons({ count }: { count: number }) {
+export function VehicleSkeletons({ count, className = "grid grid-cols-1 sm:grid-cols-2 gap-6" }: { count: number; className?: string }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6" aria-hidden="true">
+    <div className={className} aria-hidden="true">
       {Array.from({ length: count }, (_, index) => (
         <div key={index} className="motion-safe:animate-pulse">
           <div className="aspect-[4/3] rounded-[18px] bg-surface-3" />
@@ -19,10 +19,10 @@ export function VehicleSkeletons({ count }: { count: number }) {
   );
 }
 
-export function SearchFailure({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {
+export function SearchFailure({ onRetry, retrying, title = "We couldn’t load vehicles" }: { onRetry: () => void; retrying: boolean; title?: string }) {
   return (
     <div className="rounded-panel border border-line bg-surface-2 px-5 py-6">
-      <p role="alert" className="text-sm text-ink">We couldn’t load vehicles</p>
+      <p role="alert" className="text-sm text-ink">{title}</p>
       <button type="button" onClick={onRetry} disabled={retrying} className="mt-3 h-9 px-4 rounded-full border border-line-strong text-sm font-medium text-ink disabled:opacity-50">
         {retrying ? "Trying again…" : "Try again"}
       </button>

@@ -1,18 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useSearch as useLocationSearch } from "wouter";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { SlidersHorizontal } from "lucide-react";
-import { SearchCapsule, type SearchCapsuleValue } from "../components/SearchCapsule";
+import { SearchCapsule, type SearchCapsuleHandle, type SearchCapsuleValue } from "../components/SearchCapsule";
 import { FilterSheet } from "../components/FilterSheet";
 import { MapPanel } from "../components/MapPanel";
 import { VehicleCard } from "../components/VehicleCard";
 import { SearchFailure, VehicleSkeletons } from "../components/SearchFeedback";
+import { EmptyState, feedbackActionClass } from "../components/ContentFeedback";
 import { searchPresentation } from "../lib/searchPresentation";
 import { useSearch } from "../lib/api";
 import { useGeolocation } from "../lib/useGeolocation";
 import { useMediaQuery } from "../lib/useMediaQuery";
-import { DEFAULT_CITY, defaultWindow, parseSearchParams, toSearchParams, activeFilters } from "../lib/searchParams";
+import { DEFAULT_CITY, defaultWindow, parseSearchParams, toSearchParams, activeFilters, CLEAR_SEARCH_FILTERS } from "../lib/searchParams";
 import type { SearchCriteria, SearchResult } from "../lib/types";
 
 const EMPTY_RESULTS: SearchResult[] = [];
@@ -22,6 +23,7 @@ export function Browse() {
   const [, navigate] = useLocation();
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const searchRef = useRef<SearchCapsuleHandle>(null);
   const [hoveredCard, setHoveredCard] = useState<SearchResult | null>(null);
   const [focusedCard, setFocusedCard] = useState<SearchResult | null>(null);
   const [selectedShop, setSelectedShop] = useState<string | null>(null);
@@ -72,6 +74,7 @@ export function Browse() {
 
   const capsule = (
     <SearchCapsule
+      ref={searchRef}
       compact
       className="min-[1300px]:w-[660px] max-w-full"
       initial={{ city: criteria.city, pickupAt: criteria.pickupAt, returnAt: criteria.returnAt }}
@@ -144,9 +147,15 @@ export function Browse() {
           {failed && <SearchFailure onRetry={() => { void query.refetch({ cancelRefetch: false }); }} retrying={query.isFetching} />}
 
           {!loading && !failed && data?.results.length === 0 && (
-            <p className="text-sm text-ink-3 py-16 text-center bg-surface-2 rounded-panel">
-              No scooters match these filters yet. Try widening the dates, price range or city.
-            </p>
+            <EmptyState title="No vehicles match this search" description="Try different rental dates or remove filters to see more options.">
+              <button type="button" className={feedbackActionClass} onClick={() => {
+                window.scrollTo({ top: 0 });
+                searchRef.current?.openDates();
+              }}>Change dates</button>
+              {Object.keys(CLEAR_SEARCH_FILTERS).some((key) => criteria[key as keyof SearchCriteria] !== undefined) && (
+                <button type="button" className={feedbackActionClass} onClick={() => update(CLEAR_SEARCH_FILTERS)}>Clear filters</button>
+              )}
+            </EmptyState>
           )}
 
           {/* Two up, like the reference: the column is just over half the

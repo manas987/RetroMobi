@@ -5,6 +5,7 @@ import { Footer } from "../../components/Footer";
 import { usePortalSession, usePortalQuery, portalFetch, PortalApiError, type Row } from "../../lib/portal";
 import { StatusPill } from "../../components/DataTable";
 import { ErrorBox } from "../../components/AuthFormBits";
+import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock } from "../../components/ContentFeedback";
 import { DateTimeField, combine, splitIso } from "../../components/DateTimeField";
 import { rupees } from "../../lib/format";
 import { uploadFile, UploadFailedError } from "../../lib/upload";
@@ -35,11 +36,24 @@ function MyBookingsBody() {
       <p className="text-sm text-ink-3 mb-6">Every rental you've held, confirmed or completed.</p>
 
       {error && <ErrorBox text={error} />}
-      {!error && data === null && <p className="text-sm text-ink-3">Loading…</p>}
+      {!error && data === null && (
+        <LoadingSkeleton label="Loading bookings" className="space-y-4">
+          {[0, 1].map((index) => (
+            <div key={index} className="space-y-3 rounded-panel border border-line p-5">
+              <div className="flex justify-between gap-4">
+                <SkeletonBlock className="h-5 w-2/5" />
+                <SkeletonBlock className="h-6 w-20 rounded-full" />
+              </div>
+              <SkeletonBlock className="h-4 w-1/2" />
+              <SkeletonBlock className="h-12 rounded-row" />
+            </div>
+          ))}
+        </LoadingSkeleton>
+      )}
       {!error && data && data.bookings.length === 0 && (
-        <p className="text-sm text-ink-3 py-10 text-center bg-surface-2 rounded-panel">
-          No bookings yet — find a scooter from Discover.
-        </p>
+        <EmptyState title="No bookings yet" description="Your rentals will appear here once you start a booking.">
+          <Link href="/browse" className={feedbackActionClass}>Find a scooter</Link>
+        </EmptyState>
       )}
       {!error && data && data.bookings.length > 0 && (
         <div className="flex flex-col gap-4">

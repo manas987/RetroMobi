@@ -5,6 +5,7 @@ import { Link, useLocation } from "wouter";
 import { Minus, Plus, Trash2, X } from "lucide-react";
 import { MAX_CART_ITEMS, useCart } from "../lib/cart";
 import { rupees } from "../lib/format";
+import { EmptyState, feedbackActionClass } from "./ContentFeedback";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 
 export function CartDrawer({ children }: { children: ReactNode }) {
@@ -39,9 +40,9 @@ export function CartDrawer({ children }: { children: ReactNode }) {
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5">
             {items.length === 0 ? (
-              <p className="text-sm text-ink-3 py-10 text-center">
-                Nothing in your cart yet. Add a scooter from Browse to start a booking.
-              </p>
+              <EmptyState title="Your cart is empty" description="Find a vehicle and add it to start a booking.">
+                <Link href="/browse" onClick={closeDrawer} className={feedbackActionClass}>Browse vehicles</Link>
+              </EmptyState>
             ) : (
               <div className="divide-y divide-line">
                 {items.map((item) => (

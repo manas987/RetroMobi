@@ -3,6 +3,8 @@ import { Link, useLocation, useParams } from "wouter";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { ErrorBox } from "../components/AuthFormBits";
+import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock } from "../components/ContentFeedback";
+import { SearchFailure } from "../components/SearchFeedback";
 import { usePortalSession, portalFetch, PortalApiError } from "../lib/portal";
 import { startCheckout } from "../lib/cashfree";
 import { rupees } from "../lib/format";
@@ -50,17 +52,29 @@ function describe(err: unknown): string {
 function useStatus(groupId: string | undefined, token: string | undefined) {
   const [status, setStatus] = useState<PaymentStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!groupId || !token) return null;
+    setChecking(true);
     try {
       const next = await portalFetch<PaymentStatus>("user", `/payments/status/${groupId}`, { token });
       setStatus(next);
       setError(null);
+      setMissing(false);
       return next;
     } catch (err) {
+      if (err instanceof PortalApiError && err.code === "booking_group_not_found") {
+        setStatus(null);
+        setError(null);
+        setMissing(true);
+        return null;
+      }
       setError(describe(err));
       return null;
+    } finally {
+      setChecking(false);
     }
   }, [groupId, token]);
 
@@ -68,7 +82,7 @@ function useStatus(groupId: string | undefined, token: string | undefined) {
     void refresh();
   }, [refresh]);
 
-  return { status, error, refresh, setError };
+  return { status, error, refresh, setError, missing, checking };
 }
 
 function Line({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
@@ -109,12 +123,33 @@ function Confirmed() {
   );
 }
 
+function HoldUnavailable({ expired = false }: { expired?: boolean }) {
+  return (
+    <EmptyState
+      className="mt-6"
+      title={expired ? "Your booking hold expired" : "Booking hold unavailable"}
+      description={expired ? "Choose a vehicle again to start a new booking." : "Check My bookings for the latest status or browse for another vehicle."}
+    >
+      <Link href="/account/bookings" className={feedbackActionClass}>My bookings</Link>
+      <Link href="/browse" className={feedbackActionClass}>Browse vehicles</Link>
+    </EmptyState>
+  );
+}
+
 export function CheckoutPay() {
   const { groupId } = useParams<{ groupId: string }>();
   const { session } = usePortalSession("user");
   const [, navigate] = useLocation();
-  const { status, error, refresh, setError } = useStatus(groupId, session?.accessToken);
+  const { status, error, refresh, setError, missing, checking } = useStatus(groupId, session?.accessToken);
   const [busy, setBusy] = useState(false);
+  const [elapsedHold, setElapsedHold] = useState<string | null>(null);
+  const holdExpiresAt = status?.holdExpiresAt;
+
+  useEffect(() => {
+    if (!holdExpiresAt) return;
+    const timeout = window.setTimeout(() => setElapsedHold(holdExpiresAt), Math.max(0, Date.parse(holdExpiresAt) - Date.now()));
+    return () => window.clearTimeout(timeout);
+  }, [holdExpiresAt]);
 
   useEffect(() => {
     if (!session) navigate(`/login?next=${encodeURIComponent(`/checkout/pay/${groupId}`)}`);
@@ -154,7 +189,8 @@ export function CheckoutPay() {
     );
   }
 
-  const holdExpired = status?.holdExpiresAt ? new Date(status.holdExpiresAt) < new Date() : false;
+  const holdExpired = !!holdExpiresAt && (elapsedHold === holdExpiresAt || Date.parse(holdExpiresAt) <= Date.now());
+  if (missing || holdExpired) return <Shell><HoldUnavailable expired={holdExpired} /></Shell>;
 
   return (
     <Shell>
@@ -164,19 +200,31 @@ export function CheckoutPay() {
 
       <div className="mt-6">
         <h1 className="text-2xl font-semibold text-ink mb-1">Complete payment</h1>
-        {status?.holdExpiresAt && !holdExpired && (
+        {status?.holdExpiresAt && (
           <p className="text-sm text-ink-3 mb-6">
             Held until {new Date(status.holdExpiresAt).toLocaleTimeString("en-IN")}.
           </p>
         )}
-        {holdExpired && (
-          <p className="text-sm text-warning mb-6">
-            This hold has expired, so it can no longer be paid for. Nothing was charged.
-          </p>
+        {error && (status
+          ? <ErrorBox text={error} />
+          : <SearchFailure title={error} onRetry={() => void refresh()} retrying={checking} />)}
+        {!error && !status && (
+          <LoadingSkeleton label="Loading booking and payment details" className="mt-5 space-y-5">
+            <div className="space-y-2 rounded-panel border border-line px-5 py-3">
+              <SkeletonBlock className="h-4 w-1/3" />
+              <SkeletonBlock className="h-4 w-1/2" />
+            </div>
+            <div className="rounded-panel border border-line divide-y divide-line">
+              {[0, 1, 2, 3].map((index) => (
+                <div key={index} className="flex justify-between gap-4 px-5 py-3">
+                  <SkeletonBlock className="h-5 w-1/3" />
+                  <SkeletonBlock className="h-5 w-20" />
+                </div>
+              ))}
+            </div>
+            <SkeletonBlock className="h-11 rounded-row" />
+          </LoadingSkeleton>
         )}
-
-        {error && <ErrorBox text={error} />}
-        {!error && !status && <p className="text-sm text-ink-3">Loading…</p>}
 
         {status && (
           <>
@@ -208,7 +256,7 @@ export function CheckoutPay() {
 
             <button
               type="button"
-              disabled={busy || holdExpired}
+              disabled={busy}
               onClick={pay}
               className="w-full h-11 rounded-row bg-amber text-on-amber font-semibold disabled:opacity-40 hover:brightness-95 transition-[filter]"
             >
@@ -225,7 +273,8 @@ export function CheckoutPay() {
             <button
               type="button"
               onClick={() => void refresh()}
-              className="mt-4 w-full text-xs text-ink-3 hover:text-ink"
+              disabled={checking}
+              className="mt-4 w-full text-xs text-ink-3 hover:text-ink disabled:opacity-50"
             >
               Already paid? Check again
             </button>
@@ -245,7 +294,7 @@ export function CheckoutReturn() {
   const { session } = usePortalSession("user");
   const [, navigate] = useLocation();
   const groupId = new URLSearchParams(window.location.search).get("group") ?? undefined;
-  const { status, error, refresh } = useStatus(groupId, session?.accessToken);
+  const { status, error, refresh, missing, checking } = useStatus(groupId, session?.accessToken);
   const [attempts, setAttempts] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -273,18 +322,7 @@ export function CheckoutReturn() {
 
   if (!session) return null;
 
-  if (!groupId) {
-    return (
-      <Shell>
-        <div className="mt-6">
-          <h1 className="text-2xl font-semibold text-ink mb-1">Nothing to show</h1>
-          <p className="text-sm text-ink-3">
-            This page is where the payment gateway sends you back to. Open it from a booking instead.
-          </p>
-        </div>
-      </Shell>
-    );
-  }
+  if (!groupId || missing) return <Shell><HoldUnavailable /></Shell>;
 
   if (status?.paymentStatus === "SUCCEEDED" || status?.bookingStatus === "CONFIRMED") {
     return (
@@ -297,9 +335,11 @@ export function CheckoutReturn() {
   return (
     <Shell>
       <div className="mt-6">
-        {error && <ErrorBox text={error} />}
+        {error && (status
+          ? <ErrorBox text={error} />
+          : <SearchFailure title={error} onRetry={() => void refresh()} retrying={checking} />)}
 
-        {!settled && attempts < 5 && (
+        {!error && !settled && attempts < 5 && (
           <>
             <h1 className="text-2xl font-semibold text-ink mb-1">Checking your payment…</h1>
             <p className="text-sm text-ink-3">
