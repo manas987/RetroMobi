@@ -19,12 +19,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { usePortalSession, portalFetch, PortalApiError, type Row } from "../../lib/portal";
-import { ErrorBox, SubmitButton, TextField } from "../../components/AuthFormBits";
+import { ErrorBox } from "../../components/AuthFormBits";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { can as hasPermission, type Permission } from "../../lib/permissions";
 import { setLang, useT, type TKey } from "../../i18n";
-import { useMerchantQuery } from "./query";
-import { Sheet } from "./ui/ui";
+import { errorText, useMerchantQuery } from "./query";
+import { Button, ErrorNote, Field, INPUT, Sheet } from "./ui/ui";
 import { GetListedChip } from "./setup/GetListedChip";
 import { InvitesForYou } from "./staff/InvitesForYou";
 
@@ -506,7 +506,7 @@ function ShopSwitcher({
 }
 
 function FirstShopForm({ token, onCreated }: { token: string; onCreated: () => void }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const [name, setName] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
   const [city, setCity] = useState("");
@@ -526,25 +526,32 @@ function FirstShopForm({ token, onCreated }: { token: string; onCreated: () => v
       });
       onCreated();
     } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : t("errors.generic"));
+      setError(errorText(lang, err));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="max-w-md bg-surface rounded-card shadow-card p-6">
-      <h1 className="text-2xl font-semibold text-ink mb-1">{t("common.firstShopTitle")}</h1>
-      <p className="text-sm text-ink-2 mb-6">{t("common.firstShopBody")}</p>
-      {error && <ErrorBox text={error} />}
-      <TextField label={t("common.shopName")} value={name} onChange={setName} autoFocus />
-      <TextField label={t("common.address")} value={addressLine1} onChange={setAddressLine1} />
-      <TextField label={t("common.city")} value={city} onChange={setCity} />
-      <TextField label={t("common.state")} value={state} onChange={setState} />
-      <TextField label={t("common.pincode")} value={pincode} onChange={setPincode} />
-      <SubmitButton busy={busy} disabled={!name || !addressLine1 || !city || !state || pincode.length !== 6} onClick={submit}>
-        {t("common.createShop")}
-      </SubmitButton>
+    <div className="rounded-card bg-surface p-6 shadow-card">
+      <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold text-ink">
+        <Store className="h-6 w-6 shrink-0" aria-hidden />
+        {t("common.firstShopTitle")}
+      </h1>
+      <p className="mb-6 text-base text-ink-2">{t("common.firstShopBody")}</p>
+      {error && <div className="mb-4"><ErrorNote text={error} /></div>}
+      <Field label={t("common.shopName")}><input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label={t("common.address")}><input className={INPUT} value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} /></Field>
+      <div className="grid gap-x-3 sm:grid-cols-2">
+        <Field label={t("common.city")}><input className={INPUT} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
+        <Field label={t("common.pincode")}>
+          <input className={`${INPUT} tnum`} inputMode="numeric" maxLength={6} value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))} />
+        </Field>
+      </div>
+      <Field label={t("common.state")}><input className={INPUT} value={state} onChange={(e) => setState(e.target.value)} /></Field>
+      <Button variant="primary" size="lg" className="w-full" disabled={busy || !name || !addressLine1 || !city || !state || pincode.length !== 6} onClick={submit}>
+        {busy ? t("common.saving") : t("common.createShop")}
+      </Button>
     </div>
   );
 }
