@@ -55,9 +55,11 @@ export function BookingRow({ b, stage, actions }: { b: Row; stage: BookingStage 
   const p = pickupIso(b);
   const r = returnIso(b);
   const sameDay = istDay(new Date(p)) === istDay(new Date(r));
+  // Non-breaking inside each end, so a narrow row breaks at the arrow, never inside "10:00 am".
+  const keep = (s: string) => s.replace(/ /g, "\u00a0");
   const times = t("bookings.untilDay", {
-    pickup: time(p),
-    ret: sameDay ? time(r) : `${date(r, { weekday: "short", day: "numeric" })}, ${time(r)}`,
+    pickup: keep(time(p)),
+    ret: keep(sameDay ? time(r) : `${date(r, { weekday: "short", day: "numeric" })}, ${time(r)}`),
   });
   const deposit = b.source !== "OFFLINE" && b.deposit_status ? String(b.deposit_status) : null;
   const late = stage === "PICKUP_LATE" || stage === "OVERDUE";

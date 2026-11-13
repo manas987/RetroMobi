@@ -126,7 +126,8 @@ export function BookingCalendar({ filters, actions, onNewWalkin }: {
                         {list.slice(0, 3).map(({ b, stage }) => (
                           <span key={String(b.id)} className="flex min-w-0 items-center gap-1 rounded-md bg-surface-2 px-1 py-0.5 text-[11px] leading-tight text-ink-2">
                             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE[calTone(stage)].dot}`} />
-                            <span className="truncate">{String(b.registration_number ?? "")} {renterName(b).split(" ")[0]}</span>
+                            {/* Every local plate starts "UK..", so the last four digits are what tells them apart. */}
+                            <span className="truncate">{renterName(b).split(" ")[0]} · {String(b.registration_number ?? "").replace(/\s/g, "").slice(-4)}</span>
                           </span>
                         ))}
                         {list.length > 3 && <span className="px-1 text-[11px] text-ink-3">{t("bookings.more", { count: list.length - 3 })}</span>}
