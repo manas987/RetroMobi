@@ -6,7 +6,7 @@ import type { Tone } from "../../../lib/bookingStage";
 import { useT, type TKey } from "../../../i18n";
 import { useMerchantShop } from "../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { Button, Card, Chip, ConfirmSheet, EmptyState, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "../ui/ui";
+import { Button, Card, Chip, ConfirmSheet, EmptyState, ErrorNote, Field, INPUT, LoadingRows, Select, Sheet } from "../ui/ui";
 import { DocUpload } from "../setup/DocUpload";
 import { useLicenceForm } from "../setup/LicenceStep";
 
@@ -155,9 +155,7 @@ function PaperForm({ token, onDone }: { token: string; onDone: () => void }) {
   return (
     <>
       <Field label={t("shop.paperType")}>
-        <select className={INPUT} value={type} onChange={(e) => setType(e.target.value)}>
-          {DOC_TYPES.map((d) => <option key={d} value={d}>{t(`shop.paper_${d}` as TKey)}</option>)}
-        </select>
+        <Select value={type} onChange={setType} options={DOC_TYPES.map((d) => ({ value: d, label: t(`shop.paper_${d}` as TKey) }))} />
       </Field>
       <Field label={`${t("shop.paperNumber")} (${t("common.optional")})`}><input className={INPUT} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
       <Field label={`${t("setup.licenceExpiry")} (${t("common.optional")})`}><input className={INPUT} type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /></Field>

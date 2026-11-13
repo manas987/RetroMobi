@@ -6,7 +6,7 @@ import { enumLabel } from "../../../lib/format";
 import { useT } from "../../../i18n";
 import { useMerchantShop } from "../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { Button, ErrorNote, Field, INPUT, Sheet } from "../ui/ui";
+import { Button, ErrorNote, Field, INPUT, Select, Sheet } from "../ui/ui";
 
 export function AddVehicleSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useT();
@@ -93,16 +93,14 @@ function AddForm({ onClose }: { onClose: () => void }) {
     <div>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       <Field label={t("fleet.fModel")}>
-        <select className={INPUT} value={modelId} onChange={(e) => setModelId(e.target.value)}>
-          <option value="">{t("fleet.pickModel")}</option>
-          {[...byMake].map(([make, list]) => (
-            <optgroup key={make} label={make}>
-              {list.map((m) => (
-                <option key={String(m.id)} value={String(m.id)}>{String(m.model)} ({enumLabel(m.fuel_type)})</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+        <Select
+          value={modelId}
+          onChange={setModelId}
+          placeholder={t("fleet.pickModel")}
+          options={[...byMake].flatMap(([make, list]) =>
+            list.map((m) => ({ value: String(m.id), label: `${String(m.model)} (${enumLabel(m.fuel_type)})`, group: make })),
+          )}
+        />
       </Field>
       <Field label={t("fleet.fPlate")}>
         <input className={INPUT} value={plate} autoCapitalize="characters" onChange={(e) => setPlate(e.target.value.toUpperCase())} />

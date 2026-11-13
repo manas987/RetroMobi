@@ -1,4 +1,5 @@
 import { COUNTRIES, DEFAULT_COUNTRY, type Country } from "../lib/countries";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 export function PhoneInput({
   value,
@@ -16,21 +17,29 @@ export function PhoneInput({
   return (
     <div>
       <div className="flex items-center rounded-full border border-line-strong focus-within:border-ink focus-within:ring-1 focus-within:ring-ink transition-colors overflow-hidden">
-        <select
+        <Select
           value={country.code}
-          onChange={(e) => {
-            const next = COUNTRIES.find((c) => c.code === e.target.value);
+          onValueChange={(code) => {
+            const next = COUNTRIES.find((c) => c.code === code);
             if (next) onCountryChange(next);
           }}
-          className="shrink-0 bg-transparent px-2.5 py-2.5 text-sm text-ink-2 border-r border-line outline-none"
-          aria-label="Country code"
         >
-          {COUNTRIES.map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.flag} {c.dial}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            aria-label="Country code"
+            className="h-auto shrink-0 self-stretch rounded-none border-0 border-r border-line bg-transparent px-3 text-ink-2"
+          >
+            <SelectValue>
+              {country.flag} {country.dial}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className="z-[1150] max-h-72">
+            {COUNTRIES.map((c) => (
+              <SelectItem key={c.code} value={c.code}>
+                {c.flag} {c.dial} · {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <input
           type="tel"
           inputMode="numeric"

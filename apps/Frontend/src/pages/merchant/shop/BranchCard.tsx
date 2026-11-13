@@ -7,7 +7,7 @@ import type { Tone } from "../../../lib/bookingStage";
 import { useT, type TKey } from "../../../i18n";
 import { Toggle } from "../../../components/Toggle";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { Button, Card, Chip, ConfirmSheet, ErrorNote, INPUT } from "../ui/ui";
+import { Button, Card, Chip, ConfirmSheet, ErrorNote, Select } from "../ui/ui";
 import type { SetupData } from "../setup/GetListedChip";
 import { BranchSheet } from "./BranchSheet";
 import { HoursSheet } from "./HoursSheet";
@@ -87,10 +87,15 @@ export function BranchCard({ shop: s, token, licences, reloadShops, selectShop, 
             )}
             {canWrite && unused.length > 0 && (
               <div className="flex gap-2">
-                <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label={t("shop.attachPick")} className={`${INPUT} min-h-11 flex-1`}>
-                  <option value="">{t("shop.attachPick")}</option>
-                  {unused.map((l) => <option key={String(l.id)} value={String(l.id)}>{String(l.licence_number)}</option>)}
-                </select>
+                <Select
+                  compact
+                  className="flex-1"
+                  ariaLabel={t("shop.attachPick")}
+                  placeholder={t("shop.attachPick")}
+                  value={pick}
+                  onChange={setPick}
+                  options={unused.map((l) => ({ value: String(l.id), label: String(l.licence_number) }))}
+                />
                 <Button disabled={busy || !pick} onClick={() => { const l = unused.find((x) => String(x.id) === pick); if (l) { setPick(""); link(l); } }}>{t("shop.attach")}</Button>
               </div>
             )}

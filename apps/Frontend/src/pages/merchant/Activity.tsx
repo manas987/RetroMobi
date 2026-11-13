@@ -7,7 +7,7 @@ import { istDay } from "../../lib/format";
 import { useT } from "../../i18n";
 import { MerchantLayout, useMerchantShop } from "./Layout";
 import { useMerchantQuery, useUrlParam, useUrlString } from "./query";
-import { Button, Card, Chip, DayHeading, EmptyState, ErrorNote, INPUT, LoadingRows, PageHeader } from "./ui/ui";
+import { Button, Card, Chip, DayHeading, EmptyState, ErrorNote, LoadingRows, PageHeader, Select } from "./ui/ui";
 import { activityText, actorName, type ActivityItem } from "./staff/activityText";
 import { Avatar } from "./staff/MemberCard";
 import type { Role } from "./staff/RoleCards";
@@ -69,17 +69,25 @@ function ActivityBody() {
       ) : (
         <>
           <div className="mb-4 flex flex-wrap gap-3">
-            <select aria-label={t("staff.person")} className={`${INPUT} min-h-11 flex-1 @md:w-56 @md:flex-none`} value={actorId ?? ""} onChange={(e) => setActorId(e.target.value || null)}>
-              <option value="">{t("staff.everyone")}</option>
-              {(members.data?.members ?? []).map((m) => (
-                <option key={String(m.id)} value={String(m.merchant_user_id)}>{String(m.name ?? "") || String(m.phone)}</option>
-              ))}
-            </select>
-            <select aria-label={t("staff.kind")} className={`${INPUT} min-h-11 flex-1 @md:w-56 @md:flex-none`} value={kind} onChange={(e) => setKind(e.target.value === "all" ? null : (e.target.value as (typeof KINDS)[number]))}>
-              {KINDS.map((k) => (
-                <option key={k} value={k}>{t(`staff.kind_${k}`)}</option>
-              ))}
-            </select>
+            <Select
+              compact
+              ariaLabel={t("staff.person")}
+              className="flex-1 @md:w-56 @md:flex-none"
+              value={actorId ?? ""}
+              onChange={(v) => setActorId(v || null)}
+              options={[
+                { value: "", label: t("staff.everyone") },
+                ...(members.data?.members ?? []).map((m) => ({ value: String(m.merchant_user_id), label: String(m.name ?? "") || String(m.phone) })),
+              ]}
+            />
+            <Select
+              compact
+              ariaLabel={t("staff.kind")}
+              className="flex-1 @md:w-56 @md:flex-none"
+              value={kind}
+              onChange={(v) => setKind(v === "all" ? null : v)}
+              options={KINDS.map((k) => ({ value: k, label: t(`staff.kind_${k}`) }))}
+            />
           </div>
 
           {q.isPending ? (

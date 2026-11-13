@@ -7,7 +7,7 @@ import { useT, type TKey } from "../../../../i18n";
 import type { Tone } from "../../../../lib/bookingStage";
 import { useMerchantShop } from "../../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../../query";
-import { Button, Card, Chip, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "../../ui/ui";
+import { Button, Card, Chip, ErrorNote, Field, INPUT, LoadingRows, Select, Sheet } from "../../ui/ui";
 import { DOC_LABEL, useSetup } from "../SetupBoard";
 
 const TYPES = ["RC", "INSURANCE", "PUC", "FITNESS", "PERMIT", "TAX"] as const;
@@ -156,9 +156,7 @@ function AddPaper({ id, initialType, onDone }: { id: string; initialType: string
     <div>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       <Field label={t("fleet.fPaperType")}>
-        <select className={INPUT} value={type} onChange={(e) => setType(e.target.value)}>
-          {TYPES.map((k) => <option key={k} value={k}>{t(DOC_LABEL[k]!)}</option>)}
-        </select>
+        <Select value={type} onChange={setType} options={TYPES.map((k) => ({ value: k, label: t(DOC_LABEL[k]!) }))} />
       </Field>
       <Field label={`${t("fleet.fPaperNumber")} (${t("common.optional")})`}><input className={INPUT} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
       <Field label={`${t("fleet.fExpires")}${type === "RC" ? ` (${t("common.optional")})` : ""}`}><input className={INPUT} type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /></Field>

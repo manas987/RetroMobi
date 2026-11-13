@@ -1,7 +1,8 @@
 import { useRef, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import * as RSelect from "@radix-ui/react-select";
 import { Link } from "wouter";
-import { X, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, X, type LucideIcon } from "lucide-react";
 import type { Tone } from "../../../lib/bookingStage";
 import { useT } from "../../../i18n";
 import { istDay } from "../../../lib/format";
@@ -432,6 +433,90 @@ export function Field({
       {hint && !error && <span className="text-xs text-ink-3">{hint}</span>}
       {error && <span className="text-xs text-danger">{error}</span>}
     </label>
+  );
+}
+
+export type SelectOption<V extends string> = { value: V; label: string; group?: string };
+
+// Radix reserves "" for "nothing chosen", but filters use "" for "All".
+const ALL = "__all";
+
+/** The dropdown for merchant forms and filters, drawn by us rather than the OS. */
+export function Select<V extends string>({
+  value,
+  onChange,
+  options,
+  placeholder,
+  ariaLabel,
+  compact = false,
+  disabled = false,
+  className = "",
+}: {
+  value: V | "";
+  onChange: (v: V) => void;
+  options: SelectOption<V>[];
+  /** Shown while `value` is "" and no option has the value "". */
+  placeholder?: string;
+  ariaLabel?: string;
+  compact?: boolean;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const hasAll = options.some((o) => o.value === "");
+  const groups: { name?: string; items: SelectOption<V>[] }[] = [];
+  for (const o of options) {
+    const last = groups[groups.length - 1];
+    if (last && last.name === o.group) last.items.push(o);
+    else groups.push({ name: o.group, items: [o] });
+  }
+  return (
+    <RSelect.Root
+      value={value === "" ? (hasAll ? ALL : "") : value}
+      onValueChange={(v) => onChange((v === ALL ? "" : v) as V)}
+      disabled={disabled}
+    >
+      <RSelect.Trigger
+        aria-label={ariaLabel}
+        className={`group flex w-full items-center justify-between gap-2 rounded-2xl border border-line-strong bg-surface px-4 text-left text-base text-ink outline-none transition-colors hover:border-ink-3 focus-visible:border-ink data-[state=open]:border-ink disabled:opacity-50 ${
+          compact ? "min-h-11" : "min-h-12"
+        } ${className}`}
+      >
+        <span className="min-w-0 flex-1 truncate leading-normal">
+          <RSelect.Value placeholder={<span className="text-ink-3">{placeholder}</span>} />
+        </span>
+        <ChevronDown aria-hidden className="h-5 w-5 shrink-0 text-ink-3 transition-transform group-data-[state=open]:rotate-180" />
+      </RSelect.Trigger>
+      <RSelect.Portal>
+        <RSelect.Content
+          position="popper"
+          sideOffset={6}
+          collisionPadding={12}
+          className="z-[1150] flex max-h-[min(var(--radix-select-content-available-height),22rem)] min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_16px_40px_rgba(18,22,26,0.16)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+        >
+          <RSelect.Viewport className="p-1.5">
+            {groups.map((g, i) => (
+              <RSelect.Group key={`${g.name ?? ""}-${i}`}>
+                {g.name && (
+                  <RSelect.Label className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-ink-3">{g.name}</RSelect.Label>
+                )}
+                {g.items.map((o) => (
+                  <RSelect.Item
+                    key={o.value || ALL}
+                    value={o.value || ALL}
+                    className="relative flex min-h-11 cursor-pointer select-none items-center rounded-xl py-2 pl-3 pr-10 text-base text-ink outline-none data-[highlighted]:bg-surface-3 data-[state=checked]:font-semibold"
+                  >
+                    <RSelect.ItemText>{o.label}</RSelect.ItemText>
+                    <RSelect.ItemIndicator className="absolute right-3 inline-flex">
+                      <Check className="h-5 w-5 text-ink" aria-hidden />
+                    </RSelect.ItemIndicator>
+                  </RSelect.Item>
+                ))}
+              </RSelect.Group>
+            ))}
+          </RSelect.Viewport>
+        </RSelect.Content>
+      </RSelect.Portal>
+    </RSelect.Root>
   );
 }
 
