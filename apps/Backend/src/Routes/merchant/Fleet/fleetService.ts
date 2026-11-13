@@ -300,11 +300,19 @@ async function requireDocument(pool: Pool, vehicleId: string, documentId: string
   return rows[0];
 }
 
-export async function attachDocumentFile(pool: Pool, merchantUserId: string, documentId: string, storageKey: string) {
+export async function attachDocumentFile(
+  pool: Pool,
+  merchantUserId: string,
+  vehicleId: string,
+  documentId: string,
+  storageKey: string,
+) {
+  // Pinned to the vehicle in the URL: requirePermission only vouches for that
+  // vehicle's shop, not for whichever document id the caller names.
   const { rows } = await pool.query(
     `update vehicle_documents set storage_key = $1, updated_at = now()
-      where id = $2 and deleted_at is null returning *`,
-    [storageKey, documentId],
+      where id = $2 and vehicle_id = $3 and deleted_at is null returning *`,
+    [storageKey, documentId, vehicleId],
   );
   if (rows.length === 0) throw new VehicleNotFoundError(`document ${documentId} not found`);
   await writeAudit(pool, {

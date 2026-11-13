@@ -7,7 +7,9 @@ import {
   ModelNotFoundError,
   TrackerAlreadyAssignedError,
   VehicleHasActiveBookingsError,
+  VehicleNotFoundError,
   assignTracker,
+  attachDocumentFile,
   createVehicle,
   softDeleteVehicle,
 } from "./fleetService.ts";
@@ -75,5 +77,19 @@ describe("merchant fleet", () => {
         rows[0].tracker_id,
       ]),
     ).rejects.toMatchObject({ code: "23505" });
+  });
+
+  test("a document can only be confirmed through its own vehicle", async () => {
+    const mine = await createBookableVehicle(pool);
+    const theirs = await createBookableVehicle(pool);
+    const { rows } = await pool.query(
+      `insert into vehicle_documents (vehicle_id, type) values ($1, 'RC') returning id`,
+      [theirs.id],
+    );
+    await expect(
+      attachDocumentFile(pool, crypto.randomUUID(), mine.id, rows[0].id, `vehicles/${mine.id}/documents/${rows[0].id}/1700000000000`),
+    ).rejects.toBeInstanceOf(VehicleNotFoundError);
+    const after = await pool.query(`select storage_key from vehicle_documents where id = $1`, [rows[0].id]);
+    expect(after.rows[0].storage_key).toBeNull();
   });
 });

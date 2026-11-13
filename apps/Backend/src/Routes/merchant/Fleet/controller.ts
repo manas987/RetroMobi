@@ -89,6 +89,7 @@ export async function confirmDocument(req: Request, res: Response) {
   const document = await fleetService.attachDocumentFile(
     pool,
     req.merchantUserId!,
+    pathParam(req, "vehicleId"),
     pathParam(req, "documentId"),
     req.body.storageKey,
   );
