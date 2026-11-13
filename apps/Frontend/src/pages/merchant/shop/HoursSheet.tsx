@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Row } from "../../../lib/portal";
 import { portalFetch } from "../../../lib/portal";
 import { useT } from "../../../i18n";
-import { Button, ErrorNote, INPUT, LoadingRows, Sheet } from "../ui/ui";
+import { Button, ErrorNote, LoadingRows, Select, Sheet } from "../ui/ui";
 import { Toggle } from "../../../components/Toggle";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
 
@@ -13,6 +13,7 @@ export type Hours = Record<number, Slot>;
 /** Monday first. */
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const DEFAULT_SLOT = { opensAt: "09:00", closesAt: "19:00" };
+const HALF_HOURS = Array.from({ length: 38 }, (_, i) => `${String(5 + Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 
 /** From `GET /shops/:id`. A shop with no hours yet starts open 09:00-19:00 every day. */
 export function hoursFromShop(shop: Row | undefined): Hours {
@@ -35,8 +36,11 @@ export const hoursInvalid = (h: Hours) => {
 };
 
 export function HoursEditor({ value, onChange }: { value: Hours; onChange: (h: Hours) => void }) {
-  const { t, date } = useT();
+  const { t, date, time } = useT();
   const set = (d: number, s: Slot) => onChange({ ...value, [d]: s });
+  // Every half hour from 5 am to 11:30 pm, plus a saved time that's off that grid.
+  const timeOptions = (current: string) =>
+    [...new Set([...HALF_HOURS, current])].sort().map((v) => ({ value: v, label: time(`2024-01-01T${v}:00+05:30`) }));
   return (
     <div className="mb-4">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -57,9 +61,9 @@ export function HoursEditor({ value, onChange }: { value: Hours; onChange: (h: H
               </span>
               {s ? (
                 <span className="flex items-center gap-2">
-                  <input type="time" aria-label={t("setup.opensAt")} value={s.opensAt} onChange={(e) => set(d, { ...s, opensAt: e.target.value })} className={`${INPUT} !min-h-11 !w-auto !px-3 text-sm`} />
+                  <Select compact className="w-36" ariaLabel={t("setup.opensAt")} value={s.opensAt} onChange={(v) => set(d, { ...s, opensAt: v })} options={timeOptions(s.opensAt)} />
                   <span className="text-ink-3">{t("common.to")}</span>
-                  <input type="time" aria-label={t("setup.closesAt")} value={s.closesAt} onChange={(e) => set(d, { ...s, closesAt: e.target.value })} className={`${INPUT} !min-h-11 !w-auto !px-3 text-sm`} />
+                  <Select compact className="w-36" ariaLabel={t("setup.closesAt")} value={s.closesAt} onChange={(v) => set(d, { ...s, closesAt: v })} options={timeOptions(s.closesAt)} />
                 </span>
               ) : (
                 <span className="text-sm text-ink-3">{t("setup.closedDay")}</span>

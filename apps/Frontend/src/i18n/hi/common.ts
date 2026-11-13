@@ -62,4 +62,7 @@ export default {
   whyNeeded: "यह क्यों चाहिए",
   askOwner: "यह काम दुकान के मालिक से करवाएँ।",
   showOlder: "पुराने देखें",
+  pickDate: "तारीख चुनें",
+  pickYear: "साल चुनें",
+  clear: "हटाएँ",
 } satisfies Record<keyof typeof en, string>;

@@ -4,7 +4,7 @@ import { portalFetch, type Row } from "../../../../lib/portal";
 import { useT, type TKey } from "../../../../i18n";
 import { useMerchantShop } from "../../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../../query";
-import { Button, Card, EmptyState, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "../../ui/ui";
+import { Button, Card, EmptyState, ErrorNote, DateInput, Field, INPUT, LoadingRows, Sheet } from "../../ui/ui";
 
 /** What the RC carries. Only the registration number is required. */
 const FIELDS: { key: string; label: TKey; numeric?: boolean }[] = [
@@ -103,7 +103,7 @@ function RegistrationForm({ id, record, onDone }: { id: string; record: Row | nu
           <input className={INPUT} type={f.numeric ? "number" : "text"} inputMode={f.numeric ? "numeric" : undefined} value={fields[f.key]} onChange={(e) => setFields((p) => ({ ...p, [f.key]: e.target.value }))} />
         </Field>
       ))}
-      <Field label={t("fleet.reg_taxValidUntil")}><input className={INPUT} type="date" value={tax} onChange={(e) => setTax(e.target.value)} /></Field>
+      <Field label={t("fleet.reg_taxValidUntil")}><DateInput clearable value={tax} onChange={setTax} /></Field>
       <Button variant="primary" size="lg" className="w-full" disabled={busy || !number.trim() || badNumber} onClick={save}>{busy ? t("common.saving") : t("common.save")}</Button>
     </div>
   );

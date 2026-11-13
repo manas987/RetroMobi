@@ -5,7 +5,7 @@ import { portalFetch } from "../../../lib/portal";
 import { uploadFile } from "../../../lib/upload";
 import { useT } from "../../../i18n";
 import { errorText, useInvalidateMerchant } from "../query";
-import { Field, INPUT } from "../ui/ui";
+import { DateInput, Field, INPUT } from "../ui/ui";
 import { DocUpload } from "./DocUpload";
 import { StepCard } from "./Stepper";
 import type { SetupData } from "./GetListedChip";
@@ -52,7 +52,7 @@ export function useLicenceForm(token: string, shopId: string, onDone: () => void
   const form = (
     <>
       <Field label={t("setup.licenceNumber")}><input className={INPUT} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
-      <Field label={t("setup.licenceExpiry")}><input className={INPUT} type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /></Field>
+      <Field label={t("setup.licenceExpiry")}><DateInput value={expiresAt} onChange={setExpiresAt} /></Field>
       <DocUpload label={t("setup.licencePhoto")} accept="image/*,application/pdf" capture busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
     </>
   );

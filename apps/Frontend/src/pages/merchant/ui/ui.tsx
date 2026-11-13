@@ -1,8 +1,12 @@
-import { useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as RSelect from "@radix-ui/react-select";
 import { Link } from "wouter";
-import { Check, ChevronDown, X, type LucideIcon } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, X, type LucideIcon } from "lucide-react";
+import { enIN } from "react-day-picker/locale/en-IN";
+import { hi } from "react-day-picker/locale/hi";
+import { Calendar } from "../../../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import type { Tone } from "../../../lib/bookingStage";
 import { useT } from "../../../i18n";
 import { istDay } from "../../../lib/format";
@@ -517,6 +521,80 @@ export function Select<V extends string>({
         </RSelect.Content>
       </RSelect.Portal>
     </RSelect.Root>
+  );
+}
+
+/**
+ * A calendar date ("YYYY-MM-DD", or "" for none). Days before `min` (default:
+ * today, since every merchant date is an expiry or a future block) can't be
+ * picked; tapping the month title jumps by year for far-off expiries.
+ */
+export function DateInput({
+  value,
+  onChange,
+  min,
+  max,
+  placeholder,
+  ariaLabel,
+  clearable = false,
+}: {
+  value: string;
+  onChange: (day: string) => void;
+  min?: string;
+  max?: string;
+  placeholder?: string;
+  ariaLabel?: string;
+  clearable?: boolean;
+}) {
+  const { t, lang, date } = useT();
+  const [open, setOpen] = useState(false);
+  // Local noon, so no timezone can push the day across midnight.
+  const noon = (day: string) => new Date(`${day}T12:00:00`);
+  const lo = noon(min ?? istDay(new Date()));
+  const selected = value ? noon(value) : undefined;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={ariaLabel}
+          className="group flex min-h-12 w-full items-center gap-3 rounded-2xl border border-line-strong bg-surface px-4 text-left text-base outline-none transition-colors hover:border-ink-3 focus-visible:border-ink data-[state=open]:border-ink"
+        >
+          <CalendarDays className="h-5 w-5 shrink-0 text-ink-3" aria-hidden />
+          <span className={`min-w-0 flex-1 truncate leading-normal ${value ? "text-ink" : "text-ink-3"}`}>
+            {value ? date(`${value}T12:00:00+05:30`, { day: "numeric", month: "long", year: "numeric" }) : (placeholder ?? t("common.pickDate"))}
+          </span>
+          <ChevronDown aria-hidden className="h-5 w-5 shrink-0 text-ink-3 transition-transform group-data-[state=open]:rotate-180" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="rounded-2xl">
+        <Calendar
+          mode="single"
+          selected={selected}
+          defaultMonth={selected ?? lo}
+          captionLayout="dropdown"
+          startMonth={lo}
+          endMonth={max ? noon(max) : undefined}
+          disabled={max ? [{ before: lo }, { after: noon(max) }] : { before: lo }}
+          locale={lang === "hi" ? hi : enIN}
+          weekStartsOn={1}
+          pickYearLabel={t("common.pickYear")}
+          classNames={{ today: "[&>button]:font-semibold [&>button]:ring-1 [&>button]:ring-line-strong" }}
+          onSelect={(d) => {
+            if (!d) return;
+            onChange(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+            setOpen(false);
+          }}
+          autoFocus
+        />
+        {clearable && value && (
+          <div className="flex justify-end border-t border-line px-3 py-2">
+            <Button variant="ghost" onClick={() => { onChange(""); setOpen(false); }}>{t("common.clear")}</Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 

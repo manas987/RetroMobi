@@ -144,6 +144,7 @@ export default {
   replaceFile: "Replace file",
   fPaperType: "Which paper?",
   fPaperNumber: "Paper number",
+  fPaperFile: "Photo or PDF of the paper",
   fExpires: "Valid till",
   upcomingTitle: "Bookings for this vehicle",
   blocksTitle: "Block days: service, repair, own use",

@@ -145,6 +145,7 @@ export default {
   replaceFile: "फ़ाइल बदलें",
   fPaperType: "कौन-सा कागज़?",
   fPaperNumber: "कागज़ का नंबर",
+  fPaperFile: "कागज़ की फ़ोटो या PDF",
   fExpires: "कब तक चालू",
   upcomingTitle: "इस गाड़ी की बुकिंग",
   blocksTitle: "दिन बंद करें: सर्विस, मरम्मत, अपना इस्तेमाल",

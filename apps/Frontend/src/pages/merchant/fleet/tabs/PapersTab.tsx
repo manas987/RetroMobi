@@ -7,7 +7,8 @@ import { useT, type TKey } from "../../../../i18n";
 import type { Tone } from "../../../../lib/bookingStage";
 import { useMerchantShop } from "../../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../../query";
-import { Button, Card, Chip, ErrorNote, Field, INPUT, LoadingRows, Select, Sheet } from "../../ui/ui";
+import { DocUpload } from "../../setup/DocUpload";
+import { Button, Card, Chip, ErrorNote, DateInput, Field, INPUT, LoadingRows, Select, Sheet } from "../../ui/ui";
 import { DOC_LABEL, useSetup } from "../SetupBoard";
 
 const TYPES = ["RC", "INSURANCE", "PUC", "FITNESS", "PERMIT", "TAX"] as const;
@@ -159,10 +160,8 @@ function AddPaper({ id, initialType, onDone }: { id: string; initialType: string
         <Select value={type} onChange={setType} options={TYPES.map((k) => ({ value: k, label: t(DOC_LABEL[k]!) }))} />
       </Field>
       <Field label={`${t("fleet.fPaperNumber")} (${t("common.optional")})`}><input className={INPUT} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
-      <Field label={`${t("fleet.fExpires")}${type === "RC" ? ` (${t("common.optional")})` : ""}`}><input className={INPUT} type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /></Field>
-      <Field label={t("common.takePhoto")} hint={file?.name}>
-        <input className="text-sm" type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      </Field>
+      <Field label={`${t("fleet.fExpires")}${type === "RC" ? ` (${t("common.optional")})` : ""}`}><DateInput clearable={type === "RC"} value={expiresAt} onChange={setExpiresAt} /></Field>
+      <DocUpload label={t("fleet.fPaperFile")} accept="image/*,application/pdf" busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
       <Button variant="primary" size="lg" className="w-full" disabled={busy} onClick={save}>{busy ? t("common.saving") : t("common.save")}</Button>
     </div>
   );

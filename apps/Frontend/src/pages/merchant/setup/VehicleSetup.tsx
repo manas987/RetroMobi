@@ -3,9 +3,8 @@ import { Camera, CheckCircle2, ChevronDown, FileText, IndianRupee, type LucideIc
 import { portalFetch, PortalApiError, type Row } from "../../../lib/portal";
 import { uploadFile } from "../../../lib/upload";
 import { useT, type TKey } from "../../../i18n";
-import { istDay } from "../../../lib/format";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { Button, Chip, ErrorNote, Field, INPUT } from "../ui/ui";
+import { Button, Chip, ErrorNote, DateInput, Field, INPUT } from "../ui/ui";
 import { DocUpload } from "./DocUpload";
 import type { DocType, SetupVehicle } from "./GetListedChip";
 
@@ -187,7 +186,7 @@ function DocForm({ vehicleId, type, doc, token }: { vehicleId: string; type: Doc
   return (
     <>
       {doc.state !== "MISSING" && <p className="mb-3 rounded-2xl bg-danger-soft px-3 py-2 text-sm text-danger">{doc.note ?? (doc.state === "EXPIRED" ? t("setup.docExpired") : t("setup.docRejected"))}</p>}
-      {needsExpiry && <Field label={t("setup.docExpiry")}><input className={INPUT} type="date" min={istDay(new Date())} value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /></Field>}
+      {needsExpiry && <Field label={t("setup.docExpiry")}><DateInput value={expiresAt} onChange={setExpiresAt} /></Field>}
       <DocUpload label={t("setup.docFile")} accept="image/*,application/pdf" capture busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
       {error && <div className="mb-3"><ErrorNote text={error} /></div>}
       <Button className="mb-2" disabled={busy || !file || (needsExpiry && !expiresAt)} onClick={save}>{busy ? t("common.saving") : t("common.save")}</Button>

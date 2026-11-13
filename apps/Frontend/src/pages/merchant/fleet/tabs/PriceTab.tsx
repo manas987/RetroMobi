@@ -5,7 +5,7 @@ import { rupees } from "../../../../lib/format";
 import { useT } from "../../../../i18n";
 import { useMerchantShop } from "../../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../../query";
-import { Button, Card, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "../../ui/ui";
+import { Button, Card, ErrorNote, DateInput, Field, INPUT, LoadingRows, Sheet } from "../../ui/ui";
 
 const toPaise = (rupeeValue: string) => Math.round(Number(rupeeValue) * 100);
 const fromPaise = (paise: unknown) => (paise == null ? "" : String(Number(paise) / 100));
@@ -181,8 +181,8 @@ function SpecialForm({ id, onDone }: { id: string; onDone: () => void }) {
       <Field label={t("fleet.specialName")}><input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} /></Field>
       <Field label={t("fleet.fPerDay")}><input className={INPUT} type="number" inputMode="numeric" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
       <Field label={`${t("fleet.fWeekend")} (${t("common.optional")})`}><input className={INPUT} type="number" inputMode="numeric" min="0" value={weekend} onChange={(e) => setWeekend(e.target.value)} /></Field>
-      <Field label={t("common.from")}><input className={INPUT} type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-      <Field label={t("common.to")} error={badRange ? t("fleet.badRange") : undefined}><input className={INPUT} type="date" value={until} onChange={(e) => setUntil(e.target.value)} /></Field>
+      <Field label={t("common.from")}><DateInput value={from} onChange={setFrom} /></Field>
+      <Field label={t("common.to")} error={badRange ? t("fleet.badRange") : undefined}><DateInput value={until} min={from || undefined} onChange={setUntil} /></Field>
       <Button variant="primary" size="lg" className="w-full" disabled={busy || !name.trim() || Number(amount) <= 0 || !from || !until || badRange} onClick={save}>
         {busy ? t("common.saving") : t("common.save")}
       </Button>
