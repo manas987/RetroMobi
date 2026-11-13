@@ -96,4 +96,5 @@ export default {
   need_pincode: "6-digit pincode",
   need_pin: "pin on the map",
   need_hours: "opening hours (closing after opening)",
+  timeTo: "to",
 };

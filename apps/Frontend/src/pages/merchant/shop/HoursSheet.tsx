@@ -35,7 +35,16 @@ export const hoursInvalid = (h: Hours) => {
   return open.length === 0 || open.some((x) => x.closesAt <= x.opensAt);
 };
 
-export function HoursEditor({ value, onChange }: { value: Hours; onChange: (h: Hours) => void }) {
+export function HoursEditor({
+  value,
+  onChange,
+  heading = true,
+}: {
+  value: Hours;
+  onChange: (h: Hours) => void;
+  /** Off inside the hours popup, whose title already says "Opening hours". */
+  heading?: boolean;
+}) {
   const { t, date, time } = useT();
   const set = (d: number, s: Slot) => onChange({ ...value, [d]: s });
   // Every half hour from 5 am to 11:30 pm, plus a saved time that's off that grid.
@@ -44,7 +53,7 @@ export function HoursEditor({ value, onChange }: { value: Hours; onChange: (h: H
   return (
     <div className="mb-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-ink">{t("setup.hoursTitle")}</span>
+        {heading ? <span className="text-sm font-medium text-ink">{t("setup.hoursTitle")}</span> : <span />}
         <Button variant="ghost" onClick={() => onChange(Object.fromEntries(DAY_ORDER.map((d) => [d, value[1] ?? { ...DEFAULT_SLOT }])))}>
           {t("setup.sameEveryDay")}
         </Button>
@@ -60,10 +69,10 @@ export function HoursEditor({ value, onChange }: { value: Hours; onChange: (h: H
                 {name}
               </span>
               {s ? (
-                <span className="flex items-center gap-2">
-                  <Select compact className="w-36" ariaLabel={t("setup.opensAt")} value={s.opensAt} onChange={(v) => set(d, { ...s, opensAt: v })} options={timeOptions(s.opensAt)} />
-                  <span className="text-ink-3">{t("common.to")}</span>
-                  <Select compact className="w-36" ariaLabel={t("setup.closesAt")} value={s.closesAt} onChange={(v) => set(d, { ...s, closesAt: v })} options={timeOptions(s.closesAt)} />
+                <span className="flex w-full items-center gap-2 sm:w-auto sm:flex-1">
+                  <Select compact className="flex-1 px-3" ariaLabel={t("setup.opensAt")} value={s.opensAt} onChange={(v) => set(d, { ...s, opensAt: v })} options={timeOptions(s.opensAt)} />
+                  <span className="text-ink-3">{t("setup.timeTo")}</span>
+                  <Select compact className="flex-1 px-3" ariaLabel={t("setup.closesAt")} value={s.closesAt} onChange={(v) => set(d, { ...s, closesAt: v })} options={timeOptions(s.closesAt)} />
                 </span>
               ) : (
                 <span className="text-sm text-ink-3">{t("setup.closedDay")}</span>
@@ -108,7 +117,7 @@ function HoursForm({ shop, shopId, token, onClose }: { shop: Row; shopId: string
   }
   return (
     <>
-      <HoursEditor value={hours} onChange={setHours} />
+      <HoursEditor value={hours} onChange={setHours} heading={false} />
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       <Button variant="primary" size="lg" className="w-full" disabled={busy || hoursInvalid(hours)} onClick={save}>
         {busy ? t("common.saving") : t("common.save")}

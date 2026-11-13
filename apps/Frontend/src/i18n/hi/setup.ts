@@ -97,4 +97,5 @@ export default {
   need_pincode: "6 अंकों का पिनकोड",
   need_pin: "नक्शे पर पिन",
   need_hours: "खुलने का समय (बंद होने का समय बाद में हो)",
+  timeTo: "तक",
 } satisfies Record<keyof typeof en, string>;
