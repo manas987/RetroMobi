@@ -97,4 +97,6 @@ export default {
   need_pin: "pin on the map",
   need_hours: "opening hours (closing after opening)",
   timeTo: "to",
+  need_bank: "a bank account",
+  need_vehicle: "at least 1 vehicle with every item done",
 };

@@ -21,7 +21,7 @@ export function VehiclesStep({ setup, vehicleId, setVehicle, ...p }: StepProps &
   const min = setup.minVehiclesForShop;
 
   return (
-    <StepCard step="vehicles" title={t("setup.vehiclesTitle")} why={t("setup.vehiclesWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={p.next} saveLabel={t("common.continue")} disabled={!setup.steps.vehicles}>
+    <StepCard step="vehicles" title={t("setup.vehiclesTitle")} why={t("setup.vehiclesWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={p.next} saveLabel={t("common.continue")} disabled={!setup.steps.vehicles} missing={[t("setup.need_vehicle")]}>
       {open ? (
         <>
           <button type="button" onClick={() => setVehicle(null)} className="mb-3 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-ink-2">

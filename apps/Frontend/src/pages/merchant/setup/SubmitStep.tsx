@@ -34,7 +34,8 @@ export function SubmitStep({ setup, goStep, ...p }: StepProps & { setup: SetupDa
   }
 
   return (
-    <StepCard step="submit" title={t("setup.submitTitle")} why={t("setup.submitWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={send} saveLabel={t("setup.sendShop")} busy={busy} disabled={!ready || setup.steps.submitted} error={error}>
+    <StepCard step="submit" title={t("setup.submitTitle")} why={t("setup.submitWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={send} saveLabel={t("setup.sendShop")} busy={busy} disabled={!ready || setup.steps.submitted}
+      missing={setup.steps.submitted ? [] : CHECKS.filter((k) => !setup.steps[k]).map((k) => t(`setup.step_${k}` as TKey))} error={error}>
       <ul className="mb-4 flex flex-col gap-2">
         {CHECKS.map((k) => {
           const ok = setup.steps[k];

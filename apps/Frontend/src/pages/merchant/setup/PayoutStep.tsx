@@ -9,7 +9,7 @@ export function PayoutStep({ setup, ...p }: StepProps & { setup: SetupData }) {
   const { t } = useT();
   const invalidate = useInvalidateMerchant();
   return (
-    <StepCard step="payout" title={t("setup.payoutTitle")} why={t("setup.payoutWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={p.next} saveLabel={t("common.continue")} disabled={!setup.steps.payout}>
+    <StepCard step="payout" title={t("setup.payoutTitle")} why={t("setup.payoutWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={p.next} saveLabel={t("common.continue")} disabled={!setup.steps.payout} missing={[t("setup.need_bank")]}>
       <div className="mb-4"><PayoutAccountSection onChanged={() => void invalidate()} /></div>
     </StepCard>
   );

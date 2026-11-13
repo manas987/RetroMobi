@@ -98,4 +98,6 @@ export default {
   need_pin: "नक्शे पर पिन",
   need_hours: "खुलने का समय (बंद होने का समय बाद में हो)",
   timeTo: "तक",
+  need_bank: "बैंक खाता",
+  need_vehicle: "कम से कम 1 गाड़ी जिसका सब कुछ पूरा हो",
 } satisfies Record<keyof typeof en, string>;
