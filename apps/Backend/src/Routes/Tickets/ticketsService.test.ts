@@ -105,3 +105,22 @@ test("the merchant inbox says whether the latest message is the merchant's own",
   await postMessage(pool, ticket.id, { partyType: "MERCHANT", partyId: merchantId }, "Thanks");
   expect((await find()).latest_is_mine).toBe(true);
 });
+
+test("a merchant can only open a chat about a booking at their own shop", async () => {
+  const user = await createUser(pool);
+  const rider = await createRider(pool, user.id);
+  const vehicle = await createBookableVehicle(pool);
+  const group = await pool.query("insert into booking_groups (user_id) values ($1) returning id", [user.id]);
+  const window = futureWindow();
+  const booking = await insertBooking(pool, {
+    vehicleId: vehicle.id, groupId: group.rows[0].id, riderId: rider.id,
+    pickupAt: window.pickupAt.toISOString(), returnAt: window.returnAt.toISOString(),
+  });
+  const owner = await pool.query(`select merchant_user_id from shops where id = $1`, [vehicle.shopId]);
+  const stranger = await createMerchant(pool);
+
+  await expect(openTicket(pool, { openedByType: "MERCHANT", openedById: stranger.id, bookingId: booking.id }))
+    .rejects.toBeInstanceOf(TicketNotAboutBookingError);
+  const ticket = await openTicket(pool, { openedByType: "MERCHANT", openedById: owner.rows[0].merchant_user_id, bookingId: booking.id });
+  expect(ticket.id).toBeTruthy();
+});

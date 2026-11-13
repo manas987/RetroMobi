@@ -57,6 +57,19 @@ export async function openTicket(
       );
       if (!rowCount) throw new TicketNotAboutBookingError("Choose one of your bookings.");
     }
+    // Same rule for a shop: only a booking at a shop this merchant works at.
+    // Otherwise the chat list would show another shop's plate and support's
+    // "add party" picker would offer that shop's customer.
+    if (input.openedByType === "MERCHANT" && input.bookingId) {
+      const { rowCount } = await client.query(
+        `select 1 from bookings b
+           join vehicles v on v.id = b.vehicle_id
+           join shop_members m on m.shop_id = v.shop_id
+          where b.id = $1 and m.merchant_user_id = $2 and m.status = 'ACTIVE' and m.deleted_at is null`,
+        [input.bookingId, input.openedById],
+      );
+      if (!rowCount) throw new TicketNotAboutBookingError("Choose one of your shop's bookings.");
+    }
 
     const assignedTo = await pickAssignee(client);
 
