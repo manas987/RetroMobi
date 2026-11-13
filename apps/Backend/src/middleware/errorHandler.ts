@@ -508,6 +508,12 @@ export function errorHandler(
     return;
   }
 
+  // A malformed id in a URL ("/vehicles/abc") only fails once Postgres casts
+  // it. That is the caller's mistake, not a server fault worth a stack trace.
+  if ((err as { code?: string } | null)?.code === "22P02") {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
   if (err instanceof ForeignStorageKeyError) {
     res.status(400).json({ error: "invalid_storage_key", message: err.message });
     return;
