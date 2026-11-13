@@ -20,7 +20,7 @@ export default {
   noLicenceYet: "No licence added yet.",
   addLicenceLink: "Add a licence",
   attach: "Use",
-  attachPick: "Add another licence to this branch…",
+  attachPick: "Choose a licence…",
   noLicenceForBranch: "No licence covers this branch yet.",
   detach: "Stop using",
   covers: "Covers this branch",

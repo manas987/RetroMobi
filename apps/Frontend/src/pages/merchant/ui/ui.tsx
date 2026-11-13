@@ -484,7 +484,7 @@ export function Select<V extends string>({
     >
       <RSelect.Trigger
         aria-label={ariaLabel}
-        className={`group flex w-full items-center justify-between gap-2 rounded-2xl border border-line-strong bg-surface px-4 text-left text-base text-ink outline-none transition-colors hover:border-ink-3 focus-visible:border-ink data-[state=open]:border-ink disabled:opacity-50 ${
+        className={`group flex w-full min-w-0 items-center justify-between gap-2 rounded-2xl border border-line-strong bg-surface px-4 text-left text-base text-ink outline-none transition-colors hover:border-ink-3 focus-visible:border-ink data-[state=open]:border-ink disabled:opacity-50 ${
           compact ? "min-h-11" : "min-h-12"
         } ${className}`}
       >

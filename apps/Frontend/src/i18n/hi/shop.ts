@@ -21,7 +21,7 @@ export default {
   noLicenceYet: "अभी कोई लाइसेंस नहीं जोड़ा।",
   addLicenceLink: "लाइसेंस जोड़ें",
   attach: "जोड़ें",
-  attachPick: "इस ब्रांच में दूसरा लाइसेंस जोड़ें…",
+  attachPick: "लाइसेंस चुनें…",
   noLicenceForBranch: "इस ब्रांच पर अभी कोई लाइसेंस लागू नहीं है।",
   detach: "इस्तेमाल बंद करें",
   covers: "इस ब्रांच पर लागू",
