@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { Link } from "wouter";
 import { X, type LucideIcon } from "lucide-react";
 import type { Tone } from "../../../lib/bookingStage";
@@ -197,61 +198,60 @@ export function ErrorNote({ text, onRetry }: { text?: string; onRetry?: () => vo
 }
 
 /**
- * A panel for one task (hand over, return, walk-in). Native <dialog> gives
- * focus trapping, Escape-to-close and a backdrop for free. Full screen on a
- * phone, a right-hand drawer from `sm` up.
+ * A popup for one task (hand over, return, walk-in), centred on every screen
+ * size. Radix Dialog rather than native <dialog>: showModal() puts the dialog
+ * in the top layer and makes the rest of the page inert, so the Select and
+ * date popovers (portalled to <body>) would open behind it and be unclickable.
  */
 export function Sheet({
   open,
   onClose,
   title,
+  size = "lg",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: ReactNode;
+  /** "md" for short confirmations, "lg" for forms. */
+  size?: "md" | "lg";
   children: ReactNode;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
   const { t } = useT();
-
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
-
+  // Callers usually clear their data as they close (`open={booking != null}`),
+  // so keep showing the last open content while the close animation plays
+  // instead of collapsing to an empty box.
+  const shown = useRef({ title, children });
+  if (open) shown.current = { title, children };
   return (
-    <dialog
-      ref={ref}
-      aria-labelledby={titleId}
-      onClose={onClose}
-      onClick={(e) => {
-        if (e.target === ref.current) onClose();
-      }}
-      className="m-0 ml-auto h-dvh max-h-dvh w-full max-w-full sm:max-w-lg bg-surface p-0 backdrop:bg-ink/40 open:flex flex-col"
-    >
-      {open && (
-        <>
-          <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
-            <h2 id={titleId} className="text-lg font-semibold text-ink">
-              {title}
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
+    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[1100] bg-ink/45 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content
+          aria-describedby={undefined}
+          // Focus the popup itself, not its first field or the close button: on a
+          // phone a focused field throws the keyboard over half the form.
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).focus();
+          }}
+          className={`fixed left-1/2 top-1/2 z-[1101] flex max-h-[min(88dvh,760px)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-surface shadow-[0_24px_64px_rgba(18,22,26,0.22)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:duration-200 data-[state=closed]:duration-150 ${
+            size === "md" ? "max-w-md" : "max-w-lg"
+          }`}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line py-3 pl-5 pr-3">
+            <Dialog.Title className="text-lg font-semibold leading-snug text-ink">{shown.current.title}</Dialog.Title>
+            <Dialog.Close
               aria-label={t("common.close")}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-ink-2 hover:bg-surface-3"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-ink-2 hover:bg-surface-3"
             >
               <X className="h-5 w-5" />
-            </button>
+            </Dialog.Close>
           </div>
-          <div className="flex-1 overflow-y-auto px-5 py-5">{children}</div>
-        </>
-      )}
-    </dialog>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">{shown.current.children}</div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -459,7 +459,7 @@ export function ConfirmSheet({
 }) {
   const { t } = useT();
   return (
-    <Sheet open={open} onClose={onClose} title={title}>
+    <Sheet open={open} onClose={onClose} title={title} size="md">
       <p className="text-base text-ink-2 mb-6">{body}</p>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       <div className="flex flex-col gap-2">
