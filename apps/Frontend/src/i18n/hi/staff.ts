@@ -51,6 +51,7 @@ export default {
   act_vehicle_listing_changed_on: "{who} ने {vehicle} को RetroMobi पर चालू किया",
   act_vehicle_listing_changed_off: "{who} ने {vehicle} को RetroMobi पर बंद किया",
   act_vehicle_deleted: "{who} ने {vehicle} हटा दी",
+  act_vehicle_moved: "{who} ने {vehicle} को {from} से {to} भेजा",
   act_vehicle_submitted_for_checking: "{who} ने {vehicle} को जाँच के लिए RetroMobi भेजा",
   act_vehicle_document_added: "{who} ने {vehicle} का कागज़ जोड़ा",
   act_vehicle_document_uploaded: "{who} ने {vehicle} का कागज़ अपलोड किया",

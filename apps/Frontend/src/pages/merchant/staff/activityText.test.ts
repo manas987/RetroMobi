@@ -27,6 +27,11 @@ describe("activityText", () => {
       "Ravi invited +91\u00a098000\u00a054321 as Counter staff",
     );
   });
+  test("a move names both branches", () => {
+    expect(activityText({ ...base, action: "vehicle.moved", after: { from: "Rajpur Road", to: "Har Ki Pauri" } }, t)).toBe(
+      "Ravi moved UK07 GH 5520 from Rajpur Road to Har Ki Pauri",
+    );
+  });
   test("an unknown action falls back", () => {
     expect(activityText({ ...base, action: "nope.nothing" }, t)).toBe("Ravi made a change");
   });

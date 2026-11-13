@@ -16,6 +16,10 @@ export const UpdateVehicleSchema = z
   })
   .strict();
 
+// `toShopId`, not `shopId`: requirePermission reads body.shopId as the shop
+// the request is scoped to, which here is the vehicle's current shop.
+export const MoveVehicleSchema = z.object({ toShopId: z.string().uuid() }).strict();
+
 export const RegistrationRecordSchema = z.object({
   registrationNumber: z.string().min(1),
   registrationDate: z.string().optional(),

@@ -44,6 +44,10 @@ export async function remove(req: Request, res: Response) {
   res.status(204).send();
 }
 
+export async function move(req: Request, res: Response) {
+  res.status(200).json(await fleetService.moveVehicle(pool, req.merchantUserId!, pathParam(req, "vehicleId"), req.body.toShopId));
+}
+
 export async function upsertRegistration(req: Request, res: Response) {
   await fleetService.upsertRegistrationRecord(
     pool,

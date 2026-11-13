@@ -51,6 +51,7 @@ export default {
   act_vehicle_listing_changed_on: "{who} turned on {vehicle} on RetroMobi",
   act_vehicle_listing_changed_off: "{who} turned off {vehicle} on RetroMobi",
   act_vehicle_deleted: "{who} removed {vehicle}",
+  act_vehicle_moved: "{who} moved {vehicle} from {from} to {to}",
   act_vehicle_submitted_for_checking: "{who} sent {vehicle} to RetroMobi for checking",
   act_vehicle_document_added: "{who} added a paper for {vehicle}",
   act_vehicle_document_uploaded: "{who} uploaded a paper for {vehicle}",

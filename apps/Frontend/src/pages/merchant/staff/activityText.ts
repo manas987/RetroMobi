@@ -43,5 +43,8 @@ export function activityText(item: ActivityItem, t: T): string {
     // Staff rows: who was invited, and for what.
     phone: typeof item.after?.phone === "string" ? phoneLabel(item.after.phone) : "—",
     role: typeof role === "string" && hasKey(`common.role_${role}`) ? t(`common.role_${role}` as TKey) : "—",
+    // A vehicle moved between branches.
+    from: typeof item.after?.from === "string" ? item.after.from : "—",
+    to: typeof item.after?.to === "string" ? item.after.to : "—",
   });
 }
