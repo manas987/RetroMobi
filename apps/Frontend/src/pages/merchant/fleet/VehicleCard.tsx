@@ -51,7 +51,8 @@ export function VehicleCard({
 
   const listing = () => {
     if (!sv || !stage) return null;
-    if (!write) return <Chip tone={STAGE_TONE[stage]}>{t(`fleet.stage_${stage}` as const)}</Chip>;
+    // Wrapped so the chip keeps its own width in the card's column.
+    if (!write) return <div><Chip tone={STAGE_TONE[stage]}>{t(`fleet.stage_${stage}` as const)}</Chip></div>;
     if (stage === "SHOWING" || stage === "READY") {
       const on = stage === "SHOWING";
       return (
@@ -61,7 +62,7 @@ export function VehicleCard({
         </div>
       );
     }
-    if (stage === "CHECKING") return <Chip tone="info">{t("fleet.stage_CHECKING")}</Chip>;
+    if (stage === "CHECKING") return <div><Chip tone="info">{t("fleet.stage_CHECKING")}</Chip></div>;
     if (stage === "NEEDS_FIXING") {
       return (
         <div className="flex items-center gap-3">

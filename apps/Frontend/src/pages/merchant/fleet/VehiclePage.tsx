@@ -72,7 +72,8 @@ function VehicleBody() {
         actions={
           <>
             <AvailChip id={vehicleId} staged={staged} />
-            {stage && <Chip tone={STAGE_TONE[stage]}>{t(`fleet.stage_${stage}` as const)}</Chip>}
+            {/* The switch's own label already says it; don't repeat it as a chip. */}
+            {stage && !(toggle && can("fleet:write")) && <Chip tone={STAGE_TONE[stage]}>{t(`fleet.stage_${stage}` as const)}</Chip>}
             {toggle && can("fleet:write") && (
               <span className="flex min-h-11 items-center gap-2 text-sm text-ink-2">
                 <Toggle checked={stage === "SHOWING"} disabled={act.busy} onChange={(on) => act.setActive(vehicleId, on)} label={t("fleet.toggleLabel", { vehicle: String(v.registration_number) })} />
