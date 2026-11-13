@@ -348,6 +348,9 @@ export function BarChart({
   const totals = data.map((d) => d.values.reduce((a, b) => a + b, 0));
   const max = Math.max(1, ...totals);
   const H = 120;
+  // A month of day labels can't fit under the bars on a phone: label every
+  // `step`-th day, counted back from the last so today is always named.
+  const step = data.length > 14 ? Math.ceil(data.length / 10) : 1;
 
   return (
     <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
@@ -367,7 +370,7 @@ export function BarChart({
         aria-hidden
       >
         {data.map((d, col) => (
-          <div key={d.label} className="group relative flex h-full flex-1 flex-col items-center justify-end">
+          <div key={col} className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end">
             <div className="flex h-full w-full max-w-6 flex-col-reverse gap-0.5">
               {d.values.map((v, i) =>
                 v > 0 ? (
@@ -386,9 +389,9 @@ export function BarChart({
         ))}
       </div>
       <div className="flex justify-between gap-1 mt-1.5" aria-hidden>
-        {data.map((d) => (
-          <span key={d.label} className="flex-1 text-center text-[11px] text-ink-3">
-            {d.label}
+        {data.map((d, i) => (
+          <span key={i} className="min-w-0 flex-1 overflow-visible whitespace-nowrap text-center text-[11px] text-ink-3">
+            {(data.length - 1 - i) % step === 0 ? d.label : ""}
           </span>
         ))}
       </div>
@@ -397,7 +400,7 @@ export function BarChart({
         <table className="mt-2 w-full text-left">
           <tbody>
             {data.map((d, i) => (
-              <tr key={d.label} className="border-t border-line">
+              <tr key={i} className="border-t border-line">
                 <th className="py-1 font-normal">{d.label}</th>
                 {series.map((s, j) => (
                   <td key={s} className="tnum py-1">
