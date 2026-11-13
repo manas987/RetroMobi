@@ -10,7 +10,7 @@ import {
   uniquePhone,
 } from "../../../test/fixtures.ts";
 import { merchantReturn } from "../../user/Pickup/pickupService.ts";
-import { updateVehicle } from "../Fleet/fleetService.ts";
+import { attachDocumentFile, updateVehicle } from "../Fleet/fleetService.ts";
 import {
   AlreadyMemberError,
   InviteAlreadyPendingError,
@@ -56,6 +56,17 @@ describe("shop activity log", () => {
 
     const other = await listActivity(pool, b.shop.id, {});
     expect(other.items.some((i) => i.action === "vehicle.listing_changed")).toBe(false);
+  });
+
+  test("a paper upload names its vehicle", async () => {
+    const a = await shopWithVehicle();
+    const { rows } = await pool.query(`insert into vehicle_documents (vehicle_id, type) values ($1, 'RC') returning id`, [a.vehicle.id]);
+    await attachDocumentFile(pool, a.merchant.id, a.vehicle.id, rows[0].id, `vehicles/${a.vehicle.id}/documents/${rows[0].id}/1700000000000`);
+
+    const { items } = await listActivity(pool, a.shop.id, {});
+    const row = items.find((i) => i.action === "vehicle.document_uploaded")!;
+    expect(row.vehicle_id).toBe(a.vehicle.id);
+    expect(row.registration_number).toBeTruthy();
   });
 
   test("kind filters and before paginates", async () => {
