@@ -77,15 +77,18 @@ function ReportsBody() {
         actions={
           <>
             <RangeChips compact options={RANGES} value={range} onChange={(k) => setRange(k === "month" ? null : k)} />
+            {/* A wider gap than between the chips: the switch is a separate control. */}
             {multi && (
-              <ViewToggle
-                value={allShops ? "all" : "shop"}
-                onChange={(k) => setScope(k === "shop" ? null : k)}
-                options={[
-                  { key: "shop", label: t("money.scopeShop"), icon: Store },
-                  { key: "all", label: t("money.scopeAll"), icon: Building2 },
-                ]}
-              />
+              <div className="sm:ml-2">
+                <ViewToggle
+                  value={allShops ? "all" : "shop"}
+                  onChange={(k) => setScope(k === "shop" ? null : k)}
+                  options={[
+                    { key: "shop", label: t("money.scopeShop"), icon: Store },
+                    { key: "all", label: t("money.scopeAll"), icon: Building2 },
+                  ]}
+                />
+              </div>
             )}
           </>
         }

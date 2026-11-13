@@ -301,7 +301,8 @@ export function ViewToggle<K extends string>({
   onChange: (key: K) => void;
 }) {
   return (
-    <div role="group" className="inline-flex rounded-2xl bg-surface-3 p-1">
+    // The track is a shade darker than the page so the pair reads as one switch, not two loose buttons.
+    <div role="group" className="inline-flex rounded-2xl bg-line p-1">
       {options.map((o) => (
         <button
           key={o.key}
