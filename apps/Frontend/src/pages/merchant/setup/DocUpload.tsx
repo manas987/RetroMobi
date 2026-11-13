@@ -2,18 +2,21 @@ import { useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import { useT } from "../../../i18n";
 
-/** One big "take a photo or choose a file" button. Picks files; the caller uploads them. */
+/**
+ * One big "take a photo or choose a file" button. Picks files; the caller
+ * uploads them. No `capture`: on Android it skips the chooser and opens the
+ * camera, so a PDF or a photo already in the gallery couldn't be picked. The
+ * chooser offers the camera anyway.
+ */
 export function DocUpload({
   label,
   accept,
-  capture,
   multiple,
   busy,
   onFiles,
 }: {
   label: string;
   accept: string;
-  capture?: boolean;
   multiple?: boolean;
   busy?: boolean;
   onFiles: (files: File[]) => void;
@@ -28,7 +31,6 @@ export function DocUpload({
         type="file"
         accept={accept}
         multiple={multiple}
-        {...(capture ? { capture: "environment" as const } : {})}
         className="sr-only"
         tabIndex={-1}
         onChange={(e) => {

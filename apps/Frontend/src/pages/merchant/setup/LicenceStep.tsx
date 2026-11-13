@@ -53,7 +53,7 @@ export function useLicenceForm(token: string, shopId: string, onDone: () => void
     <>
       <Field label={t("setup.licenceNumber")}><input className={INPUT} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
       <Field label={t("setup.licenceExpiry")}><DateInput value={expiresAt} onChange={setExpiresAt} /></Field>
-      <DocUpload label={t("setup.licencePhoto")} accept="image/*,application/pdf" capture busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
+      <DocUpload label={t("setup.licencePhoto")} accept="image/*,application/pdf" busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
     </>
   );
   return { form, submit, busy, error, valid };

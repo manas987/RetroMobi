@@ -159,7 +159,7 @@ function PaperForm({ token, onDone }: { token: string; onDone: () => void }) {
       </Field>
       <Field label={`${t("shop.paperNumber")} (${t("common.optional")})`}><input className={INPUT} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
       <Field label={`${t("setup.licenceExpiry")} (${t("common.optional")})`}><DateInput clearable value={expiresAt} onChange={setExpiresAt} /></Field>
-      <DocUpload label={t("shop.paperFile")} accept="image/*,application/pdf" capture busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
+      <DocUpload label={t("shop.paperFile")} accept="image/*,application/pdf" busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       <Button variant="primary" size="lg" className="w-full" disabled={busy} onClick={save}>{busy ? t("common.saving") : t("common.save")}</Button>
     </>

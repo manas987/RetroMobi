@@ -151,7 +151,7 @@ function PhotoForm({ vehicle: v, token }: { vehicle: SetupVehicle; token: string
   return (
     <>
       <p className="mb-3 text-sm text-ink-2">{t("setup.photoHelp")}</p>
-      <DocUpload label={t("setup.addPhotos")} accept="image/*" capture multiple busy={busy} onFiles={upload} />
+      <DocUpload label={t("setup.addPhotos")} accept="image/*" multiple busy={busy} onFiles={upload} />
       {v.photoCount > 0 && <p className="mb-2 text-sm font-semibold text-verified">{t(v.photoCount === 1 ? "setup.photosAdded_one" : "setup.photosAdded_other", { n: v.photoCount })}</p>}
       {error && <div className="mb-3"><ErrorNote text={error} /></div>}
     </>
@@ -187,7 +187,7 @@ function DocForm({ vehicleId, type, doc, token }: { vehicleId: string; type: Doc
     <>
       {doc.state !== "MISSING" && <p className="mb-3 rounded-2xl bg-danger-soft px-3 py-2 text-sm text-danger">{doc.note ?? (doc.state === "EXPIRED" ? t("setup.docExpired") : t("setup.docRejected"))}</p>}
       {needsExpiry && <Field label={t("setup.docExpiry")}><DateInput value={expiresAt} onChange={setExpiresAt} /></Field>}
-      <DocUpload label={t("setup.docFile")} accept="image/*,application/pdf" capture busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
+      <DocUpload label={t("setup.docFile")} accept="image/*,application/pdf" busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
       {error && <div className="mb-3"><ErrorNote text={error} /></div>}
       <Button className="mb-2" disabled={busy || !file || (needsExpiry && !expiresAt)} onClick={save}>{busy ? t("common.saving") : t("common.save")}</Button>
     </>
