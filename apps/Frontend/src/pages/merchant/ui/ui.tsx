@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import * as Collapsible from "@radix-ui/react-collapsible";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as RSelect from "@radix-ui/react-select";
 import { Link } from "wouter";
@@ -401,11 +402,7 @@ export function BarChart({
           </span>
         ))}
       </div>
-      <details className="group mt-3 text-xs text-ink-3">
-        <summary className="inline-flex cursor-pointer list-none items-center gap-1 [&::-webkit-details-marker]:hidden">
-          <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden />
-          {tableLabel}
-        </summary>
+      <Reveal label={tableLabel}>
         <table className="mt-2 w-full text-left">
           <tbody>
             {data.map((d, i) => (
@@ -422,8 +419,24 @@ export function BarChart({
             ))}
           </tbody>
         </table>
-      </details>
+      </Reveal>
     </div>
+  );
+}
+
+/** "See the numbers": a small text toggle whose panel slides open with a little rebound (`.reveal` in index.css). */
+export function Reveal({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Collapsible.Root className="group/reveal mt-3 text-xs text-ink-3">
+      <Collapsible.Trigger className="inline-flex min-h-6 cursor-pointer items-center gap-1 rounded hover:text-ink">
+        <ChevronDown
+          className="h-3.5 w-3.5 transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-data-[state=open]/reveal:rotate-180"
+          aria-hidden
+        />
+        {label}
+      </Collapsible.Trigger>
+      <Collapsible.Content className="reveal">{children}</Collapsible.Content>
+    </Collapsible.Root>
   );
 }
 

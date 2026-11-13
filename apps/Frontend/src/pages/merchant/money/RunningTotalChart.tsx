@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { Reveal } from "../ui/ui";
 
 export interface LineSeries {
   name: string;
@@ -147,11 +147,7 @@ export function RunningTotalChart({
           </div>
         )}
       </div>
-      <details className="group mt-3 text-xs text-ink-3">
-        <summary className="inline-flex cursor-pointer list-none items-center gap-1 [&::-webkit-details-marker]:hidden">
-          <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden />
-          {tableLabel}
-        </summary>
+      <Reveal label={tableLabel}>
         <table className="mt-2 w-full text-left">
           <thead>
             <tr>
@@ -168,7 +164,7 @@ export function RunningTotalChart({
             ))}
           </tbody>
         </table>
-      </details>
+      </Reveal>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as Collapsible from "@radix-ui/react-collapsible";
 import { Link } from "wouter";
 import { CheckCircle2, ChevronDown } from "lucide-react";
 import { portalFetch, type Row } from "../../../lib/portal";
@@ -109,23 +110,25 @@ function AddForm({ onClose }: { onClose: () => void }) {
         <input className={INPUT} value={color} onChange={(e) => setColor(e.target.value)} />
       </Field>
 
-      <details className="group mb-5 rounded-2xl bg-surface-2 p-4">
-        <summary className="flex min-h-6 cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+      <Collapsible.Root className="group mb-5 rounded-2xl bg-surface-2 p-4">
+        <Collapsible.Trigger className="flex min-h-6 w-full cursor-pointer items-center justify-between gap-2 text-left text-sm font-semibold text-ink">
           {t("fleet.priceLater")}
-          <ChevronDown className="h-5 w-5 shrink-0 text-ink-3 transition-transform group-open:rotate-180" aria-hidden />
-        </summary>
-        <div className="mt-4">
-          <Field label={t("fleet.fPerDay")}>
-            <input className={INPUT} type="number" inputMode="numeric" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </Field>
-          <Field label={t("fleet.fDeposit")} error={depositTooHigh ? t("fleet.depositMax") : undefined}>
-            <input className={INPUT} type="number" inputMode="numeric" min="0" value={deposit} onChange={(e) => setDeposit(e.target.value)} />
-          </Field>
-          <Field label={t("fleet.fLateFee")}>
-            <input className={INPUT} type="number" inputMode="numeric" min="0" value={lateFee} onChange={(e) => setLateFee(e.target.value)} />
-          </Field>
-        </div>
-      </details>
+          <ChevronDown className="h-5 w-5 shrink-0 text-ink-3 transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-data-[state=open]:rotate-180" aria-hidden />
+        </Collapsible.Trigger>
+        <Collapsible.Content className="reveal">
+          <div className="pt-4">
+            <Field label={t("fleet.fPerDay")}>
+              <input className={INPUT} type="number" inputMode="numeric" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </Field>
+            <Field label={t("fleet.fDeposit")} error={depositTooHigh ? t("fleet.depositMax") : undefined}>
+              <input className={INPUT} type="number" inputMode="numeric" min="0" value={deposit} onChange={(e) => setDeposit(e.target.value)} />
+            </Field>
+            <Field label={t("fleet.fLateFee")}>
+              <input className={INPUT} type="number" inputMode="numeric" min="0" value={lateFee} onChange={(e) => setLateFee(e.target.value)} />
+            </Field>
+          </div>
+        </Collapsible.Content>
+      </Collapsible.Root>
 
       <Button variant="primary" size="lg" className="w-full" disabled={busy || !valid} onClick={submit}>
         {busy ? t("common.saving") : t("fleet.addVehicle")}

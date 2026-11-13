@@ -135,6 +135,26 @@
     5%, 93.75% { opacity: 1; }
     100% { opacity: 0; }
   }
+
+  /* Show-more panels (Radix Collapsible): slide open past full height by a
+     little (at most 16px), settle back, and slide shut. */
+  .reveal { overflow: hidden; }
+  .reveal[data-state="open"] { animation: reveal-open 560ms; }
+  .reveal[data-state="closed"] { animation: reveal-close 200ms ease-in; }
+  @keyframes reveal-open {
+    0% { height: 0; opacity: 0; animation-timing-function: cubic-bezier(0.3, 0.7, 0.4, 1); }
+    60% {
+      height: min(calc(var(--radix-collapsible-content-height) * 1.06), calc(var(--radix-collapsible-content-height) + 16px));
+      opacity: 1;
+      animation-timing-function: ease-in-out;
+    }
+    82% { height: calc(var(--radix-collapsible-content-height) - 3px); animation-timing-function: ease-out; }
+    100% { height: var(--radix-collapsible-content-height); }
+  }
+  @keyframes reveal-close {
+    from { height: var(--radix-collapsible-content-height); opacity: 1; }
+    to { height: 0; opacity: 0; }
+  }
   .calendar-black-glass .calendar-selected:not(.calendar-range-middle) > button,
   .calendar-black-glass .calendar-preview-end > button,
   .calendar-black-glass .calendar-preview-end > button:hover {
