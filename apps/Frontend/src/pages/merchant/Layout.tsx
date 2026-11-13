@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Bike,
@@ -211,11 +211,14 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
         )}
 
         {shopId && can("fleet:read") && <GetListedChip collapsed={collapsed} token={token} shopId={shopId} />}
-        <NavList groups={groups} path={path} collapsed={collapsed} />
+        <NavList groups={groups} path={path} collapsed={collapsed} dense />
 
-        <div className="border-t border-line p-3 flex flex-col gap-3">
-          {currentShop && <ShopPageLink shopId={String(currentShop.id)} compact={collapsed} />}
-          <LangPill compact={collapsed} />
+        {/* Kept short: the nav above has to fit a 768-900px laptop screen. */}
+        <div className="border-t border-line p-3 flex flex-col gap-2">
+          <div className={`flex gap-2 ${collapsed ? "flex-col" : "items-center"}`}>
+            {currentShop && <ShopPageLink shopId={String(currentShop.id)} compact={collapsed} />}
+            <LangPill compact={collapsed} />
+          </div>
           <UserChip name={myName} role={role} collapsed={collapsed} onSignOut={signOut} />
         </div>
       </aside>
@@ -307,10 +310,26 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NavList({ groups, path, collapsed }: { groups: { group: TKey; items: NavItem[] }[]; path: string; collapsed: boolean }) {
+function NavList({
+  groups,
+  path,
+  collapsed,
+  dense = false,
+}: {
+  groups: { group: TKey; items: NavItem[] }[];
+  path: string;
+  collapsed: boolean;
+  /** Desktop sidebar: 40px rows (mouse) so the whole list fits a laptop screen. */
+  dense?: boolean;
+}) {
   const { t } = useT();
+  // On a short screen the list scrolls; never leave the page you're on out of sight.
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+  }, [path]);
   return (
-    <nav className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
+    <nav ref={ref} className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
       {groups.map((g) => (
         <div key={g.group}>
           {!collapsed && (
@@ -325,7 +344,7 @@ function NavList({ groups, path, collapsed }: { groups: { group: TKey; items: Na
                     href={item.href}
                     title={collapsed ? t(item.label) : undefined}
                     aria-current={active ? "page" : undefined}
-                    className={`flex min-h-11 items-center gap-3 rounded-2xl px-3 text-[15px] ${collapsed ? "justify-center" : ""} ${
+                    className={`flex ${dense ? "min-h-10" : "min-h-11"} items-center gap-3 rounded-2xl px-3 text-[15px] ${collapsed ? "justify-center" : ""} ${
                       active ? "bg-ink text-surface font-medium" : "text-ink-2 hover:bg-surface-3 hover:text-ink"
                     }`}
                   >
@@ -351,10 +370,10 @@ function ShopPageLink({ shopId, compact }: { shopId: string; compact: boolean })
       href={`/shops/${shopId}`}
       target="_blank"
       rel="noreferrer"
-      title={compact ? t("common.yourShopPage") : undefined}
-      className={`flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm text-ink-2 hover:bg-surface-3 hover:text-ink ${compact ? "justify-center" : "justify-between"}`}
+      title={t("common.yourShopPage")}
+      className={`flex min-h-10 min-w-0 flex-1 items-center gap-1.5 rounded-xl px-2.5 text-sm text-ink-2 hover:bg-surface-3 hover:text-ink ${compact ? "justify-center" : ""}`}
     >
-      {compact ? <span className="sr-only">{t("common.yourShopPage")}</span> : t("common.yourShopPage")}
+      {compact ? <span className="sr-only">{t("common.yourShopPage")}</span> : <span className="truncate">{t("common.yourShopPage")}</span>}
       <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
     </a>
   );

@@ -17,7 +17,7 @@ export default {
   online: "ऑनलाइन",
   walkin: "वॉक-इन",
   viewPublicPage: "ग्राहकों को आपकी दुकान कैसी दिखती है, देखें",
-  yourShopPage: "आपकी दुकान का पेज",
+  yourShopPage: "दुकान का पेज",
   shop: "दुकान",
   shopOpen: "दुकान खुली है",
   shopClosed: "दुकान बंद है",
