@@ -108,4 +108,15 @@ describe("shop setup checklist", () => {
     expect(s.vehicles[0]!.stage).toBe("SHOWING");
     expect(s.licence.status).toBe("ACTIVE");
   });
+
+  test("an approved vehicle counts as ready even without paper rows; an expired paper doesn't", async () => {
+    const v = await createBookableVehicle(pool);
+    let s = await getShopSetup(pool, v.shopId);
+    expect(s.completeVehicles).toBe(1);
+    expect(s.steps.vehicles).toBe(true);
+
+    await addDoc(v.id, "PUC", { status: "VERIFIED", expiresAt: "2020-01-01" });
+    s = await getShopSetup(pool, v.shopId);
+    expect(s.completeVehicles).toBe(0);
+  });
 });

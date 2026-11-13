@@ -151,7 +151,14 @@ export async function getShopSetup(pool: Pool, shopId: string) {
     };
   });
 
-  const completeVehicles = vehicles.filter((v) => v.missing.length === 0).length;
+  // Ready = every item in, or already approved by RetroMobi (vehicles listed
+  // before papers were required have no paper rows but are checked and live).
+  // A rejected or expired paper never counts.
+  const paperProblem = (v: (typeof vehicles)[number]) =>
+    Object.values(v.docs).some((d) => d.state === "REJECTED" || d.state === "EXPIRED");
+  const completeVehicles = vehicles.filter(
+    (v) => v.missing.length === 0 || (v.verificationStatus === "VERIFIED" && !paperProblem(v)),
+  ).length;
   const steps = {
     shop: shop.has_address && shop.has_hours,
     licence: ["ACTIVE", "PENDING"].includes(licence.status),
