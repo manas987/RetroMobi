@@ -395,8 +395,11 @@ export function BarChart({
           </span>
         ))}
       </div>
-      <details className="mt-3 text-xs text-ink-3">
-        <summary className="cursor-pointer">{tableLabel}</summary>
+      <details className="group mt-3 text-xs text-ink-3">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1 [&::-webkit-details-marker]:hidden">
+          <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden />
+          {tableLabel}
+        </summary>
         <table className="mt-2 w-full text-left">
           <tbody>
             {data.map((d, i) => (
@@ -418,9 +421,10 @@ export function BarChart({
   );
 }
 
-/** The one text-input look for merchant forms (inputs, selects, textareas). */
+/** The one text-input look for merchant forms. Number fields drop the browser's
+ *  tiny spinner arrows: too small to tap, and easy to nudge a price by accident. */
 export const INPUT =
-  "min-h-12 w-full rounded-2xl border border-line-strong bg-surface px-4 text-base text-ink outline-none focus:border-ink";
+  "min-h-12 w-full rounded-2xl border border-line-strong bg-surface px-4 text-base text-ink outline-none focus:border-ink [&[type=number]]:[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 
 export function Field({
   label,

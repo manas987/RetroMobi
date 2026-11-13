@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ChevronDown } from "lucide-react";
 import { portalFetch, type Row } from "../../../lib/portal";
 import { enumLabel } from "../../../lib/format";
 import { useT } from "../../../i18n";
@@ -109,8 +109,11 @@ function AddForm({ onClose }: { onClose: () => void }) {
         <input className={INPUT} value={color} onChange={(e) => setColor(e.target.value)} />
       </Field>
 
-      <details className="mb-5 rounded-2xl bg-surface-2 p-4">
-        <summary className="min-h-6 cursor-pointer text-sm font-semibold text-ink">{t("fleet.priceLater")}</summary>
+      <details className="group mb-5 rounded-2xl bg-surface-2 p-4">
+        <summary className="flex min-h-6 cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
+          {t("fleet.priceLater")}
+          <ChevronDown className="h-5 w-5 shrink-0 text-ink-3 transition-transform group-open:rotate-180" aria-hidden />
+        </summary>
         <div className="mt-4">
           <Field label={t("fleet.fPerDay")}>
             <input className={INPUT} type="number" inputMode="numeric" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
