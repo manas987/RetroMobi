@@ -29,6 +29,8 @@ export function RunningTotalChart({
   format,
   compact,
   tableLabel,
+  fill = false,
+  note,
 }: {
   /** One label per position (day of the period, or month). */
   labels: string[];
@@ -37,15 +39,24 @@ export function RunningTotalChart({
   format: (n: number) => string;
   compact: (n: number) => string;
   tableLabel: string;
+  /** Take the parent's remaining height (parent must be a flex column). */
+  fill?: boolean;
+  /** How the numbers are counted; shown with the table. */
+  note?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0);
+  const [measuredH, setMeasuredH] = useState(H);
+  const h = fill ? measuredH : H;
   const [hover, setHover] = useState<number | null>(null);
 
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setW(Math.round(e!.contentRect.width)));
+    const ro = new ResizeObserver(([e]) => {
+      setW(Math.round(e!.contentRect.width));
+      setMeasuredH(Math.max(100, Math.round(e!.contentRect.height)));
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -53,7 +64,7 @@ export function RunningTotalChart({
   const n = Math.max(labels.length, ...series.map((s) => s.values.length));
   const max = niceMax(Math.max(0, ...series.flatMap((s) => s.values)));
   const plotW = Math.max(0, w - PAD.left - PAD.right);
-  const plotH = H - PAD.top - PAD.bottom;
+  const plotH = h - PAD.top - PAD.bottom;
   const x = (i: number) => PAD.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const y = (v: number) => PAD.top + plotH - (v / max) * plotH;
   const ticks = [0, max / 2, max];
@@ -68,7 +79,7 @@ export function RunningTotalChart({
   const tipLeft = hover === null ? 0 : Math.min(Math.max(x(hover), 70), Math.max(70, w - 70));
 
   return (
-    <div>
+    <div className={fill ? "flex flex-1 flex-col" : ""}>
       {/* Legend: line keys, the name, and where each line ends up. */}
       <ul className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
         {series.map((s) => (
@@ -81,8 +92,8 @@ export function RunningTotalChart({
       </ul>
       <div
         ref={box}
-        className="relative touch-pan-y select-none"
-        style={{ height: H }}
+        className={`relative touch-pan-y select-none ${fill ? "min-h-[180px] flex-1 xl:min-h-[100px]" : ""}`}
+        style={fill ? undefined : { height: H }}
         onPointerMove={(e) => pick(e.clientX)}
         onPointerDown={(e) => pick(e.clientX)}
         onPointerLeave={() => setHover(null)}
@@ -95,7 +106,7 @@ export function RunningTotalChart({
         aria-hidden
       >
         {w > 0 && (
-          <svg width={w} height={H} className="block overflow-visible">
+          <svg width={w} height={h} className="absolute inset-0 block overflow-visible">
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={PAD.left} x2={w - PAD.right} y1={y(t)} y2={y(t)} stroke="var(--color-line)" strokeWidth={1} />
@@ -104,8 +115,8 @@ export function RunningTotalChart({
             ))}
             {n > 0 && (
               <>
-                <text x={x(0)} y={H - 6} textAnchor="start" className="fill-ink-3 text-[11px]">{labels[0]}</text>
-                <text x={x(n - 1)} y={H - 6} textAnchor="end" className="fill-ink-3 text-[11px]">{labels[n - 1]}</text>
+                <text x={x(0)} y={h - 6} textAnchor="start" className="fill-ink-3 text-[11px]">{labels[0]}</text>
+                <text x={x(n - 1)} y={h - 6} textAnchor="end" className="fill-ink-3 text-[11px]">{labels[n - 1]}</text>
               </>
             )}
             {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={PAD.top + plotH} stroke="var(--color-ink-4)" strokeWidth={1} />}
@@ -148,6 +159,7 @@ export function RunningTotalChart({
         )}
       </div>
       <Reveal label={tableLabel}>
+        {note && <p className="mt-2">{note}</p>}
         <table className="mt-2 w-full text-left">
           <thead>
             <tr>

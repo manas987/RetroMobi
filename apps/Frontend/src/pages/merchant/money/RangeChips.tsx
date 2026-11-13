@@ -62,17 +62,28 @@ export function previousRange(key: RangeKey, now = new Date()): { from: string; 
   }
 }
 
-export function RangeChips<K extends RangeKey>({ options, value, onChange }: { options: readonly K[]; value: K; onChange: (k: K) => void }) {
+export function RangeChips<K extends RangeKey>({
+  options,
+  value,
+  onChange,
+  compact = false,
+}: {
+  options: readonly K[];
+  value: K;
+  onChange: (k: K) => void;
+  /** Shorter chips with no gap below, for a page header. */
+  compact?: boolean;
+}) {
   const { t } = useT();
   return (
-    <div role="group" className="flex flex-wrap gap-2 mb-5">
+    <div role="group" className={`flex flex-wrap gap-2 ${compact ? "" : "mb-5"}`}>
       {options.map((k) => (
         <button
           key={k}
           type="button"
           aria-pressed={k === value}
           onClick={() => onChange(k)}
-          className={`min-h-11 rounded-full px-4 text-sm font-medium ${k === value ? "bg-ink text-surface" : "bg-surface border border-line-strong text-ink-2 hover:bg-surface-3"}`}
+          className={`${compact ? "min-h-10 px-3.5" : "min-h-11 px-4"} rounded-full text-sm font-medium ${k === value ? "bg-ink text-surface" : "bg-surface border border-line-strong text-ink-2 hover:bg-surface-3"}`}
         >
           {t(LABEL[k])}
         </button>

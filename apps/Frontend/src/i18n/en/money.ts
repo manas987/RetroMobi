@@ -108,4 +108,7 @@ export default {
   q_shops: "Which shop earns the most?",
   topShop: "{shop} earned the most: {amount}.",
   shopLine: "{rides} · {vehicles} vehicles · out {pct}% of days",
+  tileRides: "Rides",
+  tileOnline: "Came through RetroMobi",
+  tileSplit: "Online {online} · Walk-in {walkin}",
 };

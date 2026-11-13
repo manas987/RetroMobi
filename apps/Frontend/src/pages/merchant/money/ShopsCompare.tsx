@@ -13,7 +13,7 @@ export interface ShopResult {
 }
 
 /** "Which shop earns the most?" Each branch's money as a bar, with rides, vehicles and how busy they were. */
-export function ShopsCompare({ shops, onOpen }: { shops: ShopResult[]; onOpen: (id: string) => void }) {
+export function ShopsCompare({ shops, onOpen, className = "" }: { shops: ShopResult[]; onOpen: (id: string) => void; className?: string }) {
   const { t } = useT();
   const rows = shops
     .map((s) => {
@@ -38,7 +38,7 @@ export function ShopsCompare({ shops, onOpen }: { shops: ShopResult[]; onOpen: (
   const top = best(rows, (r) => r.money);
 
   return (
-    <Card title={t("money.q_shops")} icon={Store}>
+    <Card scroll title={t("money.q_shops")} icon={Store} className={className}>
       {top && <p className="mb-4 text-base text-ink-2">{t("money.topShop", { shop: top.name, amount: rupees(top.money) })}</p>}
       <ul className="flex flex-col divide-y divide-line">
         {rows.map((r) => (

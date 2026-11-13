@@ -109,4 +109,7 @@ export default {
   q_shops: "कौन सी दुकान सबसे ज़्यादा कमाती है?",
   topShop: "{shop} ने सबसे ज़्यादा कमाया: {amount}।",
   shopLine: "{rides} · {vehicles} गाड़ियाँ · {pct}% दिन किराये पर",
+  tileRides: "राइड",
+  tileOnline: "RetroMobi से आई कमाई",
+  tileSplit: "ऑनलाइन {online} · वॉक-इन {walkin}",
 } satisfies Record<keyof typeof en, string>;

@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { BarChart3, Bike, Building2, CalendarDays, IndianRupee, Store, TrendingUp, Users } from "lucide-react";
+import { BarChart3, Bike, Building2, CalendarDays, IndianRupee, Store, TrendingUp, Users, type LucideIcon } from "lucide-react";
 import { MerchantLayout, useMerchantShop } from "./Layout";
 import { rupees } from "../../lib/format";
 import { useT, type TKey } from "../../i18n";
 import { can as hasPermission } from "../../lib/permissions";
 import { merchantQuery, useMerchantQuery, useUrlParam } from "./query";
-import { BarChart, Button, Card, EmptyState, ErrorNote, LoadingRows, PageHeader, SERIES, TONE, ViewToggle } from "./ui/ui";
+import { BarChart, Button, Card, EmptyState, ErrorNote, LoadingRows, PageHeader, SERIES, ViewToggle } from "./ui/ui";
 import { ShopsCompare, type ShopResult } from "./money/ShopsCompare";
 import { RangeChips, previousRange, rangeDates } from "./money/RangeChips";
 import { RunningTotalChart } from "./money/RunningTotalChart";
@@ -67,22 +67,29 @@ function ReportsBody() {
   }
 
   return (
-    <>
+    // Laptop (xl+): one screen, like Home. Below xl it stacks and scrolls.
+    // Windows shorter than ~850px scroll the page a little rather than hide a chart's labels inside its card.
+    <div className="flex flex-col xl:h-[calc(100dvh-3rem)] xl:min-h-[800px]">
       <PageHeader
         title={t("money.reportsTitle")}
-        subtitle={t(allShops ? "money.reportsSubtitleAll" : "money.reportsSubtitle")}
-        actions={multi && (
-          <ViewToggle
-            value={allShops ? "all" : "shop"}
-            onChange={(k) => setScope(k === "shop" ? null : k)}
-            options={[
-              { key: "shop", label: t("money.scopeShop"), icon: Store },
-              { key: "all", label: t("money.scopeAll"), icon: Building2 },
-            ]}
-          />
-        )}
+        // On a laptop the chips and the shop switch say it; the line would only push the charts down.
+        subtitle={<span className="xl:hidden">{t(allShops ? "money.reportsSubtitleAll" : "money.reportsSubtitle")}</span>}
+        actions={
+          <>
+            <RangeChips compact options={RANGES} value={range} onChange={(k) => setRange(k === "month" ? null : k)} />
+            {multi && (
+              <ViewToggle
+                value={allShops ? "all" : "shop"}
+                onChange={(k) => setScope(k === "shop" ? null : k)}
+                options={[
+                  { key: "shop", label: t("money.scopeShop"), icon: Store },
+                  { key: "all", label: t("money.scopeAll"), icon: Building2 },
+                ]}
+              />
+            )}
+          </>
+        }
       />
-      <RangeChips options={RANGES} value={range} onChange={(k) => setRange(k === "month" ? null : k)} />
       {allShops ? (
         <AllShopsReport
           shops={owned}
@@ -96,7 +103,7 @@ function ReportsBody() {
       ) : (
         shopId && <ShopReport shopId={shopId} range={range} onAllTime={() => setRange("all")} />
       )}
-    </>
+    </div>
   );
 }
 
@@ -110,7 +117,7 @@ function ShopReport({ shopId, range, onAllTime }: { shopId: string; range: Repor
   if (q.isError) return <ErrorNote onRetry={() => q.refetch()} />;
   return (
     // Switching ranges keeps the last numbers on screen, dimmed, until the new ones arrive.
-    <div className={`transition-opacity ${q.isPlaceholderData ? "opacity-60" : ""}`}>
+    <div className={`flex min-h-0 flex-1 flex-col transition-opacity ${q.isPlaceholderData ? "opacity-60" : ""}`}>
       <ReportCards data={fromSummary(q.data, prevRange ? (p.data ?? null) : null)} range={range} onAllTime={onAllTime} />
     </div>
   );
@@ -150,8 +157,13 @@ function AllShopsReport({
   const dim = current.some((q) => q.isPlaceholderData);
 
   return (
-    <div className={`transition-opacity ${dim ? "opacity-60" : ""}`}>
-      <ReportCards data={data} range={range} onAllTime={onAllTime} extra={<ShopsCompare shops={results} onOpen={onOpen} />} />
+    <div className={`flex min-h-0 flex-1 flex-col transition-opacity ${dim ? "opacity-60" : ""}`}>
+      <ReportCards
+        data={data}
+        range={range}
+        onAllTime={onAllTime}
+        extra={<ShopsCompare shops={results} onOpen={onOpen} className="lg:col-span-2 xl:col-span-1 xl:col-start-3 xl:row-start-1" />}
+      />
     </div>
   );
 }
@@ -212,141 +224,209 @@ export function ReportCards({
   const activeDays = firstRide < 0 ? data.rangeDays : data.days.length - firstRide;
   const showWeekdays = range !== "7d" && busiest !== null;
 
+  const showRunning = prev !== null && range !== "all";
+  const delta = prev ? compare(tot.money, prev.money) : null;
+
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {/* 1. The headline: how much, and more or less than before. */}
-      <Card title={t(`money.q_earn_${range}` as TKey)} icon={IndianRupee} className="lg:col-span-2">
-        <p className="tnum text-5xl font-semibold leading-tight text-ink">{rupees(tot.money)}</p>
-        {prev ? (
-          <DeltaPill current={tot.money} previous={prev.money} prevLabel={prevLabel} format={rupees} />
-        ) : (
-          range === "all" && data.days[0] && (
-            <p className="mt-2 text-sm text-ink-3">{t("money.sinceFirst", { date: date(`${data.from}T12:00:00+05:30`, { day: "numeric", month: "long", year: "numeric" }) })}</p>
-          )
-        )}
-        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-base text-ink-2">
-          <span className="inline-flex items-center gap-2">
-            <span className="tnum font-semibold text-ink">{t(tot.rides === 1 ? "money.rides_one" : "money.rides_other", { n: tot.rides })}</span>
-            {prev && prev.rides !== tot.rides && (
-              <span className={`tnum rounded-full px-2 py-0.5 text-xs font-semibold ${TONE[tot.rides > prev.rides ? "good" : "bad"].chip}`}>
-                {t(tot.rides > prev.rides ? "money.ridesMore" : "money.ridesLess", { n: Math.abs(tot.rides - prev.rides) })}
+    <div className="flex flex-col gap-4 xl:min-h-0 xl:flex-1">
+      {/* The headline numbers. */}
+      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Tile
+          className="sm:col-span-2"
+          icon={IndianRupee}
+          label={t(`money.q_earn_${range}` as TKey)}
+          value={rupees(tot.money)}
+          caption={
+            delta ? (
+              <DeltaText change={delta} prevLabel={prevLabel} />
+            ) : (
+              range === "all" && data.days[0] && t("money.sinceFirst", { date: date(`${data.from}T12:00:00+05:30`, { day: "numeric", month: "long", year: "numeric" }) })
+            )
+          }
+        />
+        <Tile
+          icon={Bike}
+          label={t("money.tileRides")}
+          value={String(tot.rides)}
+          caption={
+            <>
+              {prev && prev.rides !== tot.rides && (
+                <span className={`mr-1.5 font-semibold ${tot.rides > prev.rides ? "text-verified" : "text-danger"}`}>
+                  {t(tot.rides > prev.rides ? "money.ridesMore" : "money.ridesLess", { n: Math.abs(tot.rides - prev.rides) })}
+                </span>
+              )}
+              {tot.rides > 0 && t("money.perRide", { amount: rupees(Math.round(tot.money / tot.rides)) })}
+            </>
+          }
+        />
+        <Tile
+          icon={Users}
+          label={t("money.tileOnline")}
+          value={split ? `${split.online}%` : "—"}
+          aside={
+            split && (
+              <span className="flex h-2 w-20 gap-0.5 overflow-hidden rounded-full" aria-hidden>
+                {split.online > 0 && <span style={{ width: `${split.online}%`, background: SERIES[0] }} />}
+                {split.walkin > 0 && <span style={{ width: `${split.walkin}%`, background: SERIES[1] }} />}
               </span>
-            )}
-          </span>
-          {tot.rides > 0 && <span className="tnum">{t("money.perRide", { amount: rupees(Math.round(tot.money / tot.rides)) })}</span>}
-        </div>
-      </Card>
+            )
+          }
+          caption={split && t("money.tileSplit", { online: rupees(tot.onlineEarnings), walkin: rupees(tot.walkinCash) })}
+        />
+      </div>
 
-      {extra && <div className="lg:col-span-2">{extra}</div>}
+      {/* Charts in two columns, vehicles (and branches) in a third. Cells fill one screen on a laptop. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:min-h-0 xl:flex-1 xl:grid-cols-3 xl:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+        {/* Progress: running totals, this period against the same stretch before. */}
+        {showRunning && (
+          <Question title={t(`money.q_ahead_${range}` as TKey)} icon={TrendingUp} className="lg:col-span-2">
+            <AheadLine
+              current={runningTotals(buckets.map(moneyOf))}
+              previous={runningTotals(prevBuckets.map(moneyOf))}
+              prevLabel={prevLabel}
+              format={rupees}
+            />
+            <RunningTotalChart
+              fill
+              labels={(buckets.length >= prevBuckets.length ? buckets : prevBuckets).map((b, i) => label(b, i))}
+              series={[
+                { name: t(`money.line_cur_${range}` as TKey), values: runningTotals(buckets.map(moneyOf)), color: SERIES[0] },
+                { name: t(`money.line_prev_${range}` as TKey), values: runningTotals(prevBuckets.map(moneyOf)), color: "var(--color-ink-4)" },
+              ]}
+              format={rupees}
+              compact={compact}
+              tableLabel={t("money.showNumbers")}
+              note={t("money.runningCaption")}
+            />
+          </Question>
+        )}
 
-      {/* 2. Progress: running totals, this period against the same stretch before. */}
-      {prev && range !== "all" && (
-        <Card title={t(`money.q_ahead_${range}` as TKey)} icon={TrendingUp} className="lg:col-span-2">
-          <AheadLine
-            current={runningTotals(buckets.map(moneyOf))}
-            previous={runningTotals(prevBuckets.map(moneyOf))}
-            prevLabel={prevLabel}
-            format={rupees}
-          />
-          <RunningTotalChart
-            labels={(buckets.length >= prevBuckets.length ? buckets : prevBuckets).map((b, i) => label(b, i))}
-            series={[
-              { name: t(`money.line_cur_${range}` as TKey), values: runningTotals(buckets.map(moneyOf)), color: SERIES[0] },
-              { name: t(`money.line_prev_${range}` as TKey), values: runningTotals(prevBuckets.map(moneyOf)), color: "var(--color-ink-4)" },
-            ]}
-            format={rupees}
-            compact={compact}
-            tableLabel={t("money.showNumbers")}
-          />
-          <p className="mt-3 text-xs text-ink-3">{t("money.runningCaption")}</p>
-        </Card>
-      )}
-
-      {/* 3. Money each day / month, online and walk-in stacked. */}
-      <Card title={t(byMonth ? "money.q_moneyMonth" : "money.q_moneyDay")} icon={BarChart3} className="lg:col-span-2">
-        {topBucket && (
-          <p className="mb-4 text-base text-ink-2">
-            {t(byMonth ? "money.bestMonth" : "money.bestDay", {
+        {/* Money each day / month, online and walk-in stacked. */}
+        <Question
+          title={t(byMonth ? "money.q_moneyMonth" : "money.q_moneyDay")}
+          icon={BarChart3}
+          className={!showRunning || !showWeekdays ? "lg:col-span-2" : ""}
+          takeaway={
+            topBucket &&
+            t(byMonth ? "money.bestMonth" : "money.bestDay", {
               when: byMonth
                 ? date(`${topBucket.key}-15T12:00:00+05:30`, { month: "long", year: "numeric" })
                 : date(`${topBucket.key}T12:00:00+05:30`, { weekday: "short", day: "numeric", month: "short" }),
               amount: rupees(moneyOf(topBucket)),
-            })}
-          </p>
-        )}
-        <BarChart
-          data={buckets.map((b, i) => ({ label: label(b, i), values: [b.onlineEarnings, b.walkinCash] }))}
-          series={[t("money.fromOnline"), t("money.walkinShort")]}
-          format={rupees}
-          tableLabel={t("money.showNumbers")}
-        />
-        <p className="mt-3 text-xs text-ink-3">{t("money.moneyCaption")}</p>
-      </Card>
-
-      {/* 4. Busy weekdays. */}
-      {showWeekdays && (
-        <Card title={t("money.q_weekdays")} icon={CalendarDays}>
-          <p className="mb-4 text-base text-ink-2">
-            {tiedTop ? t("money.noBusiestDay") : t("money.busiestDay", { day: weekdayName(busiest.i, "long"), n: oneDecimal(busiest.v) })}
-          </p>
+            })
+          }
+        >
           <BarChart
-            data={weekdays.map((v, i) => ({ label: weekdayName(i, "short"), values: [v] }))}
-            series={[t("money.avgRides")]}
-            format={oneDecimal}
+            fill
+            data={buckets.map((b, i) => ({ label: label(b, i), values: [b.onlineEarnings, b.walkinCash] }))}
+            series={[t("money.fromOnline"), t("money.walkinShort")]}
+            format={rupees}
             tableLabel={t("money.showNumbers")}
+            note={t("money.moneyCaption")}
           />
-          <p className="mt-3 text-xs text-ink-3">{t("money.weekdaysCaption")}</p>
-        </Card>
-      )}
+        </Question>
 
-      {/* 6. Where the money comes from (before vehicles so it pairs with weekdays). */}
-      {split && (
-        <Card title={t("money.q_source")} icon={Users} className={showWeekdays ? "" : "lg:col-span-2"}>
-          <p className="mb-4 text-base text-ink-2">{t("money.srcTakeaway", { pct: split.online })}</p>
-          <div className="flex h-4 w-full gap-0.5 overflow-hidden rounded-full" aria-hidden>
-            {split.online > 0 && <span style={{ width: `${split.online}%`, background: SERIES[0] }} />}
-            {split.walkin > 0 && <span style={{ width: `${split.walkin}%`, background: SERIES[1] }} />}
-          </div>
-          <ul className="mt-4 flex flex-col gap-3">
-            {[
-              { name: t("money.fromOnline"), pct: split.online, money: tot.onlineEarnings, rides: tot.online, color: SERIES[0] },
-              { name: t("money.walkinShort"), pct: split.walkin, money: tot.walkinCash, rides: tot.walkin, color: SERIES[1] },
-            ].map((row) => (
-              <li key={row.name} className="flex items-start justify-between gap-3">
-                <span className="flex items-center gap-2 text-sm text-ink-2">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: row.color }} aria-hidden />
-                  {row.name}
-                </span>
-                <span className="tnum text-right text-sm">
-                  <span className="font-semibold text-ink">{row.pct}% · {rupees(row.money)}</span>
-                  <span className="block text-xs text-ink-3">{t(row.rides === 1 ? "money.rides_one" : "money.rides_other", { n: row.rides })}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+        {/* Busy weekdays. */}
+        {showWeekdays && (
+          <Question
+            title={t("money.q_weekdays")}
+            icon={CalendarDays}
+            className={showRunning ? "" : "lg:col-span-2"}
+            takeaway={tiedTop ? t("money.noBusiestDay") : t("money.busiestDay", { day: weekdayName(busiest.i, "long"), n: oneDecimal(busiest.v) })}
+          >
+            <BarChart
+              fill
+              data={weekdays.map((v, i) => ({ label: weekdayName(i, "short"), values: [v] }))}
+              series={[t("money.avgRides")]}
+              format={oneDecimal}
+              tableLabel={t("money.showNumbers")}
+              note={t("money.weekdaysCaption")}
+            />
+          </Question>
+        )}
 
-      {/* 5. Vehicles: what each earned and how often it was out. */}
-      {data.vehicles.length > 0 && (
-        <Card title={t("money.q_vehicles")} icon={Bike} className="lg:col-span-2">
-          <VehicleReport vehicles={data.vehicles} rangeDays={activeDays} />
-        </Card>
-      )}
+        {extra}
+
+        {/* Vehicles: what each earned and how often it was out. */}
+        {data.vehicles.length > 0 && (
+          <Card
+            scroll
+            title={t("money.q_vehicles")}
+            icon={Bike}
+            className={`lg:col-span-2 xl:col-span-1 xl:col-start-3 ${extra ? "xl:row-start-2" : "xl:row-span-2 xl:row-start-1"}`}
+          >
+            <VehicleReport vehicles={data.vehicles} rangeDays={activeDays} />
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
 
-/** "▲ ₹6,100 (18%) more than last month by this date", toned by direction. Wraps on a phone. */
-function DeltaPill({ current, previous, prevLabel, format }: { current: number; previous: number; prevLabel: string; format: (n: number) => string }) {
+/** A headline number: a small label with its icon, the number, and one line under it. */
+function Tile({
+  icon: Icon,
+  label,
+  value,
+  aside,
+  caption,
+  className = "",
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  /** Sits beside the number, e.g. a little share bar. */
+  aside?: ReactNode;
+  caption?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-card bg-surface p-4 shadow-card ${className}`}>
+      <p className="flex items-center gap-1.5 text-sm font-medium text-ink-2">
+        <Icon className="h-4 w-4 shrink-0 text-ink-3" aria-hidden />
+        {label}
+      </p>
+      <div className="mt-1 flex items-center gap-3">
+        <p className="tnum text-3xl font-semibold leading-tight text-ink">{value}</p>
+        {aside}
+      </div>
+      {caption && <p className="mt-1 text-xs text-ink-3">{caption}</p>}
+    </div>
+  );
+}
+
+/** A question card that fills its grid cell on a laptop. Once "See the numbers" opens, the card scrolls, never the page. */
+function Question({
+  title,
+  icon,
+  takeaway,
+  className = "",
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  takeaway?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card title={title} icon={icon} className={`min-h-0 ${className}`}>
+      <div className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto px-2">
+        {takeaway && <p className="mb-3 shrink-0 text-base text-ink-2">{takeaway}</p>}
+        {children}
+      </div>
+    </Card>
+  );
+}
+
+/** "▲ ₹6,100 more than last month by this date (18%)", in the direction's colour. */
+function DeltaText({ change, prevLabel }: { change: ReturnType<typeof compare>; prevLabel: string }) {
   const { t } = useT();
-  const c = compare(current, previous);
-  const tone = c.direction === "up" ? "good" : c.direction === "down" ? "bad" : "muted";
   const text =
-    c.direction === "same"
+    change.direction === "same"
       ? t("money.same", { prev: prevLabel })
-      : `${t(c.direction === "up" ? "money.more" : "money.less", { amount: format(Math.abs(c.diff)), prev: prevLabel })}${c.pct !== null ? ` ${t("money.pct", { pct: Math.abs(c.pct) })}` : ""}`;
-  return <p className={`mt-3 self-start rounded-2xl px-3 py-1.5 text-sm font-semibold ${TONE[tone].chip}`}>{text}</p>;
+      : `${t(change.direction === "up" ? "money.more" : "money.less", { amount: rupees(Math.abs(change.diff)), prev: prevLabel })}${change.pct !== null ? ` ${t("money.pct", { pct: Math.abs(change.pct) })}` : ""}`;
+  return <span className={`font-semibold ${change.direction === "up" ? "text-verified" : change.direction === "down" ? "text-danger" : "text-ink-2"}`}>{text}</span>;
 }
 
 /** The takeaway above the running-total chart: ahead, behind or level at the same point in time. */

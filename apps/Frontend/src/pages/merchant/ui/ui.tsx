@@ -336,6 +336,7 @@ export function BarChart({
   tableLabel,
   legend = true,
   fill = false,
+  note,
 }: {
   data: { label: string; values: number[] }[];
   series: string[];
@@ -345,6 +346,8 @@ export function BarChart({
   legend?: boolean;
   /** Stretch to the parent's remaining height (parent must be a flex column). */
   fill?: boolean;
+  /** How the numbers are counted; shown with the table. */
+  note?: string;
 }) {
   const totals = data.map((d) => d.values.reduce((a, b) => a + b, 0));
   const max = Math.max(1, ...totals);
@@ -354,7 +357,8 @@ export function BarChart({
   const step = data.length > 14 ? Math.ceil(data.length / 10) : 1;
 
   return (
-    <div className={`@container ${fill ? "flex min-h-0 flex-1 flex-col" : ""}`}>
+    // `fill` keeps its content height as a minimum, so an open table makes the card scroll instead of overlapping.
+    <div className={`@container ${fill ? "flex flex-1 flex-col" : ""}`}>
       {legend && series.length > 1 && (
         <ul className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs text-ink-2">
           {series.map((s, i) => (
@@ -366,7 +370,7 @@ export function BarChart({
         </ul>
       )}
       <div
-        className={`flex items-end justify-between gap-1 border-b border-line pt-6 ${fill ? "min-h-20 flex-1" : ""}`}
+        className={`flex items-end justify-between gap-1 border-b border-line pt-6 ${fill ? "min-h-36 flex-1 xl:min-h-16" : ""}`}
         style={fill ? undefined : { height: H + 24 }}
         aria-hidden
       >
@@ -403,6 +407,7 @@ export function BarChart({
         ))}
       </div>
       <Reveal label={tableLabel}>
+        {note && <p className="mt-2">{note}</p>}
         <table className="mt-2 w-full text-left">
           <tbody>
             {data.map((d, i) => (
