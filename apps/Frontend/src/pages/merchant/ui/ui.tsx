@@ -353,7 +353,7 @@ export function BarChart({
   const step = data.length > 14 ? Math.ceil(data.length / 10) : 1;
 
   return (
-    <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
+    <div className={`@container ${fill ? "flex min-h-0 flex-1 flex-col" : ""}`}>
       {legend && series.length > 1 && (
         <ul className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs text-ink-2">
           {series.map((s, i) => (
@@ -390,7 +390,13 @@ export function BarChart({
       </div>
       <div className="flex justify-between gap-1 mt-1.5" aria-hidden>
         {data.map((d, i) => (
-          <span key={i} className="min-w-0 flex-1 overflow-visible whitespace-nowrap text-center text-[11px] text-ink-3">
+          <span
+            key={i}
+            // More than a week of labels on a narrow chart: every other one, still ending on the latest.
+            className={`min-w-0 flex-1 overflow-visible whitespace-nowrap text-center text-[11px] text-ink-3 ${
+              data.length > 7 && step === 1 && (data.length - 1 - i) % 2 === 1 ? "@max-md:invisible" : ""
+            }`}
+          >
             {(data.length - 1 - i) % step === 0 ? d.label : ""}
           </span>
         ))}

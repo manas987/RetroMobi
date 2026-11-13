@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "wouter";
 import { handleSessionExpiry, portalFetch, PortalApiError } from "../../lib/portal";
 import { translate, hasKey, type Lang } from "../../i18n";
@@ -11,7 +11,11 @@ import { translate, hasKey, type Lang } from "../../i18n";
 export function useMerchantQuery<T>(
   path: string | null,
   token: string,
-  opts: { refetchInterval?: number } = {},
+  opts: {
+    refetchInterval?: number;
+    /** Keep showing the last result while a new path loads (a range switch), instead of a skeleton. */
+    keepPrevious?: boolean;
+  } = {},
 ) {
   return useQuery<T, Error>({
     queryKey: ["merchant", path],
@@ -25,6 +29,7 @@ export function useMerchantQuery<T>(
     },
     enabled: path != null,
     refetchInterval: opts.refetchInterval,
+    placeholderData: opts.keepPrevious ? keepPreviousData : undefined,
     // A 4xx won't fix itself by retrying; a dropped connection on hill data might.
     retry: (count, err) => !(err instanceof PortalApiError && err.status < 500) && count < 2,
   });
