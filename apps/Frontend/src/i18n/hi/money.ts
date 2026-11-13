@@ -10,6 +10,8 @@ export default {
   rangeLast: "पिछले महीने",
   range3m: "पिछले 3 महीने",
   range7d: "पिछले 7 दिन",
+  range12m: "पिछले 12 महीने",
+  rangeAll: "शुरू से अब तक",
   range30d: "पिछले 30 दिन",
   paid: "आपको मिल चुका",
   pending: "रास्ते में",

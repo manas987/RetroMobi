@@ -10,6 +10,8 @@ export default {
   range3m: "Last 3 months",
   range7d: "Last 7 days",
   range30d: "Last 30 days",
+  range12m: "Last 12 months",
+  rangeAll: "All time",
   paid: "Paid to you",
   pending: "On the way",
   pendingCaption: "RetroMobi pays your share after each ride",
