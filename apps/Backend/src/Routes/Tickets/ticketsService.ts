@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { writeAudit } from "../../lib/audit.ts";
 import { notify } from "../../lib/notify.ts";
+import { assertOwnUpload } from "../../lib/storage.ts";
 
 export class TicketNotFoundError extends Error {}
 export class TicketCategoryAlreadySetError extends Error {}
@@ -398,6 +399,7 @@ export async function addAttachment(
   if (!message) throw new TicketNotFoundError(`message ${messageId} not found`);
 
   await requireParticipant(pool, message.ticket_id, sender.partyType, sender.partyId);
+  assertOwnUpload(input.storageKey, `tickets/${message.ticket_id}/${messageId}/`);
 
   const { rows } = await pool.query(
     `insert into ticket_attachments (message_id, storage_key, file_name, size_bytes, duration_seconds)

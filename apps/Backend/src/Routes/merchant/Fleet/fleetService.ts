@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
-import { storedContentType } from "../../../lib/storage.ts";
+import { assertOwnUpload, storedContentType } from "../../../lib/storage.ts";
 import type { TrackerClient } from "../../../providers/tracker.ts";
 
 export class VehicleNotFoundError extends Error {}
@@ -309,6 +309,7 @@ export async function attachDocumentFile(
 ) {
   // Pinned to the vehicle in the URL: requirePermission only vouches for that
   // vehicle's shop, not for whichever document id the caller names.
+  assertOwnUpload(storageKey, `vehicles/${vehicleId}/documents/${documentId}/`);
   const { rows } = await pool.query(
     `update vehicle_documents set storage_key = $1, updated_at = now()
       where id = $2 and vehicle_id = $3 and deleted_at is null returning *`,
@@ -364,6 +365,7 @@ export async function addMedia(
   vehicleId: string,
   input: { storageKey: string; type: "IMAGE" | "VIDEO"; displayOrder?: number },
 ) {
+  assertOwnUpload(input.storageKey, `vehicles/${vehicleId.toLowerCase()}/media/`);
   const { rows } = await pool.query(
     `insert into vehicle_media (vehicle_id, storage_key, type, display_order)
      values ($1, $2, $3, $4) returning *`,

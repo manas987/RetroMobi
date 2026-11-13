@@ -7,6 +7,20 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+export class ForeignStorageKeyError extends Error {}
+
+/**
+ * A confirm call names the object the client says it uploaded. It has to be
+ * one this record's own presign handed out (its prefix plus the generated
+ * timestamp or uuid), or a caller who learns another object's key could attach
+ * it to their own record and then download it.
+ */
+export function assertOwnUpload(key: string, prefix: string): void {
+  if (!key.startsWith(prefix) || !/^(?:\d{13}|[0-9a-f-]{36})$/.test(key.slice(prefix.length))) {
+    throw new ForeignStorageKeyError(`storage key is not an upload for ${prefix}`);
+  }
+}
+
 function getClient(): { client: S3Client; bucket: string } | null {
   const accountId = process.env.R2_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;

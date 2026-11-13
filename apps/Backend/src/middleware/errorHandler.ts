@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { ForeignStorageKeyError } from "../lib/storage.ts";
 import {
   EmailNotVerifiedError,
   EmailTakenError,
@@ -504,6 +505,11 @@ export function errorHandler(
   }
   if (err instanceof ReviewNotFoundError) {
     res.status(404).json({ error: "review_not_found", message: err.message });
+    return;
+  }
+
+  if (err instanceof ForeignStorageKeyError) {
+    res.status(400).json({ error: "invalid_storage_key", message: err.message });
     return;
   }
 
