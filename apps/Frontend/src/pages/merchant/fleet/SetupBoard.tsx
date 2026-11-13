@@ -236,14 +236,16 @@ export function SetupBoard() {
         {STAGES.map((stage) => {
           const list = s.vehicles.filter((v) => v.stage === stage);
           return (
-            <section key={stage} className="flex min-w-0 flex-col gap-3">
+            // Stacked (narrower than five columns), an empty stage is just a big
+            // blank box; only the side-by-side board needs every column.
+            <section key={stage} className={`min-w-0 flex-col gap-3 ${list.length === 0 ? "hidden @6xl:flex" : "flex"}`}>
               <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
                 <span className={`h-2.5 w-2.5 rounded-full ${TONE[STAGE_TONE[stage]].dot}`} aria-hidden />
                 {t(`fleet.stage_${stage}` as const)}
                 <span className="tnum text-ink-3">{list.length}</span>
               </h3>
               {list.length === 0 ? (
-                <p className="rounded-2xl border-2 border-dashed border-line px-3 py-6 text-center text-sm text-ink-3">{t("fleet.nothingHere")}</p>
+                <p className="rounded-2xl border-2 border-dashed border-line px-3 py-4 text-center text-sm text-ink-3">{t("fleet.nothingHere")}</p>
               ) : (
                 <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @3xl:grid-cols-3 @6xl:grid-cols-1">
                 {list.map((v) => (
