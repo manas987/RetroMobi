@@ -22,6 +22,11 @@ describe("activityText", () => {
     const item = { ...base, action: "vehicle.verification_decided", actor_type: "ADMIN" as const, actor_name: null, after: { status: "VERIFIED" } };
     expect(activityText(item, t)).toBe("RetroMobi approved UK07 GH 5520");
   });
+  test("staff rows say who was invited and for what", () => {
+    expect(activityText({ ...base, action: "shop.member_invited", after: { phone: "+919800054321", role: "STAFF" } }, t)).toBe(
+      "Ravi invited +91\u00a098000\u00a054321 as Counter staff",
+    );
+  });
   test("an unknown action falls back", () => {
     expect(activityText({ ...base, action: "nope.nothing" }, t)).toBe("Ravi made a change");
   });

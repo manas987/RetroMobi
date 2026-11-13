@@ -51,7 +51,7 @@ test("rupees still formats integer paise", () => {
 });
 
 test("Indian mobile numbers are grouped 5 + 5, others are untouched", () => {
-  expect(phoneLabel("+917039408159")).toBe("+91 70394 08159");
+  expect(phoneLabel("+917039408159")).toBe("+91\u00a070394\u00a008159");
   expect(phoneLabel("+14155550100")).toBe("+14155550100");
   expect(phoneLabel("7039408159")).toBe("7039408159");
 });

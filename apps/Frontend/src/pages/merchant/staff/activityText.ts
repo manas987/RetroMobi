@@ -1,4 +1,5 @@
 import { hasKey, type TKey, type TVars } from "../../../i18n";
+import { phoneLabel } from "../../../lib/format";
 
 export interface ActivityItem {
   id: string;
@@ -34,9 +35,13 @@ export function activityText(item: ActivityItem, t: T): string {
   else if (item.action === "booking.returned" && item.after?.claim) key += "_claim";
   if (!hasKey(key)) key = "staff.act_unknown";
 
+  const role = item.after?.role;
   return t(key as TKey, {
     who: actorName(item, t),
     vehicle: item.registration_number ?? ([item.make, item.model].filter(Boolean).join(" ") || "—"),
     customer: item.customer_name ?? "—",
+    // Staff rows: who was invited, and for what.
+    phone: typeof item.after?.phone === "string" ? phoneLabel(item.after.phone) : "—",
+    role: typeof role === "string" && hasKey(`common.role_${role}`) ? t(`common.role_${role}` as TKey) : "—",
   });
 }
