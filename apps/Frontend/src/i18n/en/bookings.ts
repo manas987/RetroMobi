@@ -7,6 +7,7 @@ export default {
   viewCalendar: "Calendar",
   searchPlaceholder: "Name, phone or number plate",
   allVehicles: "All vehicles",
+  allSources: "All bookings",
   filterSource: "Online or walk-in",
   filterVehicle: "Vehicle",
   tabToday: "Today",

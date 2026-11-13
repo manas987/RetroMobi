@@ -73,13 +73,15 @@ function BookingsBody() {
             style={{ paddingLeft: 44 }}
           />
         </div>
+        {/* Side by side on a phone, so the list starts higher. */}
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
         <Select
           ariaLabel={t("bookings.filterSource")}
           value={source}
           onChange={(v) => setSource(v as Filters["source"])}
           className="sm:w-40"
           options={[
-            { value: "", label: t("common.all") },
+            { value: "", label: t("bookings.allSources") },
             { value: "ONLINE", label: t("common.online") },
             { value: "OFFLINE", label: t("common.walkin") },
           ]}
@@ -97,6 +99,7 @@ function BookingsBody() {
             })),
           ]}
         />
+        </div>
       </div>
 
       {view === "list" ? (
