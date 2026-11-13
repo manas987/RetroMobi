@@ -26,6 +26,7 @@ import { setLang, useT, type TKey } from "../../i18n";
 import { useMerchantQuery } from "./query";
 import { Sheet } from "./ui/ui";
 import { GetListedChip } from "./setup/GetListedChip";
+import { InvitesForYou } from "./staff/InvitesForYou";
 
 interface MerchantCtx {
   token: string;
@@ -247,7 +248,10 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
           )}
 
           {!loadError && loaded && shops.length === 0 && (
-            <FirstShopForm token={session.accessToken} onCreated={() => void shopsQ.refetch()} />
+            <div className="max-w-md">
+              <InvitesForYou token={session.accessToken} onAccepted={() => void shopsQ.refetch()} className="mb-4" />
+              <FirstShopForm token={session.accessToken} onCreated={() => void shopsQ.refetch()} />
+            </div>
           )}
 
           {!loadError && loaded && shops.length > 0 && shopId && (

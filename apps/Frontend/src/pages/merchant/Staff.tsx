@@ -10,6 +10,7 @@ import { AddStaffSheet } from "./staff/AddStaffSheet";
 import { MemberCard } from "./staff/MemberCard";
 import { ROLES, RoleCards, type Role } from "./staff/RoleCards";
 import { phoneLabel } from "../../lib/format";
+import { InvitesForYou } from "./staff/InvitesForYou";
 
 export function MerchantStaff() {
   return (
@@ -30,7 +31,6 @@ function StaffBody() {
 
   const members = useMerchantQuery<{ members: Row[] }>(canRead && shopId ? `/shops/${shopId}/members` : null, token);
   const invites = useMerchantQuery<{ invites: Row[] }>(canRead && shopId ? `/shops/${shopId}/invites` : null, token);
-  const mine = useMerchantQuery<{ invites: Row[] }>("/invites", token);
 
   const list = members.data?.members ?? [];
   const counts = Object.fromEntries(ROLES.map((r) => [r, list.filter((m) => m.role === r).length])) as Record<Role, number>;
@@ -44,15 +44,7 @@ function StaffBody() {
     <div className="@container">
       <PageHeader title={t("staff.title")} subtitle={t("staff.subtitle")} actions={addButton} />
 
-      {(mine.data?.invites.length ?? 0) > 0 && (
-        <Card title={t("staff.invitesForYou")} icon={UserPlus} className="mb-6">
-          <div className="flex flex-col gap-3">
-            {mine.data!.invites.map((i) => (
-              <MyInvite key={String(i.id)} invite={i} token={token} onAccepted={reloadShops} />
-            ))}
-          </div>
-        </Card>
-      )}
+      <InvitesForYou token={token} onAccepted={reloadShops} />
 
       {!canRead ? (
         <Card><p className="text-base text-ink-2">{t("staff.noAccess")}</p></Card>
@@ -131,36 +123,3 @@ function InviteRow({ invite: i, canManage, onCancel, errorOf, date }: {
   );
 }
 
-function MyInvite({ invite: i, token, onAccepted }: { invite: Row; token: string; onAccepted: () => void }) {
-  const { t, lang } = useT();
-  const invalidate = useInvalidateMerchant();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function respond(accept: boolean) {
-    setBusy(true);
-    setError(null);
-    try {
-      await portalFetch("merchant", `/invites/${i.id}/respond`, { method: "POST", token, body: { accept } });
-      await invalidate();
-      if (accept) onAccepted();
-    } catch (err) {
-      setError(errorText(lang, err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <p className="text-base text-ink">{t("staff.inviteJoin", { shop: String(i.shop_name ?? ""), role: t(`common.role_${i.role as Role}`) })}</p>
-        {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-      </div>
-      <div className="flex gap-2">
-        <Button variant="primary" disabled={busy} onClick={() => respond(true)}>{t("staff.accept")}</Button>
-        <Button variant="ghost" disabled={busy} onClick={() => respond(false)}>{t("staff.decline")}</Button>
-      </div>
-    </div>
-  );
-}
