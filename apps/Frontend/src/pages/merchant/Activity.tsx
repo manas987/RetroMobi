@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Bike, CalendarCheck, History } from "lucide-react";
 import { handleSessionExpiry, portalFetch, PortalApiError, type Row } from "../../lib/portal";
-import { istDay } from "../../lib/format";
+import { istDay, phoneLabel } from "../../lib/format";
 import { useT } from "../../i18n";
 import { MerchantLayout, useMerchantShop } from "./Layout";
 import { useMerchantQuery, useUrlParam, useUrlString } from "./query";
@@ -77,7 +77,7 @@ function ActivityBody() {
               onChange={(v) => setActorId(v || null)}
               options={[
                 { value: "", label: t("staff.everyone") },
-                ...(members.data?.members ?? []).map((m) => ({ value: String(m.merchant_user_id), label: String(m.name ?? "") || String(m.phone) })),
+                ...(members.data?.members ?? []).map((m) => ({ value: String(m.merchant_user_id), label: String(m.name ?? "") || phoneLabel(String(m.phone)) })),
               ]}
             />
             <Select

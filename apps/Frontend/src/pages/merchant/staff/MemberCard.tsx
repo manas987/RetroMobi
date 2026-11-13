@@ -5,6 +5,7 @@ import { useT } from "../../../i18n";
 import { errorText, useInvalidateMerchant } from "../query";
 import { Button, Chip, ConfirmSheet, Select } from "../ui/ui";
 import { ROLES, type Role } from "./RoleCards";
+import { phoneLabel } from "../../../lib/format";
 
 export function Avatar({ name }: { name: string }) {
   return (
@@ -33,7 +34,7 @@ export function MemberCard({
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const phone = String(m.phone ?? "");
-  const name = String(m.name ?? "") || phone;
+  const name = String(m.name ?? "") || phoneLabel(phone);
 
   async function run(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -57,7 +58,7 @@ export function MemberCard({
           <p className="truncate text-base font-semibold text-ink">{name}</p>
           {phone && (
             <a href={`tel:${phone}`} className="tnum text-sm text-ink-2 underline underline-offset-2">
-              {phone}
+              {phoneLabel(phone)}
             </a>
           )}
         </div>

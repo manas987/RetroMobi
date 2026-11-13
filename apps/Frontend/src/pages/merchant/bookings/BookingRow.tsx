@@ -1,6 +1,6 @@
 import { CalendarClock, CheckCircle2, RotateCcw } from "lucide-react";
 import type { Row } from "../../../lib/portal";
-import { istDay } from "../../../lib/format";
+import { istDay, phoneLabel } from "../../../lib/format";
 import { nextAction, STAGE_TONE, type BookingStage, type Tone } from "../../../lib/bookingStage";
 import { useT } from "../../../i18n";
 import { renterName, vehicleLabel } from "../bookingActions";
@@ -79,7 +79,7 @@ export function BookingRow({ b, stage, actions }: { b: Row; stage: BookingStage 
         </div>
         {phone && (
           <a href={`tel:${phone}`} onClick={(e) => e.stopPropagation()} className="tnum text-sm text-ink-3 hover:text-ink">
-            {phone}
+            {phoneLabel(phone)}
           </a>
         )}
       </div>

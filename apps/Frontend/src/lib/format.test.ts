@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { dateLabel, enumLabel, reviewTimeLabel, rupees } from "./format";
+import { dateLabel, enumLabel, phoneLabel, reviewTimeLabel, rupees } from "./format";
 
 test("reviews use relative times today, Yesterday, and the date for older posts", () => {
   const now = new Date("2026-11-12T08:00:00+05:30");
@@ -48,4 +48,10 @@ test("dateLabel passes through anything that is not a date", () => {
 
 test("rupees still formats integer paise", () => {
   expect(rupees(50_000)).toBe("₹500");
+});
+
+test("Indian mobile numbers are grouped 5 + 5, others are untouched", () => {
+  expect(phoneLabel("+917039408159")).toBe("+91 70394 08159");
+  expect(phoneLabel("+14155550100")).toBe("+14155550100");
+  expect(phoneLabel("7039408159")).toBe("7039408159");
 });

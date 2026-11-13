@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "wouter";
 import type { Row } from "../../../lib/portal";
-import { rupees } from "../../../lib/format";
+import { phoneLabel, rupees } from "../../../lib/format";
 import { bookingStage, STAGE_TONE } from "../../../lib/bookingStage";
 import { useT } from "../../../i18n";
 import { renterName, vehicleLabel } from "../bookingActions";
@@ -43,7 +43,7 @@ export function BookingSheet({ id, onClose, actions }: { id: string | null; onCl
 
           <Block>
             <Item label={t("actions.customer")}>{renterName(b)}</Item>
-            {phone && <Item label={t("actions.phone")}><a href={`tel:${phone}`} className="tnum underline underline-offset-2">{phone}</a></Item>}
+            {phone && <Item label={t("actions.phone")}><a href={`tel:${phone}`} className="tnum underline underline-offset-2">{phoneLabel(phone)}</a></Item>}
             {b.walkin_dl_number != null && <Item label={t("actions.licenceNumber")}><span className="tnum">{String(b.walkin_dl_number)}</span></Item>}
             <Item label={t("actions.vehicle")}>
               <Link href={`/merchant/fleet/${String(b.vehicle_id)}`} className="underline underline-offset-2">{vehicleLabel(b)}</Link>

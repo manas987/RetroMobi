@@ -9,6 +9,7 @@ import { Button, Card, Chip, ErrorNote, LoadingRows, PageHeader } from "./ui/ui"
 import { AddStaffSheet } from "./staff/AddStaffSheet";
 import { MemberCard } from "./staff/MemberCard";
 import { ROLES, RoleCards, type Role } from "./staff/RoleCards";
+import { phoneLabel } from "../../lib/format";
 
 export function MerchantStaff() {
   return (
@@ -112,7 +113,7 @@ function InviteRow({ invite: i, canManage, onCancel, errorOf, date }: {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-surface-2 p-3">
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2 text-base font-semibold text-ink">
-          <span className="tnum">{String(i.requested_to)}</span>
+          <span className="tnum">{phoneLabel(String(i.requested_to))}</span>
           <Chip tone="muted">{t(`common.role_${i.role as Role}`)}</Chip>
         </p>
         <p className="text-xs text-ink-3">{t("staff.invitedOn", { date: date(i.created_at) })}</p>
