@@ -32,7 +32,7 @@ export function PhoneInput({
               {country.flag} {country.dial}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent className="z-[1150] max-h-72">
+          <SelectContent className="max-h-72">
             {COUNTRIES.map((c) => (
               <SelectItem key={c.code} value={c.code}>
                 {c.flag} {c.dial} · {c.name}
