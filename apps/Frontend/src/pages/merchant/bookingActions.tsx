@@ -4,11 +4,10 @@ import { portalFetch, type Row } from "../../lib/portal";
 import { istDay, rupees } from "../../lib/format";
 import { combine, splitIso } from "../../components/DateTimeField";
 import { DateRangeField } from "../../components/DateRangeField";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { useT } from "../../i18n";
 import { useMerchantShop } from "./Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "./query";
-import { Button, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "./ui/ui";
+import { Button, ErrorNote, Field, INPUT, LoadingRows, Select, Sheet } from "./ui/ui";
 
 /**
  * The three things that happen at the counter: hand a vehicle over, take it
@@ -501,24 +500,18 @@ function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => vo
     <div>
       <p className="mb-5 text-base text-ink-2">{t("actions.walkinIntro")}</p>
       <Field label={t("actions.walkinVehicle")}>
-        <Select value={vehicleId} onValueChange={setVehicleId}>
-          <SelectTrigger className="w-full min-h-12 rounded-2xl">
-            <SelectValue placeholder={t("actions.walkinChooseVehicle")} />
-          </SelectTrigger>
-          <SelectContent>
-            {vehicles.map((v) => {
-              // No price row means the server can't total it; say so here
-              // instead of letting the save fail.
-              const priced = v.amount != null;
-              return (
-                <SelectItem key={String(v.id)} value={String(v.id)} disabled={!priced}>
-                  {vehicleLabel(v)}
-                  {!priced && <span className="text-ink-3"> — {t("actions.walkinNoPrice")}</span>}
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
+        <Select
+          value={vehicleId}
+          onChange={setVehicleId}
+          placeholder={t("actions.walkinChooseVehicle")}
+          // No price row means the server can't total it; say so here
+          // instead of letting the save fail.
+          options={vehicles.map((v) => ({
+            value: String(v.id),
+            label: v.amount != null ? vehicleLabel(v) : `${vehicleLabel(v)} — ${t("actions.walkinNoPrice")}`,
+            disabled: v.amount == null,
+          }))}
+        />
       </Field>
       <Field label={t("actions.walkinName")}>
         <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" className={INPUT} />

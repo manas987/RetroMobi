@@ -447,7 +447,7 @@ export function Field({
   );
 }
 
-export type SelectOption<V extends string> = { value: V; label: string; group?: string };
+export type SelectOption<V extends string> = { value: V; label: string; group?: string; disabled?: boolean };
 
 // Radix reserves "" for "nothing chosen", but filters use "" for "All".
 const ALL = "__all";
@@ -514,7 +514,8 @@ export function Select<V extends string>({
                   <RSelect.Item
                     key={o.value || ALL}
                     value={o.value || ALL}
-                    className="relative flex min-h-11 cursor-pointer select-none items-center rounded-xl py-2 pl-3 pr-10 text-base text-ink outline-none data-[highlighted]:bg-surface-3 data-[state=checked]:font-semibold"
+                    disabled={o.disabled}
+                    className="relative flex min-h-11 cursor-pointer select-none items-center rounded-xl py-2 pl-3 pr-10 text-base text-ink outline-none data-[highlighted]:bg-surface-3 data-[state=checked]:font-semibold data-[disabled]:cursor-default data-[disabled]:text-ink-4"
                   >
                     <RSelect.ItemText>{o.label}</RSelect.ItemText>
                     <RSelect.ItemIndicator className="absolute right-3 inline-flex">
