@@ -54,6 +54,7 @@ export function StepCard({
   saveLabel,
   busy,
   disabled,
+  missing = [],
   error,
 }: {
   title: ReactNode;
@@ -68,6 +69,8 @@ export function StepCard({
   saveLabel?: string;
   busy?: boolean;
   disabled?: boolean;
+  /** Why save is disabled, in words, so a greyed-out button is never a mystery. */
+  missing?: string[];
   error?: string | null;
 }) {
   const { t } = useT();
@@ -80,6 +83,9 @@ export function StepCard({
       </div>
       {gated ? <p className="mb-5 text-sm text-ink-2">{t("common.askOwner")}</p> : children}
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
+      {!gated && disabled && missing.length > 0 && (
+        <p className="mb-2 text-right text-sm text-ink-2">{t("setup.stillNeeded", { items: missing.join(", ") })}</p>
+      )}
       <div className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-4">
         {step !== "shop" ? <Button variant="ghost" size="lg" onClick={onBack}>{t("common.back")}</Button> : <span />}
         {gated || !onSave ? (

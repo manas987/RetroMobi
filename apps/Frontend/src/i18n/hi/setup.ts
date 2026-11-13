@@ -91,4 +91,10 @@ export default {
   statusRejected: "आपकी दुकान में कुछ ठीक करना है",
   fixAndSend: "ठीक करके दोबारा भेजें",
   openFleet: "गाड़ियाँ खोलें → लिस्टिंग",
+  stillNeeded: "अभी बाकी: {items}",
+  need_address: "पता",
+  need_city: "शहर",
+  need_pincode: "6 अंकों का पिनकोड",
+  need_pin: "नक्शे पर पिन",
+  need_hours: "खुलने का समय (बंद होने का समय बाद में हो)",
 } satisfies Record<keyof typeof en, string>;

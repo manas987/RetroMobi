@@ -90,4 +90,10 @@ export default {
   statusRejected: "Your shop needs fixing",
   fixAndSend: "Fix and send again",
   openFleet: "Open Vehicles → Get listed",
+  stillNeeded: "Still needed: {items}",
+  need_address: "address",
+  need_city: "city",
+  need_pincode: "6-digit pincode",
+  need_pin: "pin on the map",
+  need_hours: "opening hours (closing after opening)",
 };
