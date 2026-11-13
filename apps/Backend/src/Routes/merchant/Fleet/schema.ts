@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UPLOAD_CONTENT_TYPE } from "../../../lib/storage.ts";
 
 export const CreateVehicleSchema = z.object({
   modelId: z.string().uuid(),
@@ -45,7 +46,7 @@ export const CreateDocumentSchema = z.object({
 });
 
 export const UploadRequestSchema = z.object({
-  contentType: z.string().min(1),
+  contentType: z.string().regex(UPLOAD_CONTENT_TYPE, "upload a photo, video or PDF"),
 });
 
 export const ConfirmUploadSchema = z.object({

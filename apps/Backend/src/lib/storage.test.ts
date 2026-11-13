@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ForeignStorageKeyError, assertOwnUpload } from "./storage.ts";
+import { ForeignStorageKeyError, UPLOAD_CONTENT_TYPE, assertOwnUpload } from "./storage.ts";
 
 describe("assertOwnUpload", () => {
   const prefix = "licences/7f3c2c1e-0000-4000-8000-000000000001/";
@@ -20,4 +20,13 @@ describe("assertOwnUpload", () => {
       expect(() => assertOwnUpload(key, prefix)).toThrow(ForeignStorageKeyError);
     }
   });
+});
+
+test("papers and photos can't be uploaded as something a browser would run", () => {
+  for (const ok of ["image/jpeg", "image/heic", "application/pdf", "video/mp4", "application/octet-stream"]) {
+    expect(UPLOAD_CONTENT_TYPE.test(ok)).toBe(true);
+  }
+  for (const bad of ["text/html", "image/svg+xml", "application/javascript", "text/plain"]) {
+    expect(UPLOAD_CONTENT_TYPE.test(bad)).toBe(false);
+  }
 });
