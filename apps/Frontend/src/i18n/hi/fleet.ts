@@ -11,6 +11,7 @@ export default {
   sumFree: "{n} अभी खाली",
   sumToday: "{n} आज जाएँगी",
   sumOut: "{n} कस्टमर के पास",
+  sumMissed: "{n} लेने नहीं आए",
   avail_FREE: "अभी खाली",
   avail_TODAY: "{when} जाएगी",
   avail_OUT: "{when} वापस आएगी",

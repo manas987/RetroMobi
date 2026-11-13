@@ -67,6 +67,7 @@ export default {
   bookVehicle: "{vehicle} बुक करें",
   backAt: "वापसी {when}",
   goesAt: "जाएगी {when}",
+  missedAt: "कस्टमर को {when} आना था",
   nextBooking: "अगली बुकिंग {when}",
   noPrice: "किराया तय नहीं",
   manageFleet: "गाड़ियाँ संभालें",

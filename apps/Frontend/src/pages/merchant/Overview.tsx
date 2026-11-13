@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { Row } from "../../lib/portal";
 import { istDay, rupees } from "../../lib/format";
-import { bookingStage, nextAction, STAGE_TONE, type BookingStage } from "../../lib/bookingStage";
+import { bookingStage, nextAction, STAGE_TONE, type BookingStage, type Tone } from "../../lib/bookingStage";
 import { useT } from "../../i18n";
 import { MerchantLayout, useMerchantShop } from "./Layout";
 import { useMerchantQuery } from "./query";
@@ -368,48 +368,57 @@ function FleetNowCard({
 
     const rows = list
       .map((v) => {
-        const { avail: a, out, goes, next } = vehicleNow(v.id, staged);
+        const { avail: a, out, goes, next, missed } = vehicleNow(v.id, staged);
         const price = v.amount == null ? t("overview.noPrice") : t("common.perDay", { amount: rupees(Number(v.amount)) });
         const detail =
           a === "OUT" ? t("overview.backAt", { when: when(out!.b.scheduled_return_at) })
+          : missed ? t("overview.missedAt", { when: when(goes!.b.scheduled_pickup_at) })
           : a === "TODAY" ? t("overview.goesAt", { when: when(goes!.b.scheduled_pickup_at) })
           : next ? `${price} · ${t("overview.nextBooking", { when: when(next.b.scheduled_pickup_at) })}`
           : price;
-        return { v, a, detail, late: out?.stage === "OVERDUE" };
+        return { v, a, detail, late: out?.stage === "OVERDUE", missed };
       })
       .sort((x, y) => AVAIL_ORDER[x.a] - AVAIL_ORDER[y.a]);
 
-    const tally = (["FREE", "TODAY", "OUT"] as const).map((a) => ({ a, n: rows.filter((r) => r.a === a).length }));
+    const tally = [
+      ...(["FREE", "TODAY", "OUT"] as const).map((a) => ({
+        a: a as string,
+        tone: AVAIL_TONE[a] as Tone,
+        label: t(`overview.avail_${a}` as const),
+        n: rows.filter((r) => r.a === a && !r.missed).length,
+      })),
+      { a: "MISSED", tone: "bad" as Tone, label: t("status.stage_PICKUP_LATE"), n: rows.filter((r) => r.missed).length },
+    ].filter((x) => x.a !== "MISSED" || x.n > 0);
 
     return (
       <>
         {/* Availability at a glance: one bar, three states, labelled. */}
         <div className="mb-1 flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full" aria-hidden>
           {tally.filter((x) => x.n > 0).map((x) => (
-            <span key={x.a} className={TONE[AVAIL_TONE[x.a]].dot} style={{ flexGrow: x.n }} />
+            <span key={x.a} className={TONE[x.tone].dot} style={{ flexGrow: x.n }} />
           ))}
         </div>
         <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1">
           {tally.map((x) => (
             <li key={x.a} className="flex items-center gap-1.5 text-xs text-ink-2 whitespace-nowrap">
-              <span className={`h-2 w-2 rounded-full ${TONE[AVAIL_TONE[x.a]].dot}`} aria-hidden />
+              <span className={`h-2 w-2 rounded-full ${TONE[x.tone].dot}`} aria-hidden />
               <span className="tnum font-semibold text-ink">{x.n}</span>
-              {t(`overview.avail_${x.a}` as const)}
+              {x.label}
             </li>
           ))}
         </ul>
         <ul className="flex flex-col divide-y divide-line">
-          {rows.map(({ v, a, detail, late }) => {
+          {rows.map(({ v, a, detail, late, missed }) => {
             const name = `${String(v.make ?? "")} ${String(v.model ?? "")}`.trim();
             return (
               <li key={String(v.id)} className="flex items-center gap-3 py-2.5">
-                <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${TONE[late ? "bad" : AVAIL_TONE[a]].icon}`}>
+                <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${TONE[late || missed ? "bad" : AVAIL_TONE[a]].icon}`}>
                   <Bike className="h-4 w-4" aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{name}</p>
                   <p className="truncate text-xs text-ink-3">
-                    <span className="tnum">{String(v.registration_number ?? "")}</span> · <span className={late ? "font-semibold text-danger" : ""}>{detail}</span>
+                    <span className="tnum">{String(v.registration_number ?? "")}</span> · <span className={late || missed ? "font-semibold text-danger" : ""}>{detail}</span>
                   </p>
                 </div>
                 {a === "FREE" && onBook && v.amount != null ? (
@@ -417,7 +426,9 @@ function FleetNowCard({
                     {t("overview.book")}
                   </Button>
                 ) : (
-                  <Chip tone={late ? "bad" : AVAIL_TONE[a]}>{late ? t("status.stage_OVERDUE") : t(`overview.avail_${a}` as const)}</Chip>
+                  <Chip tone={late || missed ? "bad" : AVAIL_TONE[a]}>
+                    {late ? t("status.stage_OVERDUE") : missed ? t("status.stage_PICKUP_LATE") : t(`overview.avail_${a}` as const)}
+                  </Chip>
                 )}
               </li>
             );

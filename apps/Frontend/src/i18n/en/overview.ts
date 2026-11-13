@@ -65,6 +65,7 @@ export default {
   bookVehicle: "Book {vehicle}",
   backAt: "Back {when}",
   goesAt: "Goes out {when}",
+  missedAt: "Customer was due {when}",
   nextBooking: "next booking {when}",
   noPrice: "no price set",
   manageFleet: "Manage vehicles",

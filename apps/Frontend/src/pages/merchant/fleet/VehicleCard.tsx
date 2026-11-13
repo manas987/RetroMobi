@@ -20,8 +20,9 @@ export function useWhen() {
 export function AvailChip({ id, staged }: { id: unknown; staged: Staged[] }) {
   const { t } = useT();
   const when = useWhen();
-  const { avail, out, goes, late } = vehicleNow(id, staged);
+  const { avail, out, goes, late, missed } = vehicleNow(id, staged);
   if (late) return <Chip tone="bad">{t("fleet.avail_LATE")}</Chip>;
+  if (missed) return <Chip tone="bad">{t("status.stage_PICKUP_LATE")}</Chip>;
   if (avail === "OUT") return <Chip tone="info">{t("fleet.avail_OUT", { when: when(out!.b.scheduled_return_at) })}</Chip>;
   if (avail === "TODAY") return <Chip tone="attention">{t("fleet.avail_TODAY", { when: when(goes!.b.scheduled_pickup_at) })}</Chip>;
   return <Chip tone="good">{t("fleet.avail_FREE")}</Chip>;
@@ -42,7 +43,7 @@ export function VehicleCard({
   const { t } = useT();
   const act = useListingActions();
   const id = String(v.id);
-  const { avail, late } = vehicleNow(id, staged);
+  const { avail, late, missed } = vehicleNow(id, staged);
   const write = can("fleet:write");
   const hasPrice = v.amount != null;
   const fixHref = `/merchant/setup?vehicle=${id}`;
@@ -81,7 +82,7 @@ export function VehicleCard({
   return (
     <div className="flex flex-col gap-3 rounded-card bg-surface p-4 shadow-card">
       <div className="flex items-start gap-3">
-        <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${TONE[late ? "bad" : AVAIL_TONE[avail]].icon}`}>
+        <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${TONE[late || missed ? "bad" : AVAIL_TONE[avail]].icon}`}>
           <Bike className="h-5 w-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">

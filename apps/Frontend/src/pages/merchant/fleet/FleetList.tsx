@@ -29,8 +29,11 @@ export function FleetList({ onAdd, onBook }: { onAdd: () => void; onBook: (vehic
   const list = vehicles.data.vehicles;
   if (list.length === 0) return <NoVehicles onAdd={onAdd} />;
 
-  const tally = { FREE: 0, TODAY: 0, OUT: 0 };
-  for (const v of list) tally[vehicleNow(v.id, staged).avail]++;
+  const tally = { FREE: 0, TODAY: 0, OUT: 0, MISSED: 0 };
+  for (const v of list) {
+    const now = vehicleNow(v.id, staged);
+    tally[now.missed ? "MISSED" : now.avail]++;
+  }
   const sv = new Map(setup.data?.vehicles.map((x) => [x.id, x]));
 
   return (
@@ -40,6 +43,7 @@ export function FleetList({ onAdd, onBook }: { onAdd: () => void; onBook: (vehic
         <Chip tone="good">{t("fleet.sumFree", { n: tally.FREE })}</Chip>
         <Chip tone="attention">{t("fleet.sumToday", { n: tally.TODAY })}</Chip>
         <Chip tone="info">{t("fleet.sumOut", { n: tally.OUT })}</Chip>
+        {tally.MISSED > 0 && <Chip tone="bad">{t("fleet.sumMissed", { n: tally.MISSED })}</Chip>}
       </div>
       <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-3">
         {list.map((v) => (

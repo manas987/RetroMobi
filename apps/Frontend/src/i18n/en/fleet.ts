@@ -10,6 +10,7 @@ export default {
   sumFree: "{n} free now",
   sumToday: "{n} going out today",
   sumOut: "{n} with customers",
+  sumMissed: "{n} not picked up",
   avail_FREE: "Free now",
   avail_TODAY: "Goes out {when}",
   avail_OUT: "Back {when}",

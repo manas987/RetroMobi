@@ -33,5 +33,6 @@ export function vehicleNow(vehicleId: unknown, staged: Staged[]) {
     .filter((x) => x.stage === "UPCOMING")
     .sort((p, q) => String(p.b.scheduled_pickup_at).localeCompare(String(q.b.scheduled_pickup_at)))[0];
   const avail: Avail = out ? "OUT" : goes ? "TODAY" : "FREE";
-  return { avail, out, goes, next, late: out?.stage === "OVERDUE" };
+  // A pickup the customer missed still holds the vehicle, but it's a problem, not "goes out".
+  return { avail, out, goes, next, late: out?.stage === "OVERDUE", missed: goes?.stage === "PICKUP_LATE" };
 }
