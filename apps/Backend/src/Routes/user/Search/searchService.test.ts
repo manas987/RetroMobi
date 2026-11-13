@@ -173,11 +173,14 @@ describe("grouping by model", () => {
   test("by default the primary offer is the cheapest one", async () => {
     const { shopId, city } = await isolatedCity();
     const model = await createModel(pool);
-    await createBookableVehicle(pool, { shopId, modelId: model.id, amount: 90_000 });
+    // Weekend rates set too: the fixture defaults both to the same weekend
+    // price, so a window that lands on a weekend made this a coin toss.
+    await createBookableVehicle(pool, { shopId, modelId: model.id, amount: 90_000, weekendAmount: 90_000 });
     const cheapest = await createBookableVehicle(pool, {
       shopId,
       modelId: model.id,
       amount: 30_000,
+      weekendAmount: 30_000,
     });
     const { pickupAt, returnAt } = futureWindow(610);
 
