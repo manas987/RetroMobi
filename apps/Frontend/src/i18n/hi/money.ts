@@ -5,6 +5,7 @@ export default {
   earningsTitle: "कमाई",
   earningsSubtitle: "ऑनलाइन बुकिंग से आया पैसा, और दुकान पर कैश जो आपने दर्ज किया।",
   reportsTitle: "रिपोर्ट",
+  reportsSubtitleAll: "आपकी सारी दुकानें मिलाकर कैसी चल रही हैं।",
   reportsSubtitle: "आपकी दुकान कैसी चल रही है।",
   rangeMonth: "इस महीने",
   rangeLast: "पिछले महीने",

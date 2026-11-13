@@ -5,6 +5,7 @@ export default {
   earningsSubtitle: "Money from online bookings, and cash you recorded at the shop.",
   reportsTitle: "Reports",
   reportsSubtitle: "How your shop is doing.",
+  reportsSubtitleAll: "How all your shops are doing, added together.",
   rangeMonth: "This month",
   rangeLast: "Last month",
   range3m: "Last 3 months",

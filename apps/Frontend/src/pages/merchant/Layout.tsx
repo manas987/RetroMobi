@@ -489,7 +489,10 @@ function ShopSwitcher({
       ) : (
         <Select value={shopId ?? ""} onValueChange={onChange}>
           <SelectTrigger className="mt-1 h-auto min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left">
-            <SelectValue className="min-w-0 flex-1">{label(current, true)}</SelectValue>
+            {/* Radix drops SelectValue's className, so the shrinking wrapper is ours. */}
+            <span className="min-w-0 flex-1 overflow-hidden">
+              <SelectValue>{label(current, true)}</SelectValue>
+            </span>
           </SelectTrigger>
           <SelectContent>
             {shops.map((s) => (

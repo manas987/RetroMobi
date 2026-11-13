@@ -1,10 +1,13 @@
 import type { ReactNode } from "react";
-import { BarChart3, Bike, CalendarDays, IndianRupee, TrendingUp, Users } from "lucide-react";
+import { useQueries } from "@tanstack/react-query";
+import { BarChart3, Bike, Building2, CalendarDays, IndianRupee, Store, TrendingUp, Users } from "lucide-react";
 import { MerchantLayout, useMerchantShop } from "./Layout";
 import { rupees } from "../../lib/format";
 import { useT, type TKey } from "../../i18n";
-import { useMerchantQuery, useUrlParam } from "./query";
-import { BarChart, Button, Card, EmptyState, ErrorNote, LoadingRows, PageHeader, SERIES, TONE } from "./ui/ui";
+import { can as hasPermission } from "../../lib/permissions";
+import { merchantQuery, useMerchantQuery, useUrlParam } from "./query";
+import { BarChart, Button, Card, EmptyState, ErrorNote, LoadingRows, PageHeader, SERIES, TONE, ViewToggle } from "./ui/ui";
+import { ShopsCompare, type ShopResult } from "./money/ShopsCompare";
 import { RangeChips, previousRange, rangeDates } from "./money/RangeChips";
 import { RunningTotalChart } from "./money/RunningTotalChart";
 import { VehicleReport } from "./money/VehicleReport";
@@ -13,6 +16,7 @@ import {
   bucketize,
   compare,
   fromSummary,
+  mergeReports,
   moneyOf,
   ridesOf,
   runningTotals,
@@ -25,6 +29,7 @@ import {
 } from "./money/reportMath";
 
 const RANGES = ["7d", "month", "last", "12m", "all"] as const;
+const SCOPES = ["shop", "all"] as const;
 export type ReportRange = (typeof RANGES)[number];
 
 export const summaryPath = (shopId: string, r: { from: string | null; to: string }) =>
@@ -43,9 +48,14 @@ function useCompactRupees() {
 }
 
 function ReportsBody() {
-  const { shopId, can } = useMerchantShop();
+  const { shopId, shops, setShopId, can } = useMerchantShop();
   const { t } = useT();
   const [range, setRange] = useUrlParam("range", RANGES, "month");
+  const [scope, setScope] = useUrlParam("scope", SCOPES, "shop");
+  // Every branch where this person may see money; the switch only matters with two or more.
+  const owned = shops.filter((s) => hasPermission(String(s.role ?? ""), "payouts:read"));
+  const multi = owned.length > 1;
+  const allShops = multi && scope === "all";
 
   if (!can("payouts:read")) {
     return (
@@ -58,9 +68,34 @@ function ReportsBody() {
 
   return (
     <>
-      <PageHeader title={t("money.reportsTitle")} subtitle={t("money.reportsSubtitle")} />
+      <PageHeader
+        title={t("money.reportsTitle")}
+        subtitle={t(allShops ? "money.reportsSubtitleAll" : "money.reportsSubtitle")}
+        actions={multi && (
+          <ViewToggle
+            value={allShops ? "all" : "shop"}
+            onChange={(k) => setScope(k === "shop" ? null : k)}
+            options={[
+              { key: "shop", label: t("money.scopeShop"), icon: Store },
+              { key: "all", label: t("money.scopeAll"), icon: Building2 },
+            ]}
+          />
+        )}
+      />
       <RangeChips options={RANGES} value={range} onChange={(k) => setRange(k === "month" ? null : k)} />
-      {shopId && <ShopReport shopId={shopId} range={range} onAllTime={() => setRange("all")} />}
+      {allShops ? (
+        <AllShopsReport
+          shops={owned}
+          range={range}
+          onAllTime={() => setRange("all")}
+          onOpen={(id) => {
+            setShopId(id);
+            setScope(null);
+          }}
+        />
+      ) : (
+        shopId && <ShopReport shopId={shopId} range={range} onAllTime={() => setRange("all")} />
+      )}
     </>
   );
 }
@@ -77,6 +112,46 @@ function ShopReport({ shopId, range, onAllTime }: { shopId: string; range: Repor
     // Switching ranges keeps the last numbers on screen, dimmed, until the new ones arrive.
     <div className={`transition-opacity ${q.isPlaceholderData ? "opacity-60" : ""}`}>
       <ReportCards data={fromSummary(q.data, prevRange ? (p.data ?? null) : null)} range={range} onAllTime={onAllTime} />
+    </div>
+  );
+}
+
+/** Every branch added up: one summary per shop (current and previous), merged by date. */
+function AllShopsReport({
+  shops,
+  range,
+  onAllTime,
+  onOpen,
+}: {
+  shops: { id?: unknown; name?: unknown; city?: unknown }[];
+  range: ReportRange;
+  onAllTime: () => void;
+  onOpen: (shopId: string) => void;
+}) {
+  const { token } = useMerchantShop();
+  const cur = rangeDates(range);
+  const prevRange = previousRange(range);
+  const current = useQueries({ queries: shops.map((s) => merchantQuery<Summary>(summaryPath(String(s.id), cur), token, true)) });
+  const previous = useQueries({
+    queries: prevRange ? shops.map((s) => merchantQuery<Summary>(summaryPath(String(s.id), prevRange), token, true)) : [],
+  });
+
+  if (current.some((q) => q.isPending)) return <LoadingRows rows={4} />;
+  if (current.some((q) => q.isError)) return <ErrorNote onRetry={() => current.forEach((q) => void q.refetch())} />;
+
+  const results: ShopResult[] = shops.map((s, i) => ({
+    id: String(s.id),
+    name: String(s.name ?? ""),
+    city: String(s.city ?? ""),
+    current: current[i]!.data!,
+    previous: previous[i]?.data ?? null,
+  }));
+  const data = mergeReports(results.map((r) => ({ shopName: r.name, current: r.current, previous: prevRange ? r.previous : null })));
+  const dim = current.some((q) => q.isPlaceholderData);
+
+  return (
+    <div className={`transition-opacity ${dim ? "opacity-60" : ""}`}>
+      <ReportCards data={data} range={range} onAllTime={onAllTime} extra={<ShopsCompare shops={results} onOpen={onOpen} />} />
     </div>
   );
 }
@@ -138,7 +213,7 @@ export function ReportCards({
   const showWeekdays = range !== "7d" && busiest !== null;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {/* 1. The headline: how much, and more or less than before. */}
       <Card title={t(`money.q_earn_${range}` as TKey)} icon={IndianRupee} className="lg:col-span-2">
         <p className="tnum text-5xl font-semibold leading-tight text-ink">{rupees(tot.money)}</p>
