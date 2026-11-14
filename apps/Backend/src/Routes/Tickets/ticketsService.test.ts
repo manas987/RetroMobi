@@ -124,3 +124,36 @@ test("a merchant can only open a chat about a booking at their own shop", async 
   const ticket = await openTicket(pool, { openedByType: "MERCHANT", openedById: owner.rows[0].merchant_user_id, bookingId: booking.id });
   expect(ticket.id).toBeTruthy();
 });
+
+test("a second chat about the same booking reuses the first, and a closed one reopens", async () => {
+  const user = await createUser(pool);
+  const rider = await createRider(pool, user.id);
+  const vehicle = await createBookableVehicle(pool);
+  const group = await pool.query("insert into booking_groups (user_id) values ($1) returning id", [user.id]);
+  const window = futureWindow();
+  const booking = await insertBooking(pool, {
+    vehicleId: vehicle.id, groupId: group.rows[0].id, riderId: rider.id,
+    pickupAt: window.pickupAt.toISOString(), returnAt: window.returnAt.toISOString(),
+  });
+  const owner = (await pool.query(`select merchant_user_id from shops where id = $1`, [vehicle.shopId])).rows[0].merchant_user_id;
+
+  const first = await openTicket(pool, { openedByType: "CUSTOMER", openedById: user.id, bookingId: booking.id, category: "BOOKING", firstMessage: "Where do I park?" });
+  const again = await openTicket(pool, { openedByType: "CUSTOMER", openedById: user.id, bookingId: booking.id, category: "BOOKING", firstMessage: "Hello?" });
+  expect(again).toMatchObject({ id: first.id, reused: true });
+
+  await pool.query(`update tickets set status = 'RESOLVED', resolved_at = now() where id = $1`, [first.id]);
+  const reopened = await openTicket(pool, { openedByType: "CUSTOMER", openedById: user.id, bookingId: booking.id, category: "BOOKING", firstMessage: "One more thing" });
+  expect(reopened.id).toBe(first.id);
+  const t = (await pool.query(`select status, resolved_at from tickets where id = $1`, [first.id])).rows[0];
+  expect(t).toMatchObject({ status: "OPEN", resolved_at: null });
+  const bodies = (await getMessages(pool, first.id, "CUSTOMER", user.id)).map((m: { body: string }) => m.body);
+  expect(bodies).toEqual(expect.arrayContaining(["Where do I park?", "Hello?", "One more thing"]));
+
+  // The shop's chat about the same booking is its own conversation, and a
+  // deposit claim joins it rather than opening a third.
+  const shopChat = await openTicket(pool, { openedByType: "MERCHANT", openedById: owner, bookingId: booking.id, category: "BOOKING" });
+  expect(shopChat.id).not.toBe(first.id);
+  const claim = await openTicket(pool, { openedByType: "MERCHANT", openedById: owner, bookingId: booking.id, category: "BOOKING", subject: "Deposit claim on return", firstMessage: "Scratched mirror" });
+  expect(claim.id).toBe(shopChat.id);
+  expect((await pool.query(`select subject from tickets where id = $1`, [shopChat.id])).rows[0].subject).toBe("Deposit claim on return");
+});

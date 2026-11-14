@@ -11,6 +11,7 @@ export async function create(req: Request, res: Response) {
     openedById: req.merchantUserId!,
     subject: req.body.subject,
     firstMessage: req.body.firstMessage,
+    category: req.body.category,
   });
   res.status(201).json(ticket);
 }

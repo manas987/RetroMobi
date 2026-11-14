@@ -4,6 +4,9 @@ export const CreateTicketSchema = z.object({
   bookingId: z.string().uuid().optional(),
   subject: z.string().min(1).optional(),
   firstMessage: z.string().min(1).optional(),
+  category: z.enum(["BOOKING", "APP_HELP", "OTHER"]).optional(),
+}).refine((ticket) => !ticket.category || (ticket.category === "BOOKING") === !!ticket.bookingId, {
+  message: "bookingId is required for BOOKING and must be absent otherwise",
 });
 
 export const PostMessageSchema = z.object({

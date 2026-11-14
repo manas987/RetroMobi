@@ -27,13 +27,10 @@ export function NewChatSheet({ open, onClose, bookingId: preset, onCreated }: { 
     setBusy(true);
     setError(null);
     try {
+      // A booking that already has a chat returns that chat (reopened if closed).
       const ticket = await portalFetch<{ id: string }>("merchant", "/tickets", {
         method: "POST", token,
-        body: { bookingId: category === "BOOKING" ? bookingId : undefined, firstMessage: message.trim() || undefined },
-      });
-      await portalFetch("merchant", `/tickets/${ticket.id}/category`, {
-        method: "POST", token,
-        body: category === "BOOKING" ? { category, bookingId } : { category },
+        body: { category, bookingId: category === "BOOKING" ? bookingId : undefined, firstMessage: message.trim() || undefined },
       });
       await invalidate();
       setMessage("");

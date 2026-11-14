@@ -44,7 +44,7 @@ export async function openTicket(
     /** Set by callers that already know (e.g. a deposit claim is always BOOKING, booking_id already set). Otherwise null until setTicketCategory. */
     category?: "BOOKING" | "APP_HELP" | "OTHER";
   },
-): Promise<{ id: string; assignedTo: string | null }> {
+): Promise<{ id: string; assignedTo: string | null; reused?: boolean }> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -69,6 +69,50 @@ export async function openTicket(
         [input.bookingId, input.openedById],
       );
       if (!rowCount) throw new TicketNotAboutBookingError("Choose one of your shop's bookings.");
+    }
+
+    // One chat per booking per person: asking again (or a deposit claim on a
+    // booking the shop already chats about) lands in the existing chat, and a
+    // closed one reopens. ponytail: two creates in the same instant can still
+    // make two; a partial unique index on (booking_id, opener) fixes that.
+    if (input.bookingId) {
+      const { rows: existing } = await client.query(
+        `select t.id, t.status, t.assigned_to from tickets t
+           join ticket_participants p on p.ticket_id = t.id and p.party_type = $2 and p.party_id = $3
+          where t.booking_id = $1
+          order by t.created_at desc limit 1
+          for update of t`,
+        [input.bookingId, input.openedByType, input.openedById],
+      );
+      const found = existing[0];
+      if (found) {
+        await client.query(
+          `update tickets
+              set status = case when status = 'RESOLVED' then 'OPEN' else status end,
+                  resolved_at = case when status = 'RESOLVED' then null else resolved_at end,
+                  subject = coalesce($2, subject),
+                  updated_at = now()
+            where id = $1`,
+          [found.id, input.subject ?? null],
+        );
+        if (input.firstMessage) {
+          await client.query(
+            `insert into ticket_messages (ticket_id, sender_type, sender_id, body) values ($1, $2, $3, $4)`,
+            [found.id, input.openedByType, input.openedById, input.firstMessage],
+          );
+        }
+        if (found.status === "RESOLVED") {
+          await writeAudit(client, {
+            actorType: input.openedByType,
+            actorId: input.openedById,
+            action: "ticket.reopened",
+            entityType: "ticket",
+            entityId: found.id,
+          });
+        }
+        await client.query("COMMIT");
+        return { id: found.id, assignedTo: found.assigned_to, reused: true };
+      }
     }
 
     const assignedTo = await pickAssignee(client);
