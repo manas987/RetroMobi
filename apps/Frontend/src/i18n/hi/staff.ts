@@ -33,7 +33,7 @@ export default {
   activitySubtitle: "इस दुकान में सबने क्या किया, सबसे नया ऊपर।",
   person: "कौन",
   everyone: "सब लोग",
-  kind: "किस्म",
+  kind: "क्या हुआ",
   kind_all: "सब कुछ",
   kind_bookings: "बुकिंग",
   kind_vehicles: "गाड़ियाँ",

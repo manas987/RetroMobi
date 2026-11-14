@@ -69,25 +69,29 @@ function ActivityBody() {
       ) : (
         <>
           <div className="mb-4 flex flex-wrap gap-3">
-            <Select
-              compact
-              ariaLabel={t("staff.person")}
-              className="flex-1 @md:w-56 @md:flex-none"
-              value={actorId ?? ""}
-              onChange={(v) => setActorId(v || null)}
-              options={[
-                { value: "", label: t("staff.everyone") },
-                ...(members.data?.members ?? []).map((m) => ({ value: String(m.merchant_user_id), label: String(m.name ?? "") || phoneLabel(String(m.phone)) })),
-              ]}
-            />
-            <Select
-              compact
-              ariaLabel={t("staff.kind")}
-              className="flex-1 @md:w-56 @md:flex-none"
-              value={kind}
-              onChange={(v) => setKind(v === "all" ? null : v)}
-              options={KINDS.map((k) => ({ value: k, label: t(`staff.kind_${k}`) }))}
-            />
+            <div className="flex flex-1 flex-col gap-1.5 @md:w-56 @md:flex-none">
+              <span className="text-sm font-medium text-ink">{t("staff.person")}</span>
+              <Select
+                compact
+                ariaLabel={t("staff.person")}
+                value={actorId ?? ""}
+                onChange={(v) => setActorId(v || null)}
+                options={[
+                  { value: "", label: t("staff.everyone") },
+                  ...(members.data?.members ?? []).map((m) => ({ value: String(m.merchant_user_id), label: String(m.name ?? "") || phoneLabel(String(m.phone)) })),
+                ]}
+              />
+            </div>
+            <div className="flex flex-1 flex-col gap-1.5 @md:w-56 @md:flex-none">
+              <span className="text-sm font-medium text-ink">{t("staff.kind")}</span>
+              <Select
+                compact
+                ariaLabel={t("staff.kind")}
+                value={kind}
+                onChange={(v) => setKind(v === "all" ? null : v)}
+                options={KINDS.map((k) => ({ value: k, label: t(`staff.kind_${k}`) }))}
+              />
+            </div>
           </div>
 
           {q.isPending ? (

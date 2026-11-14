@@ -33,7 +33,7 @@ export default {
   activitySubtitle: "What everyone at this shop did, newest first.",
   person: "Person",
   everyone: "Everyone",
-  kind: "Type",
+  kind: "What happened",
   kind_all: "Everything",
   kind_bookings: "Bookings",
   kind_vehicles: "Vehicles",
