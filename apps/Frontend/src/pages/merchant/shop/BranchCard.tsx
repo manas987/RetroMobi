@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link } from "wouter";
-import { Clock, Pencil, Rocket, Store, Trash2 } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { ArrowRight, Rocket, Store, Trash2 } from "lucide-react";
 import { portalFetch, type Row } from "../../../lib/portal";
 import { can as roleCan } from "../../../lib/permissions";
 import type { Tone } from "../../../lib/bookingStage";
@@ -9,10 +9,8 @@ import { Toggle } from "../../../components/Toggle";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
 import { Button, Card, Chip, ConfirmSheet, ErrorNote, Select } from "../ui/ui";
 import type { SetupData } from "../setup/GetListedChip";
-import { BranchSheet } from "./BranchSheet";
-import { HoursSheet } from "./HoursSheet";
 
-const VERIFY_TONE: Record<string, Tone> = { UNVERIFIED: "muted", PENDING: "info", VERIFIED: "good", REJECTED: "bad" };
+export const VERIFY_TONE: Record<string, Tone> = { UNVERIFIED: "muted", PENDING: "info", VERIFIED: "good", REJECTED: "bad" };
 
 export function BranchCard({ shop: s, token, licences, reloadShops, selectShop, goPapers }: { shop: Row; token: string; licences: Row[]; reloadShops: () => void; selectShop: (id: string) => void; goPapers: () => void }) {
   const { t, lang } = useT();
@@ -23,7 +21,8 @@ export function BranchCard({ shop: s, token, licences, reloadShops, selectShop, 
   const canWrite = roleCan(role, "shop:write");
   const canDelete = roleCan(role, "shop:delete");
   const setup = useMerchantQuery<SetupData>(roleCan(role, "fleet:read") ? `/shops/${id}/setup` : null, token);
-  const [sheet, setSheet] = useState<"edit" | "hours" | "remove" | null>(null);
+  const [sheet, setSheet] = useState<"remove" | null>(null);
+  const [, navigate] = useLocation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const open = s.status === "OPEN";
@@ -105,16 +104,13 @@ export function BranchCard({ shop: s, token, licences, reloadShops, selectShop, 
 
       {error && <div className="mb-3"><ErrorNote text={error} /></div>}
       <div className="mt-auto flex flex-wrap gap-2">
-        {canWrite && <Button icon={Pencil} onClick={() => setSheet("edit")}>{t("shop.editDetails")}</Button>}
-        {canWrite && <Button icon={Clock} onClick={() => setSheet("hours")}>{t("shop.hours")}</Button>}
+        <Button icon={ArrowRight} onClick={() => { selectShop(id); navigate("/merchant/shop"); }}>{t("shop.openShop")}</Button>
         {canWrite && verify !== "VERIFIED" && (
           <Link href="/merchant/setup" onClick={() => selectShop(id)}><Button variant="primary" icon={Rocket}>{t("shop.getListed")}</Button></Link>
         )}
         {canDelete && <Button variant="ghost" icon={Trash2} className="text-danger" onClick={() => setSheet("remove")}>{t("shop.removeBranch")}</Button>}
       </div>
 
-      <BranchSheet open={sheet === "edit"} onClose={() => setSheet(null)} shop={s} token={token} reloadShops={reloadShops} />
-      <HoursSheet open={sheet === "hours"} onClose={() => setSheet(null)} shopId={id} token={token} />
       <ConfirmSheet
         open={sheet === "remove"}
         onClose={() => { setSheet(null); setError(null); }}

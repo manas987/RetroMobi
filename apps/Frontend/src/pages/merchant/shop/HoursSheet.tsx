@@ -96,7 +96,7 @@ export function HoursSheet({ open, onClose, shopId, token }: { open: boolean; on
   );
 }
 
-function HoursForm({ shop, shopId, token, onClose }: { shop: Row; shopId: string; token: string; onClose: () => void }) {
+export function HoursForm({ shop, shopId, token, onClose }: { shop: Row; shopId: string; token: string; onClose: () => void }) {
   const { t, lang } = useT();
   const invalidate = useInvalidateMerchant();
   const [hours, setHours] = useState(() => hoursFromShop(shop));

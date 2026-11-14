@@ -30,7 +30,7 @@ export function BranchesTab({ goPapers }: { goPapers: () => void }) {
           <div className="mt-4">{addButton}</div>
         </>
       )}
-      <BranchSheet open={adding} onClose={() => setAdding(false)} token={token} reloadShops={reloadShops} />
+      <BranchSheet open={adding} onClose={() => setAdding(false)} token={token} reloadShops={reloadShops} lockedState={shops[0] ? String(shops[0].state) : undefined} />
     </div>
   );
 }

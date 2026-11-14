@@ -1,4 +1,5 @@
 export default {
+  shop_other_state: "Shops in another state aren't supported yet. All your shops must be in one state.",
   generic: "Something went wrong. Try again.",
   forbidden: "Your role can't do this. Ask the shop owner.",
   invalid_request: "Some details are missing or wrong. Check and try again.",
