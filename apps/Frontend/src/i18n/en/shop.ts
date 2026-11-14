@@ -54,6 +54,7 @@ export default {
   papersPageTitle: "Shop papers",
   papersPageHint: "Only needed to list this shop on RetroMobi. Add them now or later.",
   saveChanges: "Save changes",
+  previewShort: "Preview",
   tabDetails: "Shop details",
   tabPapers: "Licence & papers",
   addBranch: "Add another branch",

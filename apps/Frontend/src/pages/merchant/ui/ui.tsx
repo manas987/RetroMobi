@@ -265,15 +265,19 @@ export function Tabs<K extends string>({
   tabs,
   value,
   onChange,
+  end,
 }: {
   tabs: { key: K; label: string; count?: number }[];
   value: K;
   onChange: (key: K) => void;
+  /** Actions on the right of the same row (a link, a button), so the page keeps one bar. */
+  end?: ReactNode;
 }) {
   return (
     // The line is an inset shadow, not a border the tabs overlap with -mb-px:
     // inside overflow-x-auto that 1px overflowed and drew a vertical scrollbar.
-    <div role="tablist" className="flex gap-1 overflow-x-auto shadow-[inset_0_-1px_0_var(--color-line)] mb-5 -mx-1 px-1">
+    <div className="mb-5 -mx-1 flex items-center gap-2 px-1 shadow-[inset_0_-1px_0_var(--color-line)]">
+    <div role="tablist" className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -289,6 +293,8 @@ export function Tabs<K extends string>({
           {tab.count != null && <span className="tnum ml-1.5 text-ink-3">{tab.count}</span>}
         </button>
       ))}
+    </div>
+    {end && <div className="flex shrink-0 items-center gap-2 pb-1">{end}</div>}
     </div>
   );
 }

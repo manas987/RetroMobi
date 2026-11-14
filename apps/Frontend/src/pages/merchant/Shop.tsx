@@ -97,21 +97,24 @@ function ShopPage() {
         }
       />
       {/* The three things a merchant comes here for besides editing, in one row. */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        <a href={`/shops/${shopId}`} target="_blank" rel="noreferrer"
-          className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-line-strong bg-surface px-4 text-sm font-semibold text-ink hover:bg-surface-3">
-          <ExternalLink className="h-4 w-4" aria-hidden />{t("shop.preview")}
-        </a>
-        {write && verify !== "VERIFIED" && (
-          <Link href="/merchant/setup"><Button variant="primary" icon={Rocket}>{t("shop.getListed")}</Button></Link>
-        )}
-      </div>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
 
       <Tabs value={tab} onChange={setTab} tabs={[
         { key: "details", label: t("shop.tabDetails") },
         { key: "papers", label: papers ? t("shop.papersButton", papers) : t("shop.tabShopPapers") },
-      ]} />
+      ]} end={
+        <>
+          <a href={`/shops/${shopId}`} target="_blank" rel="noreferrer" title={t("shop.preview")}
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-ink hover:bg-surface-3">
+            <ExternalLink className="h-4 w-4" aria-hidden />
+            <span className="hidden @2xl:inline">{t("shop.preview")}</span>
+            <span className="@2xl:hidden">{t("shop.previewShort")}</span>
+          </a>
+          {write && verify !== "VERIFIED" && (
+            <Link href="/merchant/setup"><Button variant="primary" icon={Rocket}>{t("shop.getListed")}</Button></Link>
+          )}
+        </>
+      } />
       {tab === "papers" ? <ShopPapersTab key={shopId} shopId={shopId} /> : full.isPending ? <LoadingRows rows={4} /> : full.isError ? <ErrorNote onRetry={() => full.refetch()} /> : (
         // Keyed on the shop so switching shop in the sidebar starts a fresh form.
         <ShopEditor key={shopId} shop={full.data} shopId={shopId} write={write} lockedState={shops.length > 1} />

@@ -55,6 +55,7 @@ export default {
   papersPageTitle: "दुकान के कागज़",
   papersPageHint: "सिर्फ़ RetroMobi पर लिस्ट करने के लिए ज़रूरी। अभी या बाद में जोड़ें।",
   saveChanges: "बदलाव सेव करें",
+  previewShort: "प्रीव्यू",
   tabDetails: "दुकान की जानकारी",
   tabPapers: "लाइसेंस और कागज़",
   addBranch: "एक और ब्रांच जोड़ें",
