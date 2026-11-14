@@ -7,7 +7,9 @@ import { DateRangeField } from "../../components/DateRangeField";
 import { useT } from "../../i18n";
 import { useMerchantShop } from "./Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "./query";
-import { Button, ErrorNote, Field, INPUT, LoadingRows, Select, Sheet } from "./ui/ui";
+import { Button, ErrorNote, Field, INPUT, LoadingRows, PHONE, Select, Sheet } from "./ui/ui";
+import { E164Input } from "../../components/PhoneInput";
+import { validPhone } from "../../lib/countries";
 
 /**
  * The three things that happen at the counter: hand a vehicle over, take it
@@ -445,7 +447,7 @@ function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => vo
   const vehiclesQ = useMerchantQuery<{ vehicles: Row[] }>(`/shops/${shopId}/vehicles`, token);
   const [vehicleId, setVehicleId] = useState(initialVehicleId ?? "");
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("+91");
+  const [phone, setPhone] = useState("");
   const [dl, setDl] = useState("");
   // The customer is at the counter: start now, not at the customer site's
   // "tomorrow 10am" default. Eight hours is a starting point to adjust.
@@ -462,7 +464,7 @@ function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => vo
   const returnAt = combine(returnDate, returnTime);
   const windowError = returnAt <= pickupAt;
   const vehicles = vehiclesQ.data?.vehicles ?? [];
-  const valid = vehicleId && name.trim() && phone.length >= 13 && dl.trim() && !windowError;
+  const valid = vehicleId && name.trim() && validPhone(phone) && dl.trim() && !windowError;
 
   if (saved) {
     const deposit = saved.totals.securityDepositAmount;
@@ -531,7 +533,7 @@ function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => vo
         <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" className={INPUT} />
       </Field>
       <Field label={t("actions.walkinPhone")}>
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={`${INPUT} tnum`} />
+        <E164Input value={phone} onChange={setPhone} className={PHONE} placeholder="" />
       </Field>
       <Field label={t("actions.licenceNumber")}>
         <input value={dl} onChange={(e) => setDl(e.target.value.toUpperCase())} autoComplete="off" className={`${INPUT} tnum`} />

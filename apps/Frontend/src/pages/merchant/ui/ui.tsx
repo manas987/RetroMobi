@@ -448,6 +448,9 @@ export function Reveal({ label, children }: { label: string; children: ReactNode
   );
 }
 
+/** `E164Input`'s box in INPUT's size and shape (no focus ring, ink border). */
+export const PHONE = "min-h-12 rounded-2xl bg-surface text-base focus-within:ring-0";
+
 /** The one text-input look for merchant forms. Number fields drop the browser's
  *  tiny spinner arrows: too small to tap, and easy to nudge a price by accident. */
 export const INPUT =

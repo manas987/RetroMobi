@@ -3,7 +3,8 @@ import { portalFetch, type Row } from "../../../lib/portal";
 import { LocationPicker } from "../../../components/LocationPicker";
 import { useT } from "../../../i18n";
 import { errorText, useInvalidateMerchant } from "../query";
-import { Button, ErrorNote, Field, INPUT, Sheet } from "../ui/ui";
+import { Button, ErrorNote, Field, INPUT, PHONE, Sheet } from "../ui/ui";
+import { E164Input } from "../../../components/PhoneInput";
 
 /** Edit a shop's details, or (no `shop`) add another branch. */
 export function BranchSheet({ open, onClose, shop, token, reloadShops }: { open: boolean; onClose: () => void; shop?: Row; token: string; reloadShops: () => void }) {
@@ -49,7 +50,7 @@ function BranchForm({ shop, token, reloadShops, onClose }: { shop?: Row; token: 
   return (
     <>
       <Field label={t("common.shopName")}><input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label={t("setup.shopPhone")}><input className={INPUT} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+      <Field label={t("setup.shopPhone")}><E164Input value={phone} onChange={setPhone} className={PHONE} placeholder="" /></Field>
       <Field label={t("common.address")}><input className={INPUT} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
       <Field label={t("common.city")}><input className={INPUT} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
       <Field label={t("common.state")}><input className={INPUT} value={state} onChange={(e) => setState(e.target.value)} /></Field>
