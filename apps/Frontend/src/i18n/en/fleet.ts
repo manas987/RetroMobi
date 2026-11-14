@@ -131,6 +131,7 @@ export default {
   hidden: "Hidden",
   moveEarlier: "Move earlier",
   moveLater: "Move later",
+  photoNotPublished: "Photo saved but hidden: it couldn't be checked as an image, so customers won't see it yet.",
   uploadFailed: "Couldn't upload the file. Check your internet and try again.",
   papersTitle: "Vehicle papers",
   papersHint: "RetroMobi's team checks these papers. Without them the vehicle can't be shown to customers.",

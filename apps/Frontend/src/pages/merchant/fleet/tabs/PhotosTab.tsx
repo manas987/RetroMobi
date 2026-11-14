@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Camera, Film, Images, Trash2 } from "lucide-react";
-import { portalFetch, type Row } from "../../../../lib/portal";
+import { ArrowDown, ArrowUp, Camera, Film, ImageIcon, Images, Trash2 } from "lucide-react";
+import { portalFetch, PortalApiError, type Row } from "../../../../lib/portal";
 import { uploadFile, UploadFailedError } from "../../../../lib/upload";
 import { useT } from "../../../../i18n";
 import { Toggle } from "../../../../components/Toggle";
@@ -26,10 +26,12 @@ export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaT
     setError(null);
     try {
       await fn();
-      await invalidate();
     } catch (err) {
-      setError(err instanceof UploadFailedError ? t("fleet.uploadFailed") : errorText(lang, err));
+      setError(err instanceof UploadFailedError ? t("fleet.uploadFailed")
+        : err instanceof PortalApiError && err.code === "invalid_photo" ? t("fleet.photoNotPublished") : errorText(lang, err));
     } finally {
+      // A photo can be saved even when publishing it was refused, so refresh either way.
+      await invalidate();
       setBusy(false);
     }
   }
@@ -37,6 +39,7 @@ export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaT
   const upload = (files: FileList | null) =>
     files &&
     run(async () => {
+      let refused: unknown = null;
       for (const file of Array.from(files)) {
         const m = await uploadFile<Row>({
           portal: "merchant", token, file,
@@ -45,8 +48,10 @@ export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaT
           confirmBody: mediaType ? { type: "IMAGE" } : undefined,
         });
         // Customers only see published photos, and a new one should show at once.
-        await portalFetch("merchant", `${base}/${m.id}`, { method: "PATCH", token, body: { published: true } });
+        // A refused publish leaves the photo saved but hidden; carry on with the rest.
+        await portalFetch("merchant", `${base}/${m.id}`, { method: "PATCH", token, body: { published: true } }).catch((e) => { refused = e; });
       }
+      if (refused) throw refused;
     });
 
   const patch = (mid: unknown, body: unknown) => run(() => portalFetch("merchant", `${base}/${mid}`, { method: "PATCH", token, body }));
@@ -111,6 +116,7 @@ export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaT
 function Thumb({ base, mid, video }: { base: string; mid: string; video: boolean }) {
   const { token } = useMerchantShop();
   const [url, setUrl] = useState<string | null>(null);
+  const Icon = video ? Film : ImageIcon;
 
   useEffect(() => {
     let cancelled = false;
@@ -121,8 +127,8 @@ function Thumb({ base, mid, video }: { base: string; mid: string; video: boolean
   }, [base, mid, token]);
 
   return url && !video ? (
-    <a href={url} target="_blank" rel="noreferrer" className="shrink-0"><img src={url} alt="" className="h-16 w-16 rounded-xl bg-surface-3 object-cover" /></a>
+    <a href={url} target="_blank" rel="noreferrer" className="shrink-0"><img src={url} alt="" onError={() => setUrl(null)} className="h-16 w-16 rounded-xl bg-surface-3 object-cover" /></a>
   ) : (
-    <span className="inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-3 text-ink-3"><Film className="h-5 w-5" aria-hidden /></span>
+    <span className="inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-3 text-ink-3"><Icon className="h-5 w-5" aria-hidden /></span>
   );
 }
