@@ -19,6 +19,8 @@ export interface SetupVehicle {
   priceSet: boolean;
   missing: string[];
   docs: Record<string, { state: string; id: string | null; note: string | null }>;
+  /** Six for petrol, four for electric (no PUC, no permit). */
+  requiredDocs: string[];
   stage: ListingStage;
   canSubmit: boolean;
   waitingFor: string[];
@@ -80,13 +82,17 @@ export function useListingActions() {
   };
 }
 
-const ITEMS = ["price", "photo", "doc:RC", "doc:INSURANCE", "doc:PUC"] as const;
-const ITEM_LABEL: Record<(typeof ITEMS)[number], TKey> = {
+/** What a vehicle needs, in order: price, a photo, then its own papers (fewer for electric). */
+const items = (v: SetupVehicle) => ["price", "photo", ...v.requiredDocs.map((d) => `doc:${d}`)];
+const ITEM_LABEL: Record<string, TKey> = {
   price: "fleet.item_price",
   photo: "fleet.item_photo",
   "doc:RC": "fleet.item_RC",
   "doc:INSURANCE": "fleet.item_INSURANCE",
+  "doc:PERMIT": "fleet.item_PERMIT",
   "doc:PUC": "fleet.item_PUC",
+  "doc:FITNESS": "fleet.item_FITNESS",
+  "doc:TAX": "fleet.item_TAX",
 };
 export const DOC_LABEL: Record<string, TKey> = {
   RC: "fleet.doc_RC",
@@ -122,12 +128,12 @@ export function ListingBox({ v, itemHref }: { v: SetupVehicle; itemHref?: (item:
       {v.stage === "NEEDS_INFO" && (
         <>
           <ul className="flex flex-col gap-1.5">
-            {ITEMS.map((item) => {
+            {items(v).map((item) => {
               const missing = v.missing.includes(item);
               const label = (
                 <span className={`flex items-center gap-2 text-sm ${missing ? "text-ink" : "text-ink-3"}`}>
                   {missing ? <XCircle className="h-4 w-4 shrink-0 text-danger" aria-hidden /> : <CheckCircle2 className="h-4 w-4 shrink-0 text-verified" aria-hidden />}
-                  {t(ITEM_LABEL[item])}
+                  {t(ITEM_LABEL[item]!)}
                 </span>
               );
               return (

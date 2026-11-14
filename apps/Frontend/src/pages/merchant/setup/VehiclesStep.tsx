@@ -44,7 +44,7 @@ export function VehiclesStep({ setup, vehicleId, setVehicle, ...p }: StepProps &
               <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-surface-2 p-3">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-ink">{v.make} {v.model}</span>
-                  <span className="tnum block text-xs text-ink-3">{v.registrationNumber} · {t("setup.doneOf", { n: 5 - v.missing.length })}</span>
+                  <span className="tnum block text-xs text-ink-3">{v.registrationNumber} · {t("setup.doneOf", { n: 2 + v.requiredDocs.length - v.missing.length, total: 2 + v.requiredDocs.length })}</span>
                 </span>
                 <StageChip stage={v.stage} />
                 <Button onClick={() => setVehicle(v.id)}>{t("setup.setUp")}</Button>

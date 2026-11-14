@@ -8,7 +8,6 @@ import { Button, Chip, ErrorNote, DateInput, Field, INPUT } from "../ui/ui";
 import { DocUpload } from "./DocUpload";
 import type { DocType, SetupVehicle } from "./GetListedChip";
 
-const DOCS: DocType[] = ["RC", "INSURANCE", "PUC"];
 const toPaise = (rupees: string) => Math.round(Number(rupees) * 100);
 const fromPaise = (p: unknown) => (p == null ? "" : String(Number(p) / 100));
 
@@ -56,7 +55,7 @@ export function VehicleSetup({ vehicle: v, token }: { vehicle: SetupVehicle; tok
       <Row_ icon={Camera} title={t("setup.itemPhoto")} done={!v.missing.includes("photo")} open={open === "photo"} onToggle={() => toggle("photo")}>
         <PhotoForm vehicle={v} token={token} />
       </Row_>
-      {DOCS.map((d) => (
+      {v.requiredDocs.map((d) => (
         <Row_ key={d} icon={FileText} title={t(`setup.doc_${d}` as TKey)} done={!v.missing.includes(`doc:${d}`)} open={open === d} onToggle={() => toggle(d)}>
           <DocForm vehicleId={v.id} type={d} doc={v.docs[d]} token={token} />
         </Row_>

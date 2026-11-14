@@ -12,7 +12,7 @@ import { AvailChip } from "../VehicleCard";
 import { ListingBox, type SetupVehicle } from "../SetupBoard";
 import { useStagedBookings } from "../vehicleNow";
 
-const ITEM_TAB: Record<string, string> = { price: "price", photo: "photos", "doc:RC": "documents", "doc:INSURANCE": "documents", "doc:PUC": "documents" };
+const itemTab = (item: string) => (item.startsWith("doc:") ? "documents" : item === "photo" ? "photos" : "price");
 
 export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
   const { token, can } = useMerchantShop();
@@ -67,7 +67,7 @@ export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
       </Card>
 
       <Card title={t("fleet.listingTitle")} icon={Rocket}>
-        {sv ? <ListingBox v={sv} itemHref={(item) => `/merchant/fleet/${id}?tab=${ITEM_TAB[item] ?? "overview"}`} /> : <LoadingRows rows={2} />}
+        {sv ? <ListingBox v={sv} itemHref={(item) => `/merchant/fleet/${id}?tab=${itemTab(item)}`} /> : <LoadingRows rows={2} />}
       </Card>
 
       {can("fleet:write") && (

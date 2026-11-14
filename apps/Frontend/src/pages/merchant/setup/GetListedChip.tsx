@@ -3,7 +3,7 @@ import { Rocket } from "lucide-react";
 import { useT } from "../../../i18n";
 import { useMerchantQuery } from "../query";
 
-export type DocType = "RC" | "INSURANCE" | "PUC";
+export type DocType = "RC" | "INSURANCE" | "PERMIT" | "PUC" | "FITNESS" | "TAX";
 export type DocState = "MISSING" | "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED";
 export type VehicleStage = "NEEDS_INFO" | "NEEDS_FIXING" | "CHECKING" | "READY" | "SHOWING";
 
@@ -17,6 +17,9 @@ export interface SetupVehicle {
   rejectionNote: string | null;
   priceSet: boolean;
   photoCount: number;
+  fuelType: string | null;
+  /** Papers this vehicle needs: six for petrol, four for electric (no PUC, no permit). */
+  requiredDocs: DocType[];
   docs: Record<DocType, { state: DocState; id: string | null; note: string | null }>;
   missing: string[];
   stage: VehicleStage;
