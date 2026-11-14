@@ -111,6 +111,9 @@ export interface ShopProfile {
   hours: ShopHours[];
   licences: ShopLicence[];
   bodyTypes: string[];
+  landmark?: string | null;
+  /** Published shop photos, short-lived URLs. Optional so an older API can't break the page. */
+  photoUrls?: string[];
 }
 
 export type SortKey = "price" | "distance" | "rating";

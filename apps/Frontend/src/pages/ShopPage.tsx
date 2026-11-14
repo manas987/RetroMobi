@@ -197,7 +197,16 @@ export function ShopPage() {
 function ShopHeader({ shop }: { shop: ShopProfile }) {
   const licence = shop.licences[0];
 
+  const photos = shop.photoUrls ?? [];
   return (
+    <>
+    {photos.length > 0 && (
+      <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+        {photos.map((url) => (
+          <img key={url} src={url} alt="" loading="lazy" className="h-40 w-60 shrink-0 rounded-panel bg-surface-3 object-cover" />
+        ))}
+      </div>
+    )}
     <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
       <div>
         <div className="flex flex-wrap items-center gap-2.5">
@@ -232,6 +241,7 @@ function ShopHeader({ shop }: { shop: ShopProfile }) {
         <div className="mt-5 rounded-panel border border-line divide-y divide-line">
           <InfoRow icon={<MapPin className="h-4 w-4" />} label="Address">
             {shop.addressLine1}, {shop.city}, {shop.state} {shop.pincode}
+            {shop.landmark && <span className="mt-0.5 block text-ink-3">{shop.landmark}</span>}
           </InfoRow>
 
           {shop.phone && (
@@ -292,6 +302,7 @@ function ShopHeader({ shop }: { shop: ShopProfile }) {
         </div>
       )}
     </div>
+    </>
   );
 }
 

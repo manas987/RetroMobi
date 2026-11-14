@@ -227,6 +227,7 @@ function BookingCard({ booking: b, token, due, onChanged }: { booking: Row; toke
             {b.shop_phone ? (
               <div><p className="text-xs text-ink-2">Shop phone</p><a className="underline underline-offset-2" href={`tel:${b.shop_phone}`}>{String(b.shop_phone)}</a></div>
             ) : null}
+            {b.shop_landmark ? <BookingFact label="How to find the shop" value={String(b.shop_landmark)} /> : null}
             {collected && <BookingFact label="Scheduled pickup" value={fmt(b.scheduled_pickup_at)} />}
             {!!b.actual_return_at && <BookingFact label="Scheduled return" value={fmt(b.scheduled_return_at)} />}
           </div>

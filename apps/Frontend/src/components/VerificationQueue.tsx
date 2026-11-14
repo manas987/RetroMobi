@@ -9,6 +9,7 @@ export type QueueType =
   | "VEHICLE"
   | "VEHICLE_DOCUMENT"
   | "MERCHANT_DOCUMENT"
+  | "SHOP_DOCUMENT"
   | "SHOP_LICENCE"
   | "RIDER_VERIFICATION";
 
@@ -111,6 +112,18 @@ export const QUEUE_TYPES: Record<QueueType, QueueTypeDef> = {
     hasFile: true,
     decidedStatuses: ["VERIFIED", "REJECTED", "EXPIRED"],
     columns: documentColumns([{ key: "merchant_name", label: "Merchant" }]),
+  },
+  SHOP_DOCUMENT: {
+    value: "SHOP_DOCUMENT",
+    label: "Shop papers",
+    decidePath: (id) => `/verification/shop-documents/${id}`,
+    approveStatus: "VERIFIED",
+    hasFile: true,
+    decidedStatuses: ["VERIFIED", "REJECTED", "EXPIRED"],
+    columns: documentColumns([
+      { key: "shop_name", label: "Shop" },
+      { key: "merchant_name", label: "Merchant" },
+    ]),
   },
   RIDER_VERIFICATION: {
     value: "RIDER_VERIFICATION",
