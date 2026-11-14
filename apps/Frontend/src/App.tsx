@@ -19,7 +19,6 @@ import { MerchantFleet } from "./pages/merchant/Fleet";
 import { MerchantVehicle } from "./pages/merchant/fleet/VehiclePage";
 import { MerchantSetup } from "./pages/merchant/Setup";
 import { MerchantShop } from "./pages/merchant/Shop";
-import { MerchantShopPapers } from "./pages/merchant/ShopPapers";
 import { MerchantBranches } from "./pages/merchant/Branches";
 import { MerchantPapers } from "./pages/merchant/Papers";
 import { MerchantAllVehicles } from "./pages/merchant/AllVehicles";
@@ -81,7 +80,7 @@ export function App() {
       <Route path="/merchant/fleet/:vehicleId" component={MerchantVehicle} />
       <Route path="/merchant/setup" component={MerchantSetup} />
       <Route path="/merchant/shop" component={MerchantShop} />
-      <Route path="/merchant/shop/papers" component={MerchantShopPapers} />
+      <Route path="/merchant/shop/papers"><Redirect to="/merchant/shop?tab=papers" replace /></Route>
       <Route path="/merchant/shops" component={MerchantBranches} />
       <Route path="/merchant/papers" component={MerchantPapers} />
       <Route path="/merchant/all-vehicles" component={MerchantAllVehicles} />

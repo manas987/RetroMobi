@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { Link, Redirect, useSearchParams } from "wouter";
-import { ExternalLink, FileText, Rocket, Store } from "lucide-react";
+import { ExternalLink, Rocket, Store } from "lucide-react";
 import { portalFetch, type Row } from "../../lib/portal";
 import { useT, type TKey } from "../../i18n";
 import { Toggle } from "../../components/Toggle";
 import { LocationPicker } from "../../components/LocationPicker";
 import { E164Input } from "../../components/PhoneInput";
 import { MerchantLayout, useMerchantShop } from "./Layout";
-import { errorText, useInvalidateMerchant, useMerchantQuery } from "./query";
-import { Button, Card, Chip, EmptyState, ErrorNote, Field, INPUT, LoadingRows, PageHeader, PHONE } from "./ui/ui";
+import { errorText, useInvalidateMerchant, useMerchantQuery, useUrlParam } from "./query";
+import { ShopPapersTab } from "./shop/ShopPapersTab";
+import { Button, Card, Chip, EmptyState, ErrorNote, Field, INPUT, LoadingRows, PageHeader, PHONE, Tabs } from "./ui/ui";
 import { VERIFY_TONE } from "./shop/BranchCard";
 import { HoursEditor, hoursFromShop, hoursInvalid, hoursPayload } from "./shop/HoursSheet";
 import { PhotosTab } from "./fleet/tabs/PhotosTab";
@@ -24,7 +25,7 @@ export function MerchantShop() {
 
 /** Old `/merchant/shop?tab=…` links now live on their own pages. */
 const MOVED: Record<string, string> = {
-  branches: "/merchant/shops", documents: "/merchant/papers", vehicles: "/merchant/all-vehicles", papers: "/merchant/shop/papers",
+  branches: "/merchant/shops", documents: "/merchant/papers", vehicles: "/merchant/all-vehicles",
 };
 
 function ShopBody() {
@@ -40,6 +41,7 @@ function ShopPage() {
   const invalidate = useInvalidateMerchant();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useUrlParam("tab", ["details", "papers"] as const, "details");
   const shop = shops.find((s) => String(s.id) === shopId);
   const full = useMerchantQuery<Row>(shopId ? `/shops/${shopId}` : null, token);
   const setup = useMerchantQuery<SetupData>(shopId && can("fleet:read") ? `/shops/${shopId}/setup` : null, token);
@@ -96,7 +98,6 @@ function ShopPage() {
       />
       {/* The three things a merchant comes here for besides editing, in one row. */}
       <div className="mb-4 flex flex-wrap gap-2">
-        <Link href="/merchant/shop/papers"><Button icon={FileText}>{papers ? t("shop.papersButton", papers) : t("shop.tabShopPapers")}</Button></Link>
         <a href={`/shops/${shopId}`} target="_blank" rel="noreferrer"
           className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-line-strong bg-surface px-4 text-sm font-semibold text-ink hover:bg-surface-3">
           <ExternalLink className="h-4 w-4" aria-hidden />{t("shop.preview")}
@@ -107,7 +108,11 @@ function ShopPage() {
       </div>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
 
-      {full.isPending ? <LoadingRows rows={4} /> : full.isError ? <ErrorNote onRetry={() => full.refetch()} /> : (
+      <Tabs value={tab} onChange={setTab} tabs={[
+        { key: "details", label: t("shop.tabDetails") },
+        { key: "papers", label: papers ? t("shop.papersButton", papers) : t("shop.tabShopPapers") },
+      ]} />
+      {tab === "papers" ? <ShopPapersTab key={shopId} shopId={shopId} /> : full.isPending ? <LoadingRows rows={4} /> : full.isError ? <ErrorNote onRetry={() => full.refetch()} /> : (
         // Keyed on the shop so switching shop in the sidebar starts a fresh form.
         <ShopEditor key={shopId} shop={full.data} shopId={shopId} write={write} lockedState={shops.length > 1} />
       )}

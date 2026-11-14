@@ -49,7 +49,7 @@ export default {
   paper_PREMISES: "किराया समझौता या मालिकाना कागज़",
   paper_LANDLORD_NOC: "मकान मालिक का NOC",
   preview: "कस्टमर को कैसा दिखता है",
-  papersButton: "कागज़ · {total} में से {n}",
+  papersButton: "कागज़ ({n}/{total})",
   detailsCard: "दुकान की जानकारी",
   hoursCard: "खुलने का समय",
   papersPageTitle: "दुकान के कागज़",

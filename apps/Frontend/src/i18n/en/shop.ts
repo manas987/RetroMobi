@@ -48,7 +48,7 @@ export default {
   paper_PREMISES: "Rent agreement or ownership deed",
   paper_LANDLORD_NOC: "Landlord's NOC",
   preview: "See how customers see it",
-  papersButton: "Papers · {n} of {total} in",
+  papersButton: "Papers ({n}/{total})",
   detailsCard: "Shop details",
   hoursCard: "Opening hours",
   papersPageTitle: "Shop papers",
