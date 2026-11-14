@@ -2,6 +2,11 @@
 export default {
   title: "Shop & papers",
   subtitle: "Your shop details, opening hours and licence.",
+  branchesTitle: "Branches",
+  branchesSubtitle: "Every shop you run. Open one to change its details, photos, hours and papers.",
+  papersTitle: "Licence & papers",
+  papersSubtitle: "Your rental licence and business papers. Uploaded once, shared by all your shops.",
+  allVehiclesSubtitle: "Every vehicle across your branches.",
   tabDetails: "Shop details",
   tabPapers: "Licence & papers",
   addBranch: "Add another branch",

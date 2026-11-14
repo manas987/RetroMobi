@@ -3,6 +3,11 @@ import type en from "../en/shop";
 export default {
   title: "दुकान और कागज़",
   subtitle: "आपकी दुकान की जानकारी, खुलने का समय और लाइसेंस।",
+  branchesTitle: "ब्रांच",
+  branchesSubtitle: "आपकी सभी दुकानें। जानकारी, फ़ोटो, समय और कागज़ बदलने के लिए दुकान खोलें।",
+  papersTitle: "लाइसेंस और कागज़ात",
+  papersSubtitle: "आपका रेंटल लाइसेंस और बिज़नेस के कागज़। एक बार अपलोड करें, सभी दुकानों के लिए।",
+  allVehiclesSubtitle: "आपकी सभी ब्रांच की हर गाड़ी।",
   tabDetails: "दुकान की जानकारी",
   tabPapers: "लाइसेंस और कागज़",
   addBranch: "एक और ब्रांच जोड़ें",

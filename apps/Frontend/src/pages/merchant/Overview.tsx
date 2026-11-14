@@ -92,10 +92,10 @@ function OverviewBody() {
   for (const l of licences.data?.licences ?? []) {
     const number = String(l.licence_number ?? "");
     if (l.status !== "ACTIVE") {
-      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/shop?tab=documents",
+      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/papers",
         text: t("overview.needLicence", { number, status: tMaybe(`overview.licence_${String(l.status)}`) ?? String(l.status) }) });
     } else if (l.expires_at && String(l.expires_at).slice(0, 10) <= soon) {
-      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/shop?tab=documents",
+      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/papers",
         text: t("overview.needLicenceExpiring", { number, date: date(`${String(l.expires_at).slice(0, 10)}T12:00:00`) }) });
     }
   }

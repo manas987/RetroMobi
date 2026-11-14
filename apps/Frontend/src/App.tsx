@@ -19,6 +19,9 @@ import { MerchantFleet } from "./pages/merchant/Fleet";
 import { MerchantVehicle } from "./pages/merchant/fleet/VehiclePage";
 import { MerchantSetup } from "./pages/merchant/Setup";
 import { MerchantShop } from "./pages/merchant/Shop";
+import { MerchantBranches } from "./pages/merchant/Branches";
+import { MerchantPapers } from "./pages/merchant/Papers";
+import { MerchantAllVehicles } from "./pages/merchant/AllVehicles";
 import { MerchantStaff } from "./pages/merchant/Staff";
 import { MerchantActivity } from "./pages/merchant/Activity";
 import { MerchantSupport } from "./pages/merchant/Support";
@@ -77,14 +80,17 @@ export function App() {
       <Route path="/merchant/fleet/:vehicleId" component={MerchantVehicle} />
       <Route path="/merchant/setup" component={MerchantSetup} />
       <Route path="/merchant/shop" component={MerchantShop} />
+      <Route path="/merchant/shops" component={MerchantBranches} />
+      <Route path="/merchant/papers" component={MerchantPapers} />
+      <Route path="/merchant/all-vehicles" component={MerchantAllVehicles} />
       <Route path="/merchant/staff" component={MerchantStaff} />
       <Route path="/merchant/activity" component={MerchantActivity} />
       <Route path="/merchant/support" component={MerchantSupport} />
       <Route path="/merchant/earnings" component={MerchantEarnings} />
       <Route path="/merchant/reports" component={MerchantReports} />
       {/* Old URLs, kept so bookmarks and links in old messages still land. */}
-      <Route path="/merchant/branches"><Redirect to="/merchant/shop" replace /></Route>
-      <Route path="/merchant/compliance"><Redirect to="/merchant/shop?tab=documents" replace /></Route>
+      <Route path="/merchant/branches"><Redirect to="/merchant/shops" replace /></Route>
+      <Route path="/merchant/compliance"><Redirect to="/merchant/papers" replace /></Route>
       <Route path="/merchant/team"><Redirect to="/merchant/staff" replace /></Route>
       <Route path="/merchant/payouts"><Redirect to="/merchant/earnings" replace /></Route>
 

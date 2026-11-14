@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Bike,
+  Building2,
   CalendarCheck,
   ChevronsLeft,
   ChevronsRight,
@@ -11,9 +12,11 @@ import {
   Home,
   IndianRupee,
   Languages,
+  LayoutGrid,
   LogOut,
   Menu,
   MessageCircle,
+  ScrollText,
   Store,
   Users,
   type LucideIcon,
@@ -55,6 +58,8 @@ interface NavItem {
   label: TKey;
   icon: LucideIcon;
   needs?: Permission;
+  /** Only shown to someone who can see two or more shops. */
+  multiOnly?: boolean;
 }
 
 /**
@@ -82,9 +87,18 @@ const NAV: { group: TKey; items: NavItem[] }[] = [
   {
     group: "nav.groupShop",
     items: [
-      { href: "/merchant/shop", label: "nav.shopAndPapers", icon: Store },
+      { href: "/merchant/shop", label: "nav.shop", icon: Store },
       { href: "/merchant/staff", label: "nav.staff", icon: Users, needs: "members:read" },
       { href: "/merchant/activity", label: "nav.activity", icon: History, needs: "members:read" },
+    ],
+  },
+  // Things that span every branch. Last, so the phone tab bar's NAV[0..2] indexes don't move.
+  {
+    group: "nav.groupAllShops",
+    items: [
+      { href: "/merchant/shops", label: "nav.allBranches", icon: Building2 },
+      { href: "/merchant/papers", label: "nav.documents", icon: ScrollText },
+      { href: "/merchant/all-vehicles", label: "nav.allVehicles", icon: LayoutGrid, multiOnly: true },
     ],
   },
 ];
@@ -168,7 +182,8 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
     navigate("/merchant/login");
   };
 
-  const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.needs || can(i.needs)) })).filter(
+  const multi = shops.filter((s) => hasPermission(String(s.role ?? ""), "fleet:read")).length > 1;
+  const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => (!i.needs || can(i.needs)) && (!i.multiOnly || multi)) })).filter(
     (g) => g.items.length > 0,
   );
 
