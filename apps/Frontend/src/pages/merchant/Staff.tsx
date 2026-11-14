@@ -61,15 +61,29 @@ function StaffBody() {
             ))}
           </div>
 
-          {list.length === 1 && (
-            <Card className="mt-4 @xl:flex-row @xl:items-center @xl:gap-4">
-              <span className="mb-3 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface-3 text-ink-3 @xl:mb-0">
-                <Users className="h-6 w-6" aria-hidden />
-              </span>
-              <p className="mb-3 flex-1 text-base text-ink-2 @xl:mb-0">{t("staff.onlyYou")}</p>
-              {addButton}
-            </Card>
-          )}
+          {/* Waits for the invites so it never flashes in; once one is sent it
+              fades and folds away (grid 1fr -> 0fr) instead of snapping out. */}
+          {list.length === 1 && invites.isSuccess && (() => {
+            const show = invites.data.invites.length === 0;
+            return (
+              <div
+                aria-hidden={!show}
+                inert={!show}
+                className={`grid transition-[grid-template-rows,opacity] delay-150 duration-500 ease-out motion-reduce:transition-none ${show ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+              >
+                {/* Clip only while folding, so the card's shadow isn't cut when shown. */}
+                <div className={`min-h-0 ${show ? "" : "overflow-hidden"}`}>
+                  <Card className="mt-4 @xl:flex-row @xl:items-center @xl:gap-4">
+                    <span className="mb-3 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface-3 text-ink-3 @xl:mb-0">
+                      <Users className="h-6 w-6" aria-hidden />
+                    </span>
+                    <p className="mb-3 flex-1 text-base text-ink-2 @xl:mb-0">{t("staff.onlyYou")}</p>
+                    {addButton}
+                  </Card>
+                </div>
+              </div>
+            );
+          })()}
 
           {(invites.data?.invites.length ?? 0) > 0 && (
             <Card title={t("staff.waiting")} icon={UserPlus} className="mt-6">
