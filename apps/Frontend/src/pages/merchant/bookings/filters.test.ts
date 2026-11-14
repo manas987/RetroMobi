@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { daysCovered, groupByDay, rowsForTab, TAB_STAGES, withFilters, type Tab } from "./filters";
+import { daysCovered, groupByDay, rowsForTab, TAB_STAGES, weekSegments, withFilters, type Tab } from "./filters";
 import type { BookingStage } from "../../../lib/bookingStage";
 
 // Noon IST on Sat 15 Nov 2025.
@@ -68,4 +68,34 @@ describe("daysCovered", () => {
 
 test("withFilters sends only what is set", () => {
   expect(withFilters(new URLSearchParams({ status: "CONFIRMED" }), { q: " UK07 ", source: "", vehicleId: "" }).toString()).toBe("status=CONFIRMED&q=UK07");
+});
+
+describe("weekSegments", () => {
+  // Mon 10 .. Sun 16 Nov 2025.
+  const week = ["2025-11-10", "2025-11-11", "2025-11-12", "2025-11-13", "2025-11-14", "2025-11-15", "2025-11-16"];
+  const ride = (id: string, from: string, to: string) => ({
+    b: { id, scheduled_pickup_at: `${from}T10:00:00+05:30`, scheduled_return_at: `${to}T18:00:00+05:30` },
+    stage: "UPCOMING" as BookingStage,
+  });
+  const pick = (s: ReturnType<typeof weekSegments>[number]) => ({ id: s.b.id, start: s.start, span: s.span, lane: s.lane, contLeft: s.contLeft, contRight: s.contRight });
+
+  test("a ride across the week edge is cut at the edge, flat on that side", () => {
+    expect(weekSegments([ride("a", "2025-11-08", "2025-11-11"), ride("b", "2025-11-15", "2025-11-18")], week).map(pick)).toEqual([
+      { id: "a", start: 0, span: 2, lane: 0, contLeft: true, contRight: false },
+      { id: "b", start: 5, span: 2, lane: 0, contLeft: false, contRight: true },
+    ]);
+  });
+
+  test("overlapping rides take separate rows; a free row is reused", () => {
+    const segs = weekSegments([ride("long", "2025-11-11", "2025-11-14"), ride("mid", "2025-11-12", "2025-11-12"), ride("late", "2025-11-15", "2025-11-15")], week);
+    expect(segs.map(pick)).toEqual([
+      { id: "long", start: 1, span: 4, lane: 0, contLeft: false, contRight: false },
+      { id: "mid", start: 2, span: 1, lane: 1, contLeft: false, contRight: false },
+      { id: "late", start: 5, span: 1, lane: 0, contLeft: false, contRight: false },
+    ]);
+  });
+
+  test("a ride outside the week gives no bar", () => {
+    expect(weekSegments([ride("x", "2025-11-01", "2025-11-02")], week)).toEqual([]);
+  });
 });
