@@ -20,6 +20,8 @@ export interface ShopProfile {
   name: string;
   /** The licence holder's name — the licence is issued to a person, not the shop, so the page has to be able to say who. */
   ownerName: string | null;
+  /** "Opposite SBI ATM": how to find the counter, in the merchant's words. */
+  landmark: string | null;
   phone: string | null;
   addressLine1: string;
   city: string;
@@ -37,6 +39,8 @@ export interface ShopProfile {
   licences: ShopLicence[];
   /** Distinct body types this shop currently has listed, for the page's at-a-glance summary. */
   bodyTypes: string[];
+  /** Published shop photos, as storage keys; the controller turns them into short-lived URLs. */
+  photoKeys: string[];
 }
 
 /**
@@ -47,7 +51,7 @@ export interface ShopProfile {
 export async function getShopProfile(pool: Pool, shopId: string): Promise<ShopProfile> {
   const { rows } = await pool.query(
     `select s.id, s.name, s.phone, s.address_line1, s.city, s.state, s.pincode,
-            s.latitude, s.longitude, s.status, s.rating, s.review_count, s.created_at,
+            s.latitude, s.longitude, s.landmark, s.status, s.rating, s.review_count, s.created_at,
             mu.name as owner_name
        from shops s
        join merchant_users mu on mu.id = s.merchant_user_id
@@ -57,7 +61,7 @@ export async function getShopProfile(pool: Pool, shopId: string): Promise<ShopPr
   const shop = rows[0];
   if (!shop) throw new ShopNotFoundError("shop not found");
 
-  const [hours, licences, bodyTypes] = await Promise.all([
+  const [hours, licences, bodyTypes, photos] = await Promise.all([
     pool.query(
       `select day_of_week, opens_at, closes_at from shop_hours
         where shop_id = $1 order by day_of_week`,
@@ -83,12 +87,19 @@ export async function getShopProfile(pool: Pool, shopId: string): Promise<ShopPr
         order by m.body_type`,
       [shopId, null, null],
     ),
+    pool.query(
+      `select storage_key from shop_media
+        where shop_id = $1 and published and deleted_at is null
+        order by display_order, created_at, id`,
+      [shopId],
+    ),
   ]);
 
   return {
     shopId: shop.id,
     name: shop.name,
     ownerName: shop.owner_name,
+    landmark: shop.landmark,
     phone: shop.phone,
     addressLine1: shop.address_line1,
     city: shop.city,
@@ -112,5 +123,6 @@ export async function getShopProfile(pool: Pool, shopId: string): Promise<ShopPr
       expiresAt: l.expires_at,
     })),
     bodyTypes: bodyTypes.rows.map((b) => b.body_type),
+    photoKeys: photos.rows.map((p) => p.storage_key),
   };
 }

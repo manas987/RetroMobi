@@ -33,6 +33,7 @@ router.post("/shops/:shopId", validate(DecisionSchema), controller.shop);
 router.post("/vehicles/:vehicleId", validate(DecisionSchema), controller.vehicle);
 router.post("/vehicle-documents/:documentId", validate(DecisionSchema), controller.vehicleDocument);
 router.post("/merchant-documents/:documentId", validate(DecisionSchema), controller.merchantDocument);
+router.post("/shop-documents/:documentId", validate(DecisionSchema), controller.shopDocument);
 router.post("/shop-licences/:licenceId", validate(LicenceDecisionSchema), controller.shopLicence);
 
 export default router;

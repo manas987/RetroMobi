@@ -5,6 +5,7 @@ export const VerifiableTypeSchema = z.enum([
   "VEHICLE",
   "VEHICLE_DOCUMENT",
   "MERCHANT_DOCUMENT",
+  "SHOP_DOCUMENT",
   "SHOP_LICENCE",
   "RIDER_VERIFICATION",
 ]);

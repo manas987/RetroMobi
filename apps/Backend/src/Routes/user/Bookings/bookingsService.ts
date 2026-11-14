@@ -571,7 +571,7 @@ export async function requestExtension(
 export async function listMyBookings(pool: Pool, userId: string) {
   const { rows } = await pool.query(
     `select b.*, m.make, m.model, s.id as shop_id, s.name as shop_name,
-            s.address_line1 as shop_address, s.city as shop_city, s.phone as shop_phone,
+            s.address_line1 as shop_address, s.city as shop_city, s.phone as shop_phone, s.landmark as shop_landmark,
             r.name as rider_name,
             exists(select 1 from reviews review where review.booking_id = b.id and review.deleted_at is null) as has_review,
             -- So the list can offer "Complete payment" on a HOLD whose clock is
