@@ -30,7 +30,7 @@ export function BranchesTab() {
       )}
       <BranchSheet open={adding} onClose={() => setAdding(false)} token={token} reloadShops={reloadShops} lockedState={shops[0] ? String(shops[0].state) : undefined}
         // A new shop goes straight to its papers: optional now, needed only to list it.
-        onSaved={(row) => { setShopId(String(row.id)); navigate("/merchant/shop?tab=papers&new=1"); }} />
+        onSaved={(row) => { setShopId(String(row.id)); navigate("/merchant/shop/papers?new=1"); }} />
     </div>
   );
 }

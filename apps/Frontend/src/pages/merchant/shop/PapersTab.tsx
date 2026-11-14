@@ -55,7 +55,7 @@ export function PapersTab() {
           {shops.map((s) => (
             <li key={String(s.id)} className="flex flex-wrap items-center gap-2 rounded-2xl bg-surface-2 p-3">
               <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{String(s.name)}</span>
-              <Button onClick={() => { setShopId(String(s.id)); navigate("/merchant/shop?tab=papers"); }}>{t("shop.openPapers")}</Button>
+              <Button onClick={() => { setShopId(String(s.id)); navigate("/merchant/shop/papers"); }}>{t("shop.openPapers")}</Button>
             </li>
           ))}
         </ul>

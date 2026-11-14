@@ -119,7 +119,7 @@ function RequiredPapers(p: StepProps & { setup: SetupData }) {
             row={rows[x.kind].get(x.type)} note={x.note} canWrite={p.can} />
         ))}
       </div>
-      <Link href="/merchant/shop?tab=papers" className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ink underline underline-offset-4">{t("setup.papersOptionalLink")}</Link>
+      <Link href="/merchant/shop/papers" className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ink underline underline-offset-4">{t("setup.papersOptionalLink")}</Link>
     </div>
   );
 }
