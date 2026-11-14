@@ -13,12 +13,26 @@ export const CONFIRMED_RENTAL_LICENCE = `coalesce(
   false
 )`;
 
+const PETROL_DOCS = ["RC", "INSURANCE", "PERMIT", "PUC", "FITNESS", "TAX"] as const;
+const ELECTRIC_DOCS = ["RC", "INSURANCE", "FITNESS", "TAX"] as const;
+
+/** Every vehicle paper type, in display order. The setup response reports all of them. */
+export const ALL_VEHICLE_DOCS = PETROL_DOCS;
+
 /**
- * Documents a vehicle must have (uploaded, not rejected, not expired) before the
- * merchant can submit it for checking. FITNESS, PERMIT and TAX stay optional.
+ * Papers a vehicle must have (uploaded, not rejected, not expired) before it can
+ * be submitted for checking. A battery vehicle needs no pollution certificate
+ * and no rental permit. An unknown fuel type is treated as petrol.
  * Read by the setup checklist (Routes/merchant/Setup); change it here only.
  */
-export const REQUIRED_VEHICLE_DOCS = ["RC", "INSURANCE", "PUC"] as const;
+export function requiredVehicleDocs(fuelType: string | null | undefined): readonly string[] {
+  return fuelType === "ELECTRIC" ? ELECTRIC_DOCS : PETROL_DOCS;
+}
+
+/** Per-shop papers a shop must have before it can be submitted. LANDLORD_NOC stays optional. */
+export const REQUIRED_SHOP_DOCS = ["SHOP_ACT", "PREMISES"] as const;
+/** Business-wide papers (merchant_documents.type) needed before a shop can be submitted. */
+export const REQUIRED_BUSINESS_DOCS = ["BUSINESS_REG", "PAN"] as const;
 
 /** README para 5(v): a rental shop needs this many compliant vehicles to be approved. */
 export const MIN_VEHICLES_FOR_SHOP = 5;
