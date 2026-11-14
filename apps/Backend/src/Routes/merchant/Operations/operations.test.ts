@@ -115,4 +115,19 @@ describe("merchant bookings list filters", () => {
     expect((await listBookings(pool, v.shopId, { source: "OFFLINE" })).map((r) => r.id)).toEqual([walkin.id]);
     expect((await listBookings(pool, v.shopId, { q: "100%_" })).length).toBe(0);
   });
+
+  test("id_checked says whether the shop has checked the rider's ID", async () => {
+    const v = await createBookableVehicle(pool);
+    const iso = (w: { pickupAt: Date; returnAt: Date }) => ({ pickupAt: w.pickupAt.toISOString(), returnAt: w.returnAt.toISOString() });
+    const b = await insertBooking(pool, { vehicleId: v.id, ...iso(futureWindow(220, 1)) });
+    expect((await listBookings(pool, v.shopId, {}))[0].id_checked).toBe(false);
+
+    await pool.query(
+      `insert into pickup_identity_checks (booking_id, rider_id, checked_by, photo_matched, physical_dl_seen)
+       select b.id, b.rider_id, s.merchant_user_id, true, true
+         from bookings b join vehicles v on v.id = b.vehicle_id join shops s on s.id = v.shop_id where b.id = $1`,
+      [b.id],
+    );
+    expect((await listBookings(pool, v.shopId, {}))[0].id_checked).toBe(true);
+  });
 });

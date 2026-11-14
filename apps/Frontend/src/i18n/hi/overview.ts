@@ -63,8 +63,6 @@ export default {
   avail_FREE: "खाली",
   avail_OUT: "ग्राहक के पास",
   avail_TODAY: "आज जाएगी",
-  book: "बुक करें",
-  bookVehicle: "{vehicle} बुक करें",
   backAt: "वापसी {when}",
   goesAt: "जाएगी {when}",
   missedAt: "कस्टमर को {when} आना था",

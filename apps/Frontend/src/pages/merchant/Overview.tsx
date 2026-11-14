@@ -16,11 +16,12 @@ import {
 } from "lucide-react";
 import type { Row } from "../../lib/portal";
 import { istDay, rupees } from "../../lib/format";
-import { bookingStage, nextAction, STAGE_TONE, type BookingStage, type Tone } from "../../lib/bookingStage";
+import { bookingStage, STAGE_TONE, type BookingStage, type Tone } from "../../lib/bookingStage";
 import { useT } from "../../i18n";
 import { MerchantLayout, useMerchantShop } from "./Layout";
 import { useMerchantQuery } from "./query";
 import { HandoverSheet, renterName, ReturnSheet, WalkinSheet } from "./bookingActions";
+import { NextStep } from "./bookings/BookingRow";
 import { AVAIL_ORDER, AVAIL_TONE, vehicleNow, type Staged } from "./fleet/vehicleNow";
 import { BarChart, Button, Card, Chip, EmptyState, ErrorNote, LoadingRows, SERIES, StatCard, TONE } from "./ui/ui";
 
@@ -50,7 +51,6 @@ function OverviewBody() {
   const { token, shopId, can, myName } = useMerchantShop();
   const { t, date, time, tMaybe } = useT();
   const [walkinOpen, setWalkinOpen] = useState(false);
-  const [walkinVehicle, setWalkinVehicle] = useState<string | undefined>();
   const [handover, setHandover] = useState<Row | null>(null);
   const [returning, setReturning] = useState<Row | null>(null);
 
@@ -122,7 +122,6 @@ function OverviewBody() {
 
   const late = count("OVERDUE");
   const canHandover = can("bookings:write");
-  const canReturn = can("bookings:return");
 
   const upcoming = staged
     .filter((x) => x.stage === "UPCOMING")
@@ -182,7 +181,6 @@ function OverviewBody() {
               ) : (
                 <ul className="@container flex flex-col gap-2">
                   {todayRows.map(({ b, stage, isPickup, at, late: isLate }) => {
-                    const act = nextAction(stage);
                     return (
                       <li key={String(b.id)} className={`flex flex-col gap-3 rounded-2xl border p-3 @md:flex-row @md:items-center ${isLate ? "border-danger/40 bg-danger-soft/40" : "border-line"}`}>
                         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -205,16 +203,7 @@ function OverviewBody() {
                             </div>
                           </div>
                         </div>
-                        {act === "handover" && canHandover && (
-                          <Button variant="primary" onClick={() => setHandover(b)} className="@md:shrink-0">
-                            {b.source === "OFFLINE" ? t("actions.handoverWalkin") : t("actions.handover")}
-                          </Button>
-                        )}
-                        {act === "return" && canReturn && (
-                          <Button variant="dark" onClick={() => setReturning(b)} className="@md:shrink-0">
-                            {t("actions.markReturned")}
-                          </Button>
-                        )}
+                        <NextStep b={b} stage={stage} onHandover={setHandover} onReturn={setReturning} className="@md:shrink-0" />
                       </li>
                     );
                   })}
@@ -268,8 +257,7 @@ function OverviewBody() {
               </ul>
             )}
           </Card>
-          <FleetNowCard vehicles={vehicles} staged={staged}
-            onBook={canHandover ? (id) => { setWalkinVehicle(id); setWalkinOpen(true); } : undefined} />
+          <FleetNowCard vehicles={vehicles} staged={staged} />
         </div>
 
         {/* ---- column 3: money, then what customers say ---- */}
@@ -279,7 +267,7 @@ function OverviewBody() {
         </div>
       </div>
 
-      <WalkinSheet open={walkinOpen} vehicleId={walkinVehicle} onClose={() => { setWalkinOpen(false); setWalkinVehicle(undefined); }} />
+      <WalkinSheet open={walkinOpen} onClose={() => setWalkinOpen(false)} />
       <HandoverSheet booking={handover} onClose={() => setHandover(null)} />
       <ReturnSheet booking={returning} onClose={() => setReturning(null)} />
     </div>
@@ -334,18 +322,16 @@ function MoneyOrRidesCard({ summary, isOwner }: { summary: ReturnType<typeof use
 
 /**
  * The fleet as the counter needs it when a walk-in arrives: which scooter can
- * go out right now, until when, and at what price -- with a Book button on the
- * free ones. Listing health lives on the Vehicles page; a rejected vehicle
+ * go out right now, until when, and at what price. Booking is the one
+ * "New walk-in" button at the top. Listing health lives on the Vehicles page; a rejected vehicle
  * already shows up under "Needs your attention".
  */
 function FleetNowCard({
   vehicles,
   staged,
-  onBook,
 }: {
   vehicles: ReturnType<typeof useMerchantQuery<{ vehicles: Row[] }>>;
   staged: Staged[];
-  onBook?: (vehicleId: string) => void;
 }) {
   const { t, date, time } = useT();
   const today = istDay(new Date());
@@ -421,15 +407,9 @@ function FleetNowCard({
                     <span className="tnum">{String(v.registration_number ?? "")}</span> · <span className={late || missed ? "font-semibold text-danger" : ""}>{detail}</span>
                   </p>
                 </div>
-                {a === "FREE" && onBook && v.amount != null ? (
-                  <Button className="min-h-9 shrink-0 px-3" onClick={() => onBook(String(v.id))} aria-label={t("overview.bookVehicle", { vehicle: name })}>
-                    {t("overview.book")}
-                  </Button>
-                ) : (
-                  <Chip tone={late || missed ? "bad" : AVAIL_TONE[a]}>
-                    {late ? t("status.stage_OVERDUE") : missed ? t("status.stage_PICKUP_LATE") : t(`overview.avail_${a}` as const)}
-                  </Chip>
-                )}
+                <Chip tone={late || missed ? "bad" : AVAIL_TONE[a]}>
+                  {late ? t("status.stage_OVERDUE") : missed ? t("status.stage_PICKUP_LATE") : t(`overview.avail_${a}` as const)}
+                </Chip>
               </li>
             );
           })}

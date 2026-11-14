@@ -29,7 +29,9 @@ const BOOKING_SELECT = `
          v.registration_number, m.make, m.model,
          r.name as rider_name,
          u.name as customer_name, u.phone as customer_phone,
-         sd.status as deposit_status, sd.amount as deposit_amount
+         sd.status as deposit_status, sd.amount as deposit_amount,
+         -- ID checked, handover waiting on the customer's vehicle video.
+         exists (select 1 from pickup_identity_checks c where c.booking_id = b.id) as id_checked
     from bookings b
     join vehicles v on v.id = b.vehicle_id
     join vehicle_models m on m.id = v.model_id

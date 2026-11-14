@@ -1,4 +1,4 @@
-import { CalendarClock, CheckCircle2, RotateCcw } from "lucide-react";
+import { CalendarClock, CheckCircle2, RotateCcw, Video } from "lucide-react";
 import type { Row } from "../../../lib/portal";
 import { istDay, phoneLabel } from "../../../lib/format";
 import { nextAction, STAGE_TONE, type BookingStage, type Tone } from "../../../lib/bookingStage";
@@ -26,6 +26,14 @@ export function NextStep({ b, stage, onHandover, onReturn, className = "" }: { b
   const { t } = useT();
   const { can } = useMerchantShop();
   const act = nextAction(stage);
+  // ID checked; the ride starts once the customer records the vehicle video.
+  if (act === "handover" && b.source !== "OFFLINE" && b.id_checked)
+    return (
+      <span className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold ${TONE.info.chip} ${className}`}>
+        <Video className="h-4 w-4 shrink-0" aria-hidden />
+        {t("actions.waitingVideo")}
+      </span>
+    );
   if (act === "handover" && can("bookings:write"))
     return (
       <Button variant="primary" className={className} onClick={(e) => { e.stopPropagation(); onHandover(b); }}>

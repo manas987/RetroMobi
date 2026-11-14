@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, ShieldAlert, ShieldCheck, ThumbsUp, TriangleAlert } from "lucide-react";
+import { CheckCircle2, ShieldAlert, ShieldCheck, ThumbsUp, TriangleAlert, Video } from "lucide-react";
 import { portalFetch, type Row } from "../../lib/portal";
 import { istDay, rupees } from "../../lib/format";
 import { combine, splitIso } from "../../components/DateTimeField";
@@ -132,11 +132,25 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
     );
   }
 
-  if (outcome === "ok" || id.alreadyChecked) {
+  if (outcome !== "ok" && id.alreadyChecked) {
+    // Not a success screen: the shop is waiting, the customer has to act.
+    return (
+      <div className="rounded-2xl bg-info-soft p-5 text-info">
+        <Video className="h-8 w-8 mb-2" aria-hidden />
+        <p className="text-lg font-semibold">{t("actions.waitingVideoTitle")}</p>
+        <p className="mt-1 text-base">{t("actions.waitingVideoBody")}</p>
+        <Button variant="secondary" className="mt-5 w-full" onClick={onClose}>
+          {t("common.close")}
+        </Button>
+      </div>
+    );
+  }
+
+  if (outcome === "ok") {
     return (
       <div className="rounded-2xl bg-verified-soft p-5 text-verified">
         <ShieldCheck className="h-8 w-8 mb-2" aria-hidden />
-        <p className="text-base font-medium">{outcome === "ok" ? t("actions.idDone") : t("actions.idAlreadyChecked")}</p>
+        <p className="text-base font-medium">{t("actions.idDone")}</p>
         <Button variant="secondary" className="mt-5 w-full" onClick={onClose}>
           {t("common.done")}
         </Button>
