@@ -101,7 +101,7 @@ function ShopPage() {
             <span className="@2xl:hidden">{t("shop.previewShort")}</span>
           </a>
           {write && verify !== "VERIFIED" && (
-            <Link href="/merchant/setup"><Button variant="primary" icon={Rocket}>{t("shop.getListed")}</Button></Link>
+            <Link href="/merchant/setup" aria-label={t("shop.getListed")}><Button variant="primary" icon={Rocket}><span className="hidden @md:inline">{t("shop.getListed")}</span></Button></Link>
           )}
         </>
       } />

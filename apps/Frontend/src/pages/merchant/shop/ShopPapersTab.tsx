@@ -1,88 +1,59 @@
 import { useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "wouter";
-import { CheckCircle2, ChevronRight, Info } from "lucide-react";
+import { AlertCircle, Bike, Building2, CheckCircle2, Circle, Clock, FileText, Info, ScrollText, type LucideIcon } from "lucide-react";
 import { portalFetch, type Row } from "../../../lib/portal";
 import { useT, type TKey } from "../../../i18n";
 import { useMerchantShop } from "../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { Button, Card, Chip, ErrorNote, LoadingRows, Select, Sheet, TONE } from "../ui/ui";
-import type { SetupData, SetupPaper } from "../setup/GetListedChip";
-import { newestByType, PaperSlot, STATUS_TONE } from "./PaperSlot";
+import { Button, Card, Chip, ErrorNote, LoadingRows, Select, Sheet } from "../ui/ui";
+import type { DocState, DocType, SetupData, SetupPaper } from "../setup/GetListedChip";
+import { newestByType, PaperActions, PaperSlot, paperStatus, STATUS_TONE } from "./PaperSlot";
 
-type Item = {
-  key: string;
-  title: string;
-  hint: string;
-  /** Shown under the title when there's something to say (which licence, which number). */
-  detail?: string;
-  state: string;
-  required: boolean;
-  /** Business-wide papers are uploaded on Licence & papers, not here. */
-  shared?: boolean;
-};
-
-const IN = ["PENDING", "VERIFIED", "ACTIVE"];
+const VEHICLE_DOCS: DocType[] = ["RC", "INSURANCE", "PERMIT", "PUC", "FITNESS", "TAX"];
+/** Same columns on every table, so the categories line up down the page. */
+const COLS = "@2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_10rem_minmax(0,1.4fr)]";
 
 /**
- * This shop's papers as one checklist, in the order of the licence rules.
- * Each row is one line with its status and one button; the form for a paper
- * opens in a sheet, so the page stays a list you can read at a glance.
+ * Every paper this shop has, grouped the way the licence rules group them:
+ * the transport licence, this shop's own papers, the business papers all
+ * shops share, and each vehicle's papers. What's still needed to get listed is
+ * the setup guide's job; this page is for seeing and managing what's there.
  */
 export function ShopPapersTab({ shopId }: { shopId: string }) {
   const { token, can } = useMerchantShop();
-  const { t, tMaybe } = useT();
+  const { t } = useT();
   const [params] = useSearchParams();
   const setup = useMerchantQuery<SetupData>(`/shops/${shopId}/setup`, token);
   const docs = useMerchantQuery<{ documents: Row[] }>(`/shops/${shopId}/documents`, token);
+  const business = useMerchantQuery<{ documents: Row[] }>("/merchant-documents", token);
   const licences = useMerchantQuery<{ licences: Row[] }>("/licences", token);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<{ type: string; base: string; title: string; hint?: string; required: boolean } | "LICENCE" | null>(null);
   const write = can("shop:write");
 
   if (setup.isPending || docs.isPending) return <LoadingRows rows={5} />;
   if (setup.isError || docs.isError) return <ErrorNote onRetry={() => { void setup.refetch(); void docs.refetch(); }} />;
 
-  const newest = newestByType(docs.data.documents);
-  const { papers, licence } = setup.data;
-  const find = (list: SetupPaper[], type: string) => list.find((p) => p.type === type);
+  const shopRows = newestByType(docs.data.documents);
+  const businessRows = newestByType(business.data?.documents);
+  const { papers, licence, vehicles } = setup.data;
   // A licence only counts for this shop once it's linked to it. Someone without
   // their own licences (a manager) can't see links, so they get the setup status.
   const covering = (licences.data?.licences ?? []).filter((l) => ((l.shops ?? []) as { id?: string }[]).some((x) => String(x.id) === shopId));
   const ownsLicences = (licences.data?.licences.length ?? 0) > 0;
-  const licenceState = ownsLicences && covering.length === 0 ? "NOT_LINKED" : licence.status === "NONE" ? "MISSING" : licence.status;
 
-  const shopItem = (type: string, hint: string): Item => {
-    const p = find(papers.shop, type);
-    const r = newest.get(type);
-    return { key: type, title: t(`shop.paper_${type}` as TKey), hint, state: p?.state ?? "MISSING", required: p?.required ?? false,
-      detail: r?.document_number ? String(r.document_number) : undefined };
-  };
-  const sharedItem = (type: string, hint: string): Item => {
-    const p = find(papers.business, type);
-    return { key: type, title: t(`shop.paper_${type}` as TKey), hint, state: p?.state ?? "MISSING", required: p?.required ?? false, shared: true };
-  };
-  const items: Item[] = [
-    { key: "LICENCE", title: t("shop.group_licence"), hint: t("shop.group_licenceHint"), state: licenceState, required: true,
-      detail: covering.map((l) => String(l.licence_number)).join(", ") || undefined },
-    shopItem("SHOP_ACT", t("shop.group_shopActHint")),
-    sharedItem("BUSINESS_REG", t("shop.sharedByAll")),
-    sharedItem("PAN", t("shop.sharedByAll")),
-    sharedItem("GSTIN", t("shop.group_gstHint")),
-    shopItem("PREMISES", t("shop.group_premisesHint")),
-    shopItem("LANDLORD_NOC", t("shop.hint_LANDLORD_NOC")),
-  ];
-  const needed = items.filter((i) => i.required);
-  const done = needed.filter((i) => IN.includes(i.state)).length;
-  const current = items.find((i) => i.key === open);
-
-  const chip = (i: Item) =>
-    IN.includes(i.state) || i.state === "REJECTED" || i.state === "EXPIRED"
-      ? <Chip tone={STATUS_TONE[i.state] ?? "muted"}>{tMaybe(`shop.status_${i.state}`) ?? t("shop.status_OTHER")}</Chip>
-      : i.state === "NOT_LINKED" ? <Chip tone="attention">{t("shop.notLinked")}</Chip>
-      : i.required ? <Chip tone="attention">{t("shop.neededToList")}</Chip>
-      : <Chip tone="muted">{t("common.optional")}</Chip>;
+  const paperRows = (list: SetupPaper[], rows: Map<string, Row>, base: string) =>
+    list.map((p) => {
+      const title = t(`shop.paper_${p.type}` as TKey);
+      const hint = HINTS[p.type] && t(HINTS[p.type]!);
+      return (
+        <PaperRow key={p.type} title={title} required={p.required} row={rows.get(p.type)} fallback={p.state} note={p.note}
+          action={(r) => r ? <PaperActions compact row={r} base={base} title={title} canWrite={write} />
+            : write && <Button onClick={() => setOpen({ type: p.type, base, title, hint, required: p.required })}>{t("shop.upload")}</Button>} />
+      );
+    });
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {params.get("new") && (
         <p className="flex gap-2 rounded-2xl bg-info-soft p-3 text-sm text-info">
           <Info className="h-5 w-5 shrink-0" aria-hidden />
@@ -90,53 +61,137 @@ export function ShopPapersTab({ shopId }: { shopId: string }) {
         </p>
       )}
 
-      <Card>
-        <div className="mb-4">
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-base font-semibold text-ink">{t("shop.papersProgress", { n: done, total: needed.length })}</p>
-            <p className="text-sm text-ink-3">{t("shop.papersPageHint")}</p>
-          </div>
-          <div className="h-2 rounded-full bg-surface-3" role="progressbar" aria-valuemin={0} aria-valuemax={needed.length} aria-valuenow={done}>
-            <div className={`h-2 rounded-full ${TONE.good.dot}`} style={{ width: `${(done / needed.length) * 100}%` }} />
-          </div>
-        </div>
+      <Section icon={ScrollText} title={t("shop.group_licence")} hint={t("shop.group_licenceHint")}
+        action={write && ownsLicences && <Button variant="ghost" onClick={() => setOpen("LICENCE")}>{covering.length ? t("shop.change") : t("shop.linkLicence")}</Button>}>
+        {covering.length > 0 ? covering.map((l) => (
+          <PaperRow key={String(l.id)} title={t("shop.group_licence")} required row={{ ...l, document_number: l.licence_number }} statusOnly />
+        )) : (
+          <PaperRow title={t("shop.group_licence")} required fallback={ownsLicences ? "NOT_LINKED" : licence.status === "NONE" ? "MISSING" : licence.status}
+            action={() => write && (ownsLicences
+              ? <Button onClick={() => setOpen("LICENCE")}>{t("shop.linkLicence")}</Button>
+              : <Link href="/merchant/papers" className="inline-flex min-h-11 items-center rounded-2xl border border-line px-4 text-sm font-semibold text-ink hover:bg-surface-2">{t("shop.addLicence")}</Link>)} />
+        )}
+      </Section>
 
-        <ul className="-mx-2 flex flex-col divide-y divide-line">
-          {items.map((i, n) => {
-            const ok = IN.includes(i.state);
-            const action: ReactNode = i.shared
-              ? <Link href="/merchant/papers" className="inline-flex min-h-11 items-center gap-1 rounded-2xl px-3 text-sm font-semibold text-ink hover:bg-surface-3">
-                  {ok ? t("common.view") : t("shop.addThere")}<ChevronRight className="h-4 w-4" aria-hidden />
-                </Link>
-              : (write || ok) && <Button variant={ok ? "ghost" : "secondary"} onClick={() => setOpen(i.key)}>
-                  {ok ? t("shop.manage") : i.key === "LICENCE" ? t("shop.linkLicence") : t("shop.upload")}
-                </Button>;
-            return (
-              <li key={i.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-2 py-3">
-                <span className={`tnum inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${ok ? "bg-verified-soft text-verified" : "bg-surface-3 text-ink-2"}`}>
-                  {ok ? <CheckCircle2 className="h-5 w-5" aria-hidden /> : n + 1}
-                </span>
-                <span className="min-w-0 flex-1 basis-48">
-                  <span className="block text-sm font-semibold text-ink">{i.title}</span>
-                  <span className="block text-xs text-ink-3">{i.detail ? `${i.detail} · ` : ""}{i.hint}</span>
-                </span>
-                <span className="flex w-full items-center gap-2 pl-11 @2xl:w-auto @2xl:pl-0">{chip(i)}{action}</span>
-              </li>
-            );
-          })}
-        </ul>
+      <Section icon={Building2} title={t("shop.thisShopPapers")} hint={t("shop.thisShopPapersHint")}>
+        {paperRows(papers.shop, shopRows, `/shops/${shopId}/documents`)}
+      </Section>
+
+      <Section icon={FileText} title={t("shop.businessPapers")} hint={t("shop.businessPapersHint")}>
+        {paperRows(papers.business, businessRows, "/merchant-documents")}
+      </Section>
+
+      <Card title={<span className="flex items-center gap-2"><Bike className="h-5 w-5 text-ink-3" aria-hidden />{t("shop.vehiclePapers")}</span>}>
+        <p className="-mt-1 mb-3 text-sm text-ink-3">{t("shop.vehiclePapersHint")}</p>
+        {vehicles.length === 0 ? <p className="text-sm text-ink-2">{t("shop.noVehicles")}</p> : (
+          <div className="-mx-5 overflow-x-auto px-5">
+            <table className="w-full min-w-[36rem] text-sm">
+              <thead>
+                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-ink-3">
+                  <th className="py-2 pr-3 font-semibold">{t("shop.colVehicle")}</th>
+                  {VEHICLE_DOCS.map((d) => <th key={d} className="px-2 py-2 text-center font-semibold">{t(`shop.vdoc_${d}` as TKey)}</th>)}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {vehicles.map((v) => (
+                  <tr key={v.id}>
+                    <td className="py-2.5 pr-3">
+                      <Link href={`/merchant/fleet/${v.id}?tab=documents`} className="block font-semibold text-ink hover:underline">{v.make} {v.model}</Link>
+                      <span className="tnum text-xs text-ink-3">{v.registrationNumber}</span>
+                    </td>
+                    {VEHICLE_DOCS.map((d) => (
+                      <td key={d} className="px-2 py-2.5 text-center">
+                        {v.requiredDocs.includes(d) ? <StateMark state={v.docs[d]?.state ?? "MISSING"} /> : <span className="text-ink-3" title={t("shop.notNeeded")}>—</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-3">
+          {(["VERIFIED", "PENDING", "REJECTED", "MISSING"] as const).map((s) => <span key={s} className="flex items-center gap-1"><StateMark state={s} />{t(`shop.mark_${s}`)}</span>)}
+          <span>— {t("shop.notNeeded")}</span>
+        </p>
       </Card>
 
-      <Sheet open={current != null} onClose={() => setOpen(null)} title={current?.title ?? ""}>
-        {current?.key === "LICENCE" ? (
-          <LicencePicker shopId={shopId} />
-        ) : current && (
-          <PaperSlot type={current.key} base={`/shops/${shopId}/documents`} title={current.title} hint={current.hint}
-            required={current.required} row={newest.get(current.key)} note={find(papers.shop, current.key)?.note} canWrite={write} bare />
+      <Sheet open={open != null} onClose={() => setOpen(null)} title={open === "LICENCE" ? t("shop.group_licence") : open?.title ?? ""}>
+        {open === "LICENCE" ? <LicencePicker shopId={shopId} /> : open && (
+          <PaperSlot type={open.type} base={open.base} title={open.title} hint={open.hint} required={open.required} canWrite={write} bare />
         )}
       </Sheet>
     </div>
   );
+}
+
+const HINTS: Record<string, TKey> = {
+  SHOP_ACT: "shop.group_shopActHint", PREMISES: "shop.group_premisesHint", LANDLORD_NOC: "shop.hint_LANDLORD_NOC",
+  GSTIN: "shop.hint_GSTIN", UDYAM: "shop.hint_UDYAM",
+};
+
+function Section({ icon: Icon, title, hint, action, children }: { icon: LucideIcon; title: string; hint: string; action?: ReactNode; children: ReactNode }) {
+  const { t } = useT();
+  return (
+    <Card title={<span className="flex items-center gap-2"><Icon className="h-5 w-5 text-ink-3" aria-hidden />{title}</span>} action={action || undefined}>
+      <p className="-mt-1 mb-2 text-sm text-ink-3">{hint}</p>
+      <div className={`hidden gap-3 border-b border-line py-2 text-xs font-semibold uppercase tracking-wide text-ink-3 @2xl:grid ${COLS}`}>
+        <span>{t("shop.colPaper")}</span><span>{t("shop.paperNumber")}</span><span>{t("shop.colValidTill")}</span><span>{t("shop.colStatus")}</span><span />
+      </div>
+      <ul className="divide-y divide-line">{children}</ul>
+    </Card>
+  );
+}
+
+/**
+ * One paper as a table row on wide screens, a small card on phones. `row` is
+ * the uploaded record when this person can see it; otherwise `fallback` is the
+ * state the setup check reports (a manager sees the owner's business papers that way).
+ */
+function PaperRow(p: {
+  title: string; required: boolean; row?: Row; fallback?: string; note?: string | null; action?: (row?: Row) => ReactNode;
+  /** The licence's status is RetroMobi's check of the licence itself, file or not. */
+  statusOnly?: boolean;
+}) {
+  const { t, tMaybe, date } = useT();
+  const r = p.row;
+  const state = r ? (p.statusOnly ? String(r.status) : paperStatus(r) ?? "NO_FILE") : p.fallback ?? "MISSING";
+  const number = r?.document_number ? String(r.document_number) : "—";
+  const till = r?.expires_at ? date(String(r.expires_at).slice(0, 10) + "T12:00:00+05:30", { day: "numeric", month: "short", year: "numeric" }) : "—";
+  const chip = state === "NOT_LINKED" ? <Chip tone="attention">{t("shop.notLinked")}</Chip>
+    : state === "NO_FILE" ? <Chip tone="muted">{t("fleet.noFile")}</Chip>
+    : state === "MISSING" || state === "NONE" ? <Chip tone={p.required ? "attention" : "muted"}>{t("shop.notAdded")}</Chip>
+    : <Chip tone={STATUS_TONE[state] ?? "muted"}>{tMaybe(`shop.status_${state}`) ?? t("shop.status_OTHER")}</Chip>;
+  return (
+    <li className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-3 ${COLS}`}>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-ink">{p.title}</span>
+        <span className="block text-xs text-ink-3">{p.required ? t("shop.neededToList") : t("common.optional")}</span>
+        <span className="block text-xs text-ink-3 @2xl:hidden">{[number !== "—" && number, till !== "—" && t("shop.validTill", { date: till })].filter(Boolean).join(" · ")}</span>
+        <span className="mt-1.5 block @2xl:hidden">{chip}</span>
+      </span>
+      <span className="tnum hidden truncate text-sm text-ink-2 @2xl:block">{number}</span>
+      <span className="tnum hidden text-sm text-ink-2 @2xl:block">{till}</span>
+      <span className="hidden @2xl:block">{chip}</span>
+      <span className="flex justify-end">{p.action?.(r)}</span>
+      {state === "REJECTED" && p.note && <p className="col-span-full rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{p.note}</p>}
+    </li>
+  );
+}
+
+const MARKS: Record<string, { icon: LucideIcon; cls: string }> = {
+  VERIFIED: { icon: CheckCircle2, cls: "text-verified" },
+  PENDING: { icon: Clock, cls: "text-info" },
+  REJECTED: { icon: AlertCircle, cls: "text-danger" },
+  EXPIRED: { icon: AlertCircle, cls: "text-danger" },
+  MISSING: { icon: Circle, cls: "text-ink-3" },
+};
+
+function StateMark({ state }: { state: DocState }) {
+  const { t } = useT();
+  const m = MARKS[state] ?? MARKS.MISSING!;
+  const label = t(`shop.mark_${state === "EXPIRED" ? "REJECTED" : state}` as TKey);
+  return <m.icon className={`inline h-4 w-4 ${m.cls}`} aria-label={label}><title>{label}</title></m.icon>;
 }
 
 /**

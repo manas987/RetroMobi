@@ -39,34 +39,25 @@ export function PaperSlot(p: {
   const [expiresAt, setExpiresAt] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
-  const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const replace = useRef<HTMLInputElement>(null);
   const r = p.row;
 
-  async function run(fn: () => Promise<unknown>) {
+  async function create() {
     setBusy(true);
     setError(null);
     try {
-      await fn();
-      setRemoving(false);
+      const doc = await portalFetch<Row>("merchant", p.base, {
+        method: "POST", token, body: { type: p.type, documentNumber: number.trim() || undefined, expiresAt: expiresAt || undefined },
+      });
+      await uploadFile({ portal: "merchant", token, file: file!, presignPath: `${p.base}/${doc.id}/upload`, confirmPath: `${p.base}/${doc.id}/confirm` });
     } catch (err) {
-      setError(err instanceof UploadFailedError ? t("fleet.uploadFailed")
-        : err instanceof PortalApiError && err.status === 404 ? t("shop.fileMissing") : errorText(lang, err));
+      setError(err instanceof UploadFailedError ? t("fleet.uploadFailed") : errorText(lang, err));
     } finally {
       // The record exists once the POST returned, so refresh either way.
       await invalidate();
       setBusy(false);
     }
   }
-  const upload = (id: unknown, f: File) =>
-    uploadFile({ portal: "merchant", token, file: f, presignPath: `${p.base}/${id}/upload`, confirmPath: `${p.base}/${id}/confirm` });
-  const create = () => run(async () => {
-    const doc = await portalFetch<Row>("merchant", p.base, {
-      method: "POST", token, body: { type: p.type, documentNumber: number.trim() || undefined, expiresAt: expiresAt || undefined },
-    });
-    await upload(doc.id, file!);
-  });
   const chip = <Chip tone={p.required ? "attention" : "muted"}>{p.required ? t("shop.neededToList") : t("common.optional")}</Chip>;
 
   if (!r) {
@@ -93,15 +84,12 @@ export function PaperSlot(p: {
   }
 
   const status = String(r.status ?? "");
-  const expired = r.expires_at != null && String(r.expires_at).slice(0, 10) < new Date().toISOString().slice(0, 10);
-  const shown = expired ? "EXPIRED" : status;
-  const hasFile = r.storage_key != null;
-  const path = `${p.base}/${r.id}`;
+  const shown = paperStatus(r);
   return (
     <div className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink"><FileText className="h-4 w-4 shrink-0 text-ink-3" aria-hidden />{p.title}</span>
-        {hasFile ? <Chip tone={STATUS_TONE[shown] ?? "muted"}>{tMaybe(`shop.status_${shown}`) ?? t("shop.status_OTHER")}</Chip> : <Chip tone="muted">{t("fleet.noFile")}</Chip>}
+        {shown ? <Chip tone={STATUS_TONE[shown] ?? "muted"}>{tMaybe(`shop.status_${shown}`) ?? t("shop.status_OTHER")}</Chip> : <Chip tone="muted">{t("fleet.noFile")}</Chip>}
         {chip}
       </div>
       <p className="text-xs text-ink-3">
@@ -109,18 +97,57 @@ export function PaperSlot(p: {
         {r.expires_at ? t("shop.validTill", { date: date(String(r.expires_at).slice(0, 10) + "T12:00:00+05:30", { day: "numeric", month: "short", year: "numeric" }) }) : t("shop.noExpiry")}
       </p>
       {status === "REJECTED" && p.note && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{p.note}</p>}
-      {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-      <div className="flex flex-wrap gap-2">
-        {hasFile && <Button icon={Download} disabled={busy} onClick={() => run(async () => window.open((await portalFetch<{ downloadUrl: string }>("merchant", `${path}/download`, { token })).downloadUrl, "_blank", "noopener"))}>{t("common.view")}</Button>}
-        {p.canWrite && <Button icon={Upload} disabled={busy} onClick={() => replace.current?.click()}>{hasFile ? t("fleet.replaceFile") : t("common.uploadFile")}</Button>}
-        {p.canWrite && <button type="button" disabled={busy} onClick={() => setRemoving(true)} aria-label={t("common.remove")} className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-danger hover:bg-danger-soft"><Trash2 className="h-5 w-5" aria-hidden /></button>}
-      </div>
+      <PaperActions row={r} base={p.base} title={p.title} canWrite={p.canWrite} />
+    </div>
+  );
+}
+
+/** Status to show for an uploaded record: EXPIRED once past its date, null when no file is attached yet. */
+export function paperStatus(r: Row): string | null {
+  if (r.storage_key == null) return null;
+  const expired = r.expires_at != null && String(r.expires_at).slice(0, 10) < new Date().toISOString().slice(0, 10);
+  return expired ? "EXPIRED" : String(r.status ?? "");
+}
+
+/** View, replace and remove for one uploaded paper. */
+export function PaperActions({ row: r, base, title, canWrite, compact }: { row: Row; base: string; title: string; canWrite: boolean; compact?: boolean }) {
+  const { token } = useMerchantShop();
+  const { t, lang } = useT();
+  const invalidate = useInvalidateMerchant();
+  const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const replace = useRef<HTMLInputElement>(null);
+  const path = `${base}/${r.id}`;
+  const hasFile = r.storage_key != null;
+
+  async function run(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      setRemoving(false);
+    } catch (err) {
+      setError(err instanceof UploadFailedError ? t("fleet.uploadFailed")
+        : err instanceof PortalApiError && err.status === 404 ? t("shop.fileMissing") : errorText(lang, err));
+    } finally {
+      await invalidate();
+      setBusy(false);
+    }
+  }
+  const size = compact ? "h-10 w-10" : "h-11 w-11";
+  return (
+    <div className={compact ? "flex flex-wrap items-center justify-end gap-1" : "flex flex-wrap gap-2"}>
+      {hasFile && <Button variant={compact ? "ghost" : undefined} icon={Download} disabled={busy} onClick={() => run(async () => window.open((await portalFetch<{ downloadUrl: string }>("merchant", `${path}/download`, { token })).downloadUrl, "_blank", "noopener"))}>{t("common.view")}</Button>}
+      {canWrite && <Button variant={compact ? "ghost" : undefined} icon={Upload} disabled={busy} onClick={() => replace.current?.click()}>{hasFile ? t("fleet.replaceFile") : t("common.uploadFile")}</Button>}
+      {canWrite && <button type="button" disabled={busy} onClick={() => setRemoving(true)} aria-label={t("common.remove")} className={`inline-flex ${size} items-center justify-center rounded-2xl text-danger hover:bg-danger-soft`}><Trash2 className="h-5 w-5" aria-hidden /></button>}
+      {error && <p role="alert" className="w-full text-xs text-danger">{error}</p>}
       <input ref={replace} type="file" accept="image/*,application/pdf" className="sr-only" onChange={(e) => {
         const f = e.target.files?.[0];
         e.target.value = "";
-        if (f) run(() => upload(r.id, f));
+        if (f) run(() => uploadFile({ portal: "merchant", token, file: f, presignPath: `${path}/upload`, confirmPath: `${path}/confirm` }));
       }} />
-      <ConfirmSheet open={removing} onClose={() => setRemoving(false)} title={t("shop.removePaperTitle", { name: p.title })} body={t("shop.removePaperBody")}
+      <ConfirmSheet open={removing} onClose={() => setRemoving(false)} title={t("shop.removePaperTitle", { name: title })} body={t("shop.removePaperBody")}
         confirmLabel={t("common.remove")} danger busy={busy} error={error} onConfirm={() => run(() => portalFetch("merchant", path, { method: "DELETE", token }))} />
     </div>
   );
