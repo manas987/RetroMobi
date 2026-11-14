@@ -76,6 +76,7 @@ import {
 import {
   ShopHasActiveBookingsError,
   ShopNotFoundError,
+  ShopOtherStateError,
 } from "../Routes/merchant/Shops/shopsService.ts";
 import {
   AlreadyMemberError,
@@ -373,6 +374,10 @@ export function errorHandler(
   }
   if (err instanceof ShopNotFoundError) {
     res.status(404).json({ error: "shop_not_found", message: err.message });
+    return;
+  }
+  if (err instanceof ShopOtherStateError) {
+    res.status(409).json({ error: "shop_other_state", message: err.message });
     return;
   }
   if (err instanceof ShopHasActiveBookingsError) {

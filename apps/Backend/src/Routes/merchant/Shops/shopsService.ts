@@ -1,8 +1,11 @@
 import type { Pool, PoolClient } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
+import { assertOwnUpload, storedContentType } from "../../../lib/storage.ts";
 
 export class ShopNotFoundError extends Error {}
 export class ShopHasActiveBookingsError extends Error {}
+export class ShopOtherStateError extends Error {}
+export class NoFileError extends Error {}
 
 export interface CreateShopInput {
   name: string;
@@ -15,6 +18,7 @@ export interface CreateShopInput {
   latitude?: number;
   longitude?: number;
   gstin?: string;
+  landmark?: string;
 }
 
 export interface UpdateShopInput {
@@ -28,7 +32,20 @@ export interface UpdateShopInput {
   latitude?: number;
   longitude?: number;
   gstin?: string;
+  landmark?: string;
   status?: "OPEN" | "CLOSED";
+}
+
+/** A merchant's shops must all be in one state for now: one transport licence and one GSTIN per state, and billing is single-state. */
+async function assertSameState(db: Pick<Pool, "query">, merchantUserId: string, state: string, exceptShopId?: string) {
+  const { rows } = await db.query(
+    `select 1 from shops
+      where merchant_user_id = $1 and deleted_at is null
+        and ($3::uuid is null or id <> $3)
+        and lower(btrim(state)) <> lower(btrim($2)) limit 1`,
+    [merchantUserId, state, exceptShopId ?? null],
+  );
+  if (rows.length > 0) throw new ShopOtherStateError("shops in another state are not supported yet");
 }
 
 // Joined on shop_members, not shops.merchant_user_id, so a MANAGER or STAFF
@@ -68,11 +85,12 @@ export async function createShop(pool: Pool, merchantUserId: string, input: Crea
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await assertSameState(client, merchantUserId, input.state);
 
     const { rows } = await client.query(
       `insert into shops (merchant_user_id, name, phone, email, address_line1, city, state, pincode,
-                           latitude, longitude, gstin)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                           latitude, longitude, gstin, landmark)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        returning *`,
       [
         merchantUserId,
@@ -86,6 +104,7 @@ export async function createShop(pool: Pool, merchantUserId: string, input: Crea
         input.latitude ?? null,
         input.longitude ?? null,
         input.gstin ?? null,
+        input.landmark ?? null,
       ],
     );
     const shop = rows[0];
@@ -127,6 +146,7 @@ const UPDATABLE_COLUMNS = [
   "latitude",
   "longitude",
   "gstin",
+  "landmark",
   "status",
 ] as const;
 
@@ -141,6 +161,7 @@ const COLUMN_BY_KEY: Record<string, string> = {
   latitude: "latitude",
   longitude: "longitude",
   gstin: "gstin",
+  landmark: "landmark",
   status: "status",
 };
 
@@ -151,6 +172,7 @@ export async function updateShop(
   input: UpdateShopInput,
 ) {
   const before = await getShop(pool, shopId);
+  if (input.state !== undefined) await assertSameState(pool, before.merchant_user_id, input.state, shopId);
 
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -318,4 +340,184 @@ export async function listShopReviews(pool: Pool, shopId: string) {
     reviewCount: Number(shopRows[0]?.review_count ?? 0),
     reviews: rows,
   };
+}
+
+// Shop photos. Mirrors the vehicle media functions in Fleet/fleetService.ts.
+
+export async function listShopMedia(pool: Pool, shopId: string) {
+  const { rows } = await pool.query(
+    `select * from shop_media where shop_id = $1 and deleted_at is null order by display_order, created_at`,
+    [shopId],
+  );
+  return rows;
+}
+
+export async function addShopMedia(
+  pool: Pool,
+  merchantUserId: string,
+  shopId: string,
+  input: { storageKey: string; displayOrder?: number },
+) {
+  assertOwnUpload(input.storageKey, `shops/${shopId.toLowerCase()}/media/`);
+  const { rows } = await pool.query(
+    `insert into shop_media (shop_id, storage_key, display_order) values ($1, $2, $3) returning *`,
+    [shopId, input.storageKey, input.displayOrder ?? 0],
+  );
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "shop.photo_added",
+    entityType: "shop",
+    entityId: shopId,
+  });
+  return rows[0];
+}
+
+export async function reorderShopMedia(pool: Pool, shopId: string, order: Array<{ id: string; displayOrder: number }>) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const item of order) {
+      await client.query(`update shop_media set display_order = $1 where id = $2 and shop_id = $3`, [item.displayOrder, item.id, shopId]);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function softDeleteShopMedia(pool: Pool, merchantUserId: string, shopId: string, mediaId: string) {
+  const { rowCount } = await pool.query(
+    `update shop_media set deleted_at = now() where id = $1 and shop_id = $2 and deleted_at is null`,
+    [mediaId, shopId],
+  );
+  if (!rowCount) throw new ShopNotFoundError(`photo ${mediaId} not found at this shop`);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "shop.photo_removed",
+    entityType: "shop",
+    entityId: shopId,
+  });
+}
+
+export async function getShopMediaStorageKey(pool: Pool, shopId: string, mediaId: string): Promise<string> {
+  const { rows } = await pool.query(
+    `select storage_key from shop_media where id = $1 and shop_id = $2 and deleted_at is null`,
+    [mediaId, shopId],
+  );
+  if (rows.length === 0) throw new ShopNotFoundError(`photo ${mediaId} not found at this shop`);
+  return rows[0].storage_key;
+}
+
+/** False when the stored object isn't a real image: shop photos are shown publicly. */
+export async function setShopMediaPublication(pool: Pool, shopId: string, mediaId: string, published: boolean, merchantUserId: string) {
+  if (published) {
+    const key = await getShopMediaStorageKey(pool, shopId, mediaId);
+    const prefix = `shops/${shopId}/media/`;
+    if (!key.startsWith(prefix) || !/^(?:\d{13}|[0-9a-f-]{36})$/.test(key.slice(prefix.length))) return false;
+    const contentType = await storedContentType(key);
+    if (!contentType || !/^image\/(jpeg|png|webp|avif|gif)$/.test(contentType)) return false;
+  }
+  const { rowCount } = await pool.query(
+    `update shop_media set published = $3 where id = $1 and shop_id = $2 and deleted_at is null`,
+    [mediaId, shopId, published],
+  );
+  if (!rowCount) throw new ShopNotFoundError(`photo ${mediaId} not found at this shop`);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "shop.photo_visibility",
+    entityType: "shop",
+    entityId: shopId,
+    after: { published },
+  });
+  return true;
+}
+
+// Per-shop papers (Shop Act / trade licence, premises proof, landlord NOC).
+// Mirrors the vehicle document functions in Fleet/fleetService.ts.
+
+export type ShopDocType = "SHOP_ACT" | "PREMISES" | "LANDLORD_NOC";
+
+export async function listShopDocuments(pool: Pool, shopId: string) {
+  const { rows } = await pool.query(
+    `select * from shop_documents where shop_id = $1 and deleted_at is null order by created_at desc`,
+    [shopId],
+  );
+  return rows;
+}
+
+export async function createShopDocument(
+  pool: Pool,
+  merchantUserId: string,
+  shopId: string,
+  input: { type: ShopDocType; documentNumber?: string; issuedAt?: string; expiresAt?: string },
+) {
+  const { rows } = await pool.query(
+    `insert into shop_documents (shop_id, type, document_number, issued_at, expires_at, status)
+     values ($1, $2, $3, $4, $5, 'PENDING') returning *`,
+    [shopId, input.type, input.documentNumber ?? null, input.issuedAt ?? null, input.expiresAt ?? null],
+  );
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "shop.document_added",
+    entityType: "shop",
+    entityId: shopId,
+    after: { type: input.type },
+  });
+  return rows[0];
+}
+
+async function requireShopDocument(pool: Pool, shopId: string, documentId: string) {
+  const { rows } = await pool.query(
+    `select * from shop_documents where id = $1 and shop_id = $2 and deleted_at is null`,
+    [documentId, shopId],
+  );
+  if (rows.length === 0) throw new ShopNotFoundError(`document ${documentId} not found at this shop`);
+  return rows[0];
+}
+
+export async function attachShopDocumentFile(pool: Pool, merchantUserId: string, shopId: string, documentId: string, storageKey: string) {
+  // Pinned to the shop in the URL: requirePermission only vouches for that shop.
+  assertOwnUpload(storageKey, `shops/${shopId}/documents/${documentId}/`);
+  // A new file is checked again, so it goes back to PENDING.
+  const { rows } = await pool.query(
+    `update shop_documents set storage_key = $1, status = 'PENDING', updated_at = now()
+      where id = $2 and shop_id = $3 and deleted_at is null returning *`,
+    [storageKey, documentId, shopId],
+  );
+  if (rows.length === 0) throw new ShopNotFoundError(`document ${documentId} not found`);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "shop.document_uploaded",
+    entityType: "shop_document",
+    entityId: documentId,
+    after: { type: rows[0].type },
+  });
+  return rows[0];
+}
+
+export async function getShopDocumentStorageKey(pool: Pool, shopId: string, documentId: string): Promise<string> {
+  const doc = await requireShopDocument(pool, shopId, documentId);
+  if (!doc.storage_key) throw new NoFileError(`document ${documentId} has no file attached`);
+  return doc.storage_key;
+}
+
+export async function softDeleteShopDocument(pool: Pool, merchantUserId: string, shopId: string, documentId: string) {
+  const doc = await requireShopDocument(pool, shopId, documentId);
+  await pool.query(`update shop_documents set deleted_at = now(), updated_at = now() where id = $1`, [documentId]);
+  await writeAudit(pool, {
+    actorType: "MERCHANT",
+    actorId: merchantUserId,
+    action: "shop.document_removed",
+    entityType: "shop",
+    entityId: shopId,
+    after: { type: doc.type },
+  });
 }

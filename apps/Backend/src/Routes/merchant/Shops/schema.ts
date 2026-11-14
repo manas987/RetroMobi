@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UPLOAD_CONTENT_TYPE } from "../../../lib/storage.ts";
 
 const pincodeSchema = z.string().regex(/^\d{6}$/, "pincode must be 6 digits");
 const gstinSchema = z.string().length(15, "gstin must be 15 characters");
@@ -15,6 +16,7 @@ export const CreateShopSchema = z.object({
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   gstin: gstinSchema.optional(),
+  landmark: z.string().max(200).optional(),
 });
 
 export const UpdateShopSchema = z
@@ -29,6 +31,7 @@ export const UpdateShopSchema = z
     latitude: z.number().optional(),
     longitude: z.number().optional(),
     gstin: gstinSchema.optional(),
+    landmark: z.string().max(200).optional(),
     status: z.enum(["OPEN", "CLOSED"]).optional(),
   })
   .strict();
@@ -43,4 +46,23 @@ export const SetShopHoursSchema = z.object({
       }),
     )
     .max(7),
+});
+
+export const UploadRequestSchema = z.object({
+  contentType: z.string().regex(UPLOAD_CONTENT_TYPE, "upload a photo, video or PDF"),
+});
+
+export const ConfirmUploadSchema = z.object({ storageKey: z.string().min(1) });
+
+export const ReorderMediaSchema = z.object({
+  order: z.array(z.object({ id: z.string().uuid(), displayOrder: z.number().int() })),
+});
+
+export const PublishMediaSchema = z.object({ published: z.boolean() });
+
+export const CreateShopDocumentSchema = z.object({
+  type: z.enum(["SHOP_ACT", "PREMISES", "LANDLORD_NOC"]),
+  documentNumber: z.string().optional(),
+  issuedAt: z.string().optional(),
+  expiresAt: z.string().optional(),
 });
