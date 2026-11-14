@@ -292,6 +292,8 @@ function ReturnFlow({ booking, onClose }: { booking: Row; onClose: () => void })
       });
       setReleased(r.depositReleased ?? 0);
       setStep(next);
+      // Now, not on "Done": closing the receipt with ✕ left "Mark returned" showing.
+      void invalidate();
     } catch (err) {
       setError(errorText(lang, err));
     } finally {

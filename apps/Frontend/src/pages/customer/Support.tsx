@@ -198,6 +198,8 @@ function SupportInbox({ token }: { token: string }) {
         <NewConversation token={token} accountId={accountId} onClose={() => setComposing(false)} onCreated={async (id) => {
           setComposing(false);
           navigate(conversationLink(id));
+          // The id may be an existing chat about that booking, with the new message appended.
+          await queryClient.invalidateQueries({ queryKey: ["support-messages", accountId, id] });
           await queryClient.invalidateQueries({ queryKey: inboxKey });
         }} />
       )}

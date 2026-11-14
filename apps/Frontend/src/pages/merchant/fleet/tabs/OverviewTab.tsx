@@ -5,7 +5,7 @@ import { portalFetch, type Row } from "../../../../lib/portal";
 import { STAGE_TONE } from "../../../../lib/bookingStage";
 import { useT } from "../../../../i18n";
 import { useMerchantShop } from "../../Layout";
-import { errorText } from "../../query";
+import { errorText, useInvalidateMerchant } from "../../query";
 import { renterName } from "../../bookingActions";
 import { Button, Card, Chip, ConfirmSheet, LoadingRows } from "../../ui/ui";
 import { AvailChip } from "../VehicleCard";
@@ -20,6 +20,7 @@ export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
   const [, go] = useLocation();
   const { staged } = useStagedBookings();
   const [confirm, setConfirm] = useState(false);
+  const invalidate = useInvalidateMerchant();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const id = String(v.id);
@@ -33,6 +34,7 @@ export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
     setError(null);
     try {
       await portalFetch("merchant", `/vehicles/${id}`, { method: "DELETE", token });
+      await invalidate();
       go("/merchant/fleet");
     } catch (err) {
       setError(errorText(lang, err));
