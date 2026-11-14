@@ -1,10 +1,13 @@
 import { useRef, useState } from "react";
+import { Link } from "wouter";
 import { CheckCircle2, Clock, XCircle } from "lucide-react";
 import type { Row } from "../../../lib/portal";
 import { portalFetch } from "../../../lib/portal";
 import { uploadFile } from "../../../lib/upload";
 import { useT } from "../../../i18n";
-import { errorText, useInvalidateMerchant } from "../query";
+import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
+import { newestByType, PaperSlot } from "../shop/PaperSlot";
+import type { TKey } from "../../../i18n";
 import { DateInput, Field, INPUT } from "../ui/ui";
 import { DocUpload } from "./DocUpload";
 import { StepCard } from "./Stepper";
@@ -90,6 +93,33 @@ export function LicenceStep(p: StepProps & { setup: SetupData }) {
         </p>
       )}
       {showForm && f.form}
+      <RequiredPapers {...p} />
     </StepCard>
+  );
+}
+
+/**
+ * The other papers RetroMobi needs before listing this shop, by name. Optional
+ * ones (GST, Udyam, landlord NOC) live on the shop's Papers tab, linked below.
+ */
+function RequiredPapers(p: StepProps & { setup: SetupData }) {
+  const { t } = useT();
+  const business = useMerchantQuery<{ documents: Row[] }>("/merchant-documents", p.token);
+  const shop = useMerchantQuery<{ documents: Row[] }>(`/shops/${p.shopId}/documents`, p.token);
+  const rows = { business: newestByType(business.data?.documents), shop: newestByType(shop.data?.documents) };
+  const base = { business: "/merchant-documents", shop: `/shops/${p.shopId}/documents` };
+  const needed = (["business", "shop"] as const).flatMap((k) => p.setup.papers[k].filter((x) => x.required).map((x) => ({ ...x, kind: k })));
+  return (
+    <div className="mt-6 border-t border-line pt-5">
+      <h3 className="mb-1 text-base font-semibold text-ink">{t("setup.papersNeeded")}</h3>
+      <p className="mb-3 text-sm text-ink-3">{t("setup.papersNeededWhy")}</p>
+      <div className="flex flex-col gap-3">
+        {needed.map((x) => (
+          <PaperSlot key={x.type} type={x.type} base={base[x.kind]} title={t(`shop.paper_${x.type}` as TKey)} required
+            row={rows[x.kind].get(x.type)} note={x.note} canWrite={p.can} />
+        ))}
+      </div>
+      <Link href="/merchant/shop?tab=papers" className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ink underline underline-offset-4">{t("setup.papersOptionalLink")}</Link>
+    </div>
   );
 }

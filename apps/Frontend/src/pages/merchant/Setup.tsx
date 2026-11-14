@@ -44,7 +44,8 @@ function SetupBody() {
 
   const status: Record<StepKey, string> = {
     shop: t(done.shop ? "setup.st_done" : "setup.st_todo"),
-    licence: t(`setup.st_licence_${setup.licence.status}`),
+    // A licence that's in doesn't make the step done while other required papers are missing.
+    licence: !setup.steps.licence && ["ACTIVE", "PENDING"].includes(setup.licence.status) ? t("setup.st_todo") : t(`setup.st_licence_${setup.licence.status}`),
     vehicles: t("setup.vehiclesReady", { n: setup.completeVehicles }),
     payout: t(`setup.st_payout_${setup.payoutAccount.status}`),
     submit: t(done.submit ? "setup.st_done" : "setup.st_todo"),
