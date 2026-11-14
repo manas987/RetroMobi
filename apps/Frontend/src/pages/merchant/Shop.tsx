@@ -13,7 +13,6 @@ import { Button, Card, Chip, EmptyState, ErrorNote, Field, INPUT, LoadingRows, P
 import { VERIFY_TONE } from "./shop/BranchCard";
 import { HoursEditor, hoursFromShop, hoursInvalid, hoursPayload } from "./shop/HoursSheet";
 import { PhotosTab } from "./fleet/tabs/PhotosTab";
-import type { SetupData } from "./setup/GetListedChip";
 
 export function MerchantShop() {
   return (
@@ -44,7 +43,6 @@ function ShopPage() {
   const [tab, setTab] = useUrlParam("tab", ["details", "papers"] as const, "details");
   const shop = shops.find((s) => String(s.id) === shopId);
   const full = useMerchantQuery<Row>(shopId ? `/shops/${shopId}` : null, token);
-  const setup = useMerchantQuery<SetupData>(shopId && can("fleet:read") ? `/shops/${shopId}/setup` : null, token);
 
   if (!shop || !shopId) {
     return (
@@ -71,14 +69,6 @@ function ShopPage() {
       setBusy(false);
     }
   }
-  // The licence plus the required named papers: what "Papers 3 of 5" counts.
-  const papers = setup.data && (() => {
-    const needed = [...setup.data.papers.business, ...setup.data.papers.shop].filter((p) => p.required);
-    const inNow = needed.filter((p) => p.state === "PENDING" || p.state === "VERIFIED").length
-      + (["ACTIVE", "PENDING"].includes(setup.data.licence.status) ? 1 : 0);
-    return { n: inNow, total: needed.length + 1 };
-  })();
-
   return (
     <div className="@container">
       <PageHeader
@@ -101,7 +91,7 @@ function ShopPage() {
 
       <Tabs value={tab} onChange={setTab} tabs={[
         { key: "details", label: t("shop.tabDetails") },
-        { key: "papers", label: papers ? t("shop.papersButton", papers) : t("shop.tabShopPapers") },
+        { key: "papers", label: t("shop.tabShopPapers") },
       ]} end={
         <>
           <a href={`/shops/${shopId}`} target="_blank" rel="noreferrer" title={t("shop.preview")}

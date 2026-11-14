@@ -29,6 +29,8 @@ export function PaperSlot(p: {
   needsExpiry?: boolean;
   /** Admin's reason, when the paper was sent back. */
   note?: string | null;
+  /** Inside a sheet whose title already names the paper: no outer box, no title row. */
+  bare?: boolean;
 }) {
   const { token } = useMerchantShop();
   const { t, lang, date, tMaybe } = useT();
@@ -69,19 +71,21 @@ export function PaperSlot(p: {
 
   if (!r) {
     return (
-      <div className="flex flex-col gap-2 rounded-2xl border-2 border-dashed border-line p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="flex items-center gap-2 text-sm font-semibold text-ink"><FileText className="h-4 w-4 text-ink-3" aria-hidden />{p.title}</span>
-          {chip}
-        </div>
-        {p.hint && <p className="text-xs text-ink-3">{p.hint}</p>}
+      <div className={p.bare ? "flex flex-col gap-2" : "flex flex-col gap-2 rounded-2xl border-2 border-dashed border-line p-4"}>
+        {!p.bare && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-2 text-sm font-semibold text-ink"><FileText className="h-4 w-4 text-ink-3" aria-hidden />{p.title}</span>
+            {chip}
+          </div>
+        )}
+        {p.hint && <p className={p.bare ? "mb-2 text-sm text-ink-2" : "text-xs text-ink-3"}>{p.hint}</p>}
         {p.canWrite && (
           <div className="mt-1">
             <Field label={`${t("shop.paperNumber")} (${t("common.optional")})`}><input className={INPUT} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
             {p.needsExpiry && <Field label={`${t("setup.licenceExpiry")} (${t("common.optional")})`}><DateInput clearable value={expiresAt} onChange={setExpiresAt} /></Field>}
             <DocUpload label={t("shop.paperFile")} accept="image/*,application/pdf" busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
             {error && <p role="alert" className="mb-2 text-xs text-danger">{error}</p>}
-            <Button disabled={busy || !file} onClick={create}>{busy ? t("common.saving") : t("common.save")}</Button>
+            <Button variant={p.bare ? "primary" : undefined} size={p.bare ? "lg" : undefined} className={p.bare ? "w-full" : undefined} disabled={busy || !file} onClick={create}>{busy ? t("common.saving") : t("common.save")}</Button>
           </div>
         )}
       </div>
