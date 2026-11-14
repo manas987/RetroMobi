@@ -24,9 +24,13 @@ export interface SetupVehicle {
   waitingFor: ("shop" | "licence")[];
 }
 
+/** A named business-wide or per-shop paper, as the setup checklist reports it. */
+export interface SetupPaper { type: string; state: DocState; id: string | null; note: string | null; required: boolean }
+
 export interface SetupData {
   shop: { id: string; name: string; verificationStatus: string; rejectionNote: string | null; hasAddress: boolean; hasHours: boolean };
   licence: { status: "NONE" | "PENDING" | "ACTIVE" | "EXPIRED" | "REJECTED"; expiresAt: string | null; hasFile: boolean; rejectionNote: string | null };
+  papers: { business: SetupPaper[]; shop: SetupPaper[] };
   payoutAccount: { status: "NONE" | "PENDING" | "VERIFIED" | "REJECTED" };
   minVehiclesForShop: number;
   completeVehicles: number;
