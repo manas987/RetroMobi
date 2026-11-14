@@ -271,7 +271,9 @@ export function Tabs<K extends string>({
   onChange: (key: K) => void;
 }) {
   return (
-    <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-line mb-5 -mx-1 px-1">
+    // The line is an inset shadow, not a border the tabs overlap with -mb-px:
+    // inside overflow-x-auto that 1px overflowed and drew a vertical scrollbar.
+    <div role="tablist" className="flex gap-1 overflow-x-auto shadow-[inset_0_-1px_0_var(--color-line)] mb-5 -mx-1 px-1">
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -279,7 +281,7 @@ export function Tabs<K extends string>({
           role="tab"
           aria-selected={tab.key === value}
           onClick={() => onChange(tab.key)}
-          className={`min-h-11 px-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px ${
+          className={`min-h-11 px-3 text-sm font-medium whitespace-nowrap border-b-2 ${
             tab.key === value ? "border-ink text-ink" : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >

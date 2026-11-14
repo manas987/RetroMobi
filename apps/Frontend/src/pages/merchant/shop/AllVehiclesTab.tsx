@@ -350,7 +350,10 @@ function Board({
                     <Chips item={x} />
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Price item={x} />
-                      <MoveControl item={x} targets={to} onMove={(dest) => onMove(x, dest)} />
+                      {/* With a mouse the card drags; "Move to…" is for touch. The booking chip still shows. */}
+                      <div className={draggable ? "[@media(hover:hover)]:hidden" : ""}>
+                        <MoveControl item={x} targets={to} onMove={(dest) => onMove(x, dest)} />
+                      </div>
                     </div>
                   </article>
                 );
