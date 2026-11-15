@@ -67,7 +67,7 @@ export function Card({
           {action}
         </div>
       )}
-      {scroll ? <div className="min-h-0 flex-1 overflow-y-auto -mx-2 px-2">{children}</div> : children}
+      {scroll ? <div className="relative min-h-0 flex-1 overflow-y-auto -mx-2 px-2">{children}</div> : children}
     </section>
   );
 }

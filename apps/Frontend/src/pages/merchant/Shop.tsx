@@ -76,7 +76,8 @@ function ShopPage() {
         subtitle={[shop.address_line1, shop.city].filter(Boolean).map(String).join(", ")}
         actions={
           <>
-            <Chip tone={VERIFY_TONE[verify] ?? "muted"}>{t(`status.verify_${verify}` as TKey)}</Chip>
+            {/* Not sent yet says nothing the Get listed button doesn't. */}
+            {verify !== "UNVERIFIED" && <Chip tone={VERIFY_TONE[verify] ?? "muted"}>{t(`status.verify_${verify}` as TKey)}</Chip>}
             {write && (
               <span className="flex min-h-11 items-center gap-2 text-sm text-ink-2">
                 <Toggle checked={open} disabled={busy} label={t("common.shopOpen")} onChange={setOpen} />

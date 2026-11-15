@@ -14,7 +14,8 @@ export function MerchantPapers() {
 function PapersBody() {
   const { t } = useT();
   return (
-    <div className="@container">
+    // Wide screens: one screen, three tiles side by side, each scrolling inside.
+    <div className="@container flex flex-col xl:h-[calc(100dvh-3rem)]">
       <PageHeader title={t("shop.papersTitle")} subtitle={t("shop.papersSubtitle")} />
       <PapersTab />
     </div>

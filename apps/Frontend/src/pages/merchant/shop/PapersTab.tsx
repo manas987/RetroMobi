@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Briefcase, FileText, Plus, ScrollText, Store } from "lucide-react";
+import { Briefcase, ChevronRight, FileText, Plus, ScrollText, Store } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { portalFetch, PortalApiError, type Row } from "../../../lib/portal";
 import { uploadFile } from "../../../lib/upload";
@@ -32,12 +32,12 @@ export function PapersTab() {
   const others = (docs.data?.documents ?? []).filter((d) => !NAMED.includes(String(d.type)));
 
   return (
-    <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
-      <Card title={t("shop.licenceCard")} icon={ScrollText} action={write && <Button icon={Plus} onClick={() => setSheet("licence")}>{t("shop.addLicence")}</Button>}>
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:min-h-0 xl:flex-1 xl:grid-cols-3">
+      <Card scroll className="xl:min-h-0" title={t("shop.licenceCard")} icon={ScrollText} action={write && <Button icon={Plus} onClick={() => setSheet("licence")}>{t("shop.addLicence")}</Button>}>
         <p className="mb-3 text-sm text-ink-3">{t("shop.licenceCardHint")}</p>
         <List q={licences} rows={licences.data?.licences} base="/licences" title={(r) => String(r.licence_number)} write={write} empty={t("shop.noLicences")} />
       </Card>
-      <Card title={t("shop.businessCard")} icon={Briefcase}>
+      <Card scroll className="xl:min-h-0" title={t("shop.businessCard")} icon={Briefcase}>
         <p className="mb-3 text-sm text-ink-3">{t("shop.businessCardHint")}</p>
         {docs.isPending ? <LoadingRows rows={2} /> : docs.isError ? <ErrorNote onRetry={() => docs.refetch()} /> : (
           <div className="flex flex-col gap-3">
@@ -45,26 +45,31 @@ export function PapersTab() {
               <PaperSlot key={b.type} type={b.type} base="/merchant-documents" title={t(`shop.paper_${b.type}` as TKey)}
                 hint={"hint" in b ? t(b.hint) : undefined} required={b.required} row={newest.get(b.type)} canWrite={write} />
             ))}
+            {others.length > 0 && (
+              <>
+                <h3 className="mt-2 text-sm font-semibold text-ink">{t("shop.otherCard")}</h3>
+                <List q={docs} rows={others} base="/merchant-documents" title={(r) => tMaybeLabel(t, r)} write={write} empty="" />
+              </>
+            )}
             <p className="text-sm text-ink-3">{t("shop.bankHint")} <Link href="/merchant/earnings" className="font-semibold text-ink underline">{t("nav.earnings")}</Link></p>
           </div>
         )}
       </Card>
-      <Card title={t("shop.eachShopCard")} icon={Store}>
+      <Card scroll className="xl:min-h-0" title={t("shop.eachShopCard")} icon={Store}>
         <p className="mb-3 text-sm text-ink-3">{t("shop.eachShopHint")}</p>
         <ul className="flex flex-col gap-2">
           {shops.map((s) => (
-            <li key={String(s.id)} className="flex flex-wrap items-center gap-2 rounded-2xl bg-surface-2 p-3">
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{String(s.name)}</span>
-              <Button onClick={() => { setShopId(String(s.id)); navigate("/merchant/shop?tab=papers"); }}>{t("shop.openPapers")}</Button>
+            <li key={String(s.id)}>
+              <button type="button" onClick={() => { setShopId(String(s.id)); navigate("/merchant/shop?tab=papers"); }} aria-label={`${t("shop.openPapers")}: ${String(s.name)}`}
+                className="flex min-h-12 w-full items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2 text-left hover:bg-surface-3">
+                <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{String(s.name)}</span>
+                <span className="shrink-0 text-xs font-semibold text-ink-2">{t("shop.openPapers")}</span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-ink-3" aria-hidden />
+              </button>
             </li>
           ))}
         </ul>
       </Card>
-      {others.length > 0 && (
-        <Card title={t("shop.otherCard")} icon={FileText}>
-          <List q={docs} rows={others} base="/merchant-documents" title={(r) => tMaybeLabel(t, r)} write={write} empty="" />
-        </Card>
-      )}
       <LicenceSheet open={sheet === "licence"} onClose={() => setSheet(null)} token={token} shopId={shopId} />
     </div>
   );
@@ -112,7 +117,7 @@ function PaperRow({ row: r, base, title, write }: { row: Row; base: string; titl
     <li className="rounded-2xl bg-surface-2 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-ink">{title}</span>
+          <span className="block break-words text-sm font-semibold text-ink">{title}</span>
           <span className="block text-xs text-ink-3">{r.expires_at ? t("shop.validTill", { date: date(r.expires_at, { day: "numeric", month: "short", year: "numeric" }) }) : t("shop.noExpiry")}</span>
         </span>
         <Chip tone={STATUS_TONE[status] ?? "muted"}>{tMaybe(`shop.status_${status}`) ?? t("shop.status_OTHER")}</Chip>
