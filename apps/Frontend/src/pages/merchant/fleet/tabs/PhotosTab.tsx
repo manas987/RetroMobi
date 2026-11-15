@@ -9,7 +9,7 @@ import { errorText, useInvalidateMerchant, useMerchantQuery } from "../../query"
 import { Button, Card, EmptyState, ErrorNote, LoadingRows } from "../../ui/ui";
 
 /** Vehicle photos by default; the shop page passes its own `base` (shop media has no IMAGE/VIDEO type). */
-export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaType = true }: { id: string; base?: string; canWrite?: boolean; mediaType?: boolean }) {
+export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaType = true, className = "", scroll }: { id: string; base?: string; canWrite?: boolean; mediaType?: boolean; className?: string; scroll?: boolean }) {
   const { token, can } = useMerchantShop();
   const { t, lang } = useT();
   const invalidate = useInvalidateMerchant();
@@ -78,20 +78,20 @@ export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaT
   );
 
   return (
-    <Card className="@container" title={t("fleet.photosTitle")} action={media.length > 0 ? picker || undefined : undefined}>
+    <Card className={`@container ${className}`} scroll={scroll} title={t("fleet.photosTitle")} action={media.length > 0 ? picker || undefined : undefined}>
       <p className="mb-4 text-sm text-ink-3">{t("fleet.photosHint")}</p>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       {q.isPending && <LoadingRows rows={2} />}
       {q.isError && <ErrorNote onRetry={() => q.refetch()} />}
       {q.data && media.length === 0 && <EmptyState icon={Camera} text={t("fleet.photosEmpty")} action={picker || undefined} />}
-      <ul className="grid gap-3 @xl:grid-cols-2">
+      <ul className="grid gap-3 @2xl:grid-cols-2">
         {media.map((m, i) => (
-          <li key={String(m.id)} className="flex items-center gap-3 rounded-2xl bg-surface-2 p-3">
+          <li key={String(m.id)} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-surface-2 p-3">
             <Thumb base={base} mid={String(m.id)} video={m.type === "VIDEO"} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-ink">{m.type === "VIDEO" ? t("fleet.video") : t("fleet.photoN", { n: i + 1 })}</p>
+            <div className="min-w-0 flex-1 basis-40">
+              <p className="whitespace-nowrap text-sm font-semibold text-ink">{m.type === "VIDEO" ? t("fleet.video") : t("fleet.photoN", { n: i + 1 })}</p>
               {write && m.type !== "VIDEO" ? (
-                <span className="mt-1 flex items-center gap-2 text-xs text-ink-2">
+                <span className="mt-1 flex items-center gap-2 whitespace-nowrap text-xs text-ink-2">
                   <Toggle checked={Boolean(m.published)} disabled={busy} onChange={(published) => patch(m.id, { published })} label={t("fleet.showToCustomers")} />
                   {t("fleet.showToCustomers")}
                 </span>
@@ -100,7 +100,7 @@ export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaT
               )}
             </div>
             {write && (
-              <div className="flex shrink-0 items-center">
+              <div className="ml-auto flex shrink-0 items-center">
                 <button type="button" disabled={busy || i === 0} onClick={() => move(i, -1)} aria-label={t("fleet.moveEarlier")} className="inline-flex h-11 w-9 items-center justify-center text-ink-2 hover:text-ink disabled:opacity-30"><ArrowUp className="h-4 w-4" aria-hidden /></button>
                 <button type="button" disabled={busy || i === media.length - 1} onClick={() => move(i, 1)} aria-label={t("fleet.moveLater")} className="inline-flex h-11 w-9 items-center justify-center text-ink-2 hover:text-ink disabled:opacity-30"><ArrowDown className="h-4 w-4" aria-hidden /></button>
                 <button type="button" disabled={busy} onClick={() => remove(m.id)} aria-label={t("common.remove")} className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-danger hover:bg-danger-soft disabled:opacity-30"><Trash2 className="h-5 w-5" aria-hidden /></button>

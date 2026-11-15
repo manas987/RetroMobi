@@ -70,7 +70,8 @@ function ShopPage() {
     }
   }
   return (
-    <div className="@container">
+    // Shop details on wide screens: one screen, each tile scrolls inside.
+    <div className={`@container ${tab === "details" ? "flex flex-col xl:h-[calc(100dvh-3rem)]" : ""}`}>
       <PageHeader
         title={String(shop.name)}
         subtitle={[shop.address_line1, shop.city].filter(Boolean).map(String).join(", ")}
@@ -182,8 +183,9 @@ function ShopEditor({ shop, shopId, write, lockedState }: { shop: Row; shopId: s
   const dirty = detailsChanged || hoursChanged;
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <Card title={t("shop.detailsCard")}>
+    <div className="flex flex-col gap-4 xl:min-h-0 xl:flex-1">
+    <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:min-h-0 xl:flex-1 xl:grid-rows-[minmax(0,1fr)] xl:items-stretch">
+      <Card scroll className="xl:min-h-0" title={t("shop.detailsCard")}>
         <div className="grid gap-x-3 @xl:grid-cols-2">
           {input("name", t("common.shopName"))}
           <Field label={t("setup.shopPhone")}><E164Input value={v.phone} onChange={(phone) => set({ phone })} className={PHONE} placeholder="" /></Field>
@@ -203,18 +205,19 @@ function ShopEditor({ shop, shopId, write, lockedState }: { shop: Row; shopId: s
         <div className={ro ? "pointer-events-none" : ""}><LocationPicker latitude={v.lat} longitude={v.lng} onChange={(lat, lng) => set({ lat, lng })} /></div>
       </Card>
 
-      <div className="flex min-w-0 flex-col gap-4">
-        <PhotosTab id={shopId} base={`/shops/${shopId}/media`} canWrite={write} mediaType={false} />
-        <Card title={t("shop.hoursCard")}>
+      <div className="flex min-w-0 flex-col gap-4 xl:min-h-0">
+        <PhotosTab id={shopId} base={`/shops/${shopId}/media`} canWrite={write} mediaType={false} scroll className="xl:max-h-[45%] xl:min-h-0 xl:shrink-0" />
+        <Card scroll className="xl:min-h-0 xl:flex-1" title={t("shop.hoursCard")}>
           <fieldset disabled={ro} className="min-w-0">
             <HoursEditor value={hours} onChange={(h) => { setSaved(false); setHours(h); }} heading={false} />
           </fieldset>
         </Card>
       </div>
+    </div>
 
       {write && (dirty || saved || error) && (
         // Appears once something changed, and sticks to the bottom so the one Save is always in reach.
-        <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex flex-wrap lg:bottom-3 items-center justify-end gap-3 rounded-2xl border border-line bg-surface/95 px-4 py-3 shadow-card backdrop-blur @4xl:col-span-2">
+        <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex flex-wrap lg:bottom-3 items-center justify-end gap-3 rounded-2xl border border-line bg-surface/95 px-4 py-3 shadow-card backdrop-blur xl:shrink-0">
           {error && <span className="mr-auto text-sm text-danger" role="alert">{error}</span>}
           {saved && !dirty && <span role="status" className="mr-auto text-sm font-semibold text-verified">{t("shop.saved")}</span>}
           {dirty && missing.length > 0 && <span className="mr-auto text-sm text-ink-2">{t("setup.stillNeeded", { items: missing.join(", ") })}</span>}
