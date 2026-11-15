@@ -11,7 +11,7 @@ import { newestByType, PaperActions, PaperSlot, paperStatus, STATUS_TONE } from 
 
 const VEHICLE_DOCS: DocType[] = ["RC", "INSURANCE", "PERMIT", "PUC", "FITNESS", "TAX"];
 /** Same columns on every table, so the categories line up down the page. */
-const COLS = "@2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_10rem_minmax(0,1.4fr)]";
+const COLS = "@2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_9rem_minmax(17.5rem,1.4fr)]";
 
 /**
  * Every paper this shop has, grouped the way the licence rules group them:
