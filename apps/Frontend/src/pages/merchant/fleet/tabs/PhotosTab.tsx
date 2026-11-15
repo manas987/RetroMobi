@@ -78,19 +78,19 @@ export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaT
   );
 
   return (
-    <Card title={t("fleet.photosTitle")} action={media.length > 0 ? picker || undefined : undefined}>
+    <Card className="@container" title={t("fleet.photosTitle")} action={media.length > 0 ? picker || undefined : undefined}>
       <p className="mb-4 text-sm text-ink-3">{t("fleet.photosHint")}</p>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       {q.isPending && <LoadingRows rows={2} />}
       {q.isError && <ErrorNote onRetry={() => q.refetch()} />}
       {q.data && media.length === 0 && <EmptyState icon={Camera} text={t("fleet.photosEmpty")} action={picker || undefined} />}
-      <ul className="grid gap-3 sm:grid-cols-2">
+      <ul className="grid gap-3 @xl:grid-cols-2">
         {media.map((m, i) => (
           <li key={String(m.id)} className="flex items-center gap-3 rounded-2xl bg-surface-2 p-3">
             <Thumb base={base} mid={String(m.id)} video={m.type === "VIDEO"} />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-ink">{m.type === "VIDEO" ? t("fleet.video") : t("fleet.photoN", { n: i + 1 })}</p>
-              {write && m.type === "IMAGE" ? (
+              {write && m.type !== "VIDEO" ? (
                 <span className="mt-1 flex items-center gap-2 text-xs text-ink-2">
                   <Toggle checked={Boolean(m.published)} disabled={busy} onChange={(published) => patch(m.id, { published })} label={t("fleet.showToCustomers")} />
                   {t("fleet.showToCustomers")}
