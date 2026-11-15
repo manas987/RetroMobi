@@ -175,8 +175,8 @@ export async function getShopSetup(pool: Pool, shopId: string) {
   const paperQuery = (table: string, owner: string, entity: string) => `
     select distinct on (type) type, id, status, storage_key is not null as has_file,
            expires_at is not null and expires_at < ${IST_TODAY} as expired,
-           case when status = 'REJECTED' then ${rejectionNote(entity, "id")} end as note
-      from ${table} where ${owner} = $1 and deleted_at is null
+           case when status = 'REJECTED' then ${rejectionNote(entity, "p.id")} end as note
+      from ${table} p where ${owner} = $1 and deleted_at is null
      order by type, created_at desc`;
   const toPapers = (types: readonly string[], required: readonly string[], rows: Map<string, any>) =>
     types.map((type) => {

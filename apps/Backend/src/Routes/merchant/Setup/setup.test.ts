@@ -101,6 +101,20 @@ describe("shop setup checklist", () => {
     expect(v.docs.PUC!.state).toBe("EXPIRED");
   });
 
+  test("a rejected shop paper carries the admin's note", async () => {
+    const merchant = await createMerchant(pool);
+    const shop = await createShop(pool, merchant.id);
+    const { rows: [doc] } = await pool.query(
+      `insert into shop_documents (shop_id, type, status, storage_key) values ($1, 'PREMISES', 'REJECTED', 'k') returning id`, [shop.id]);
+    await pool.query(
+      `insert into audit_logs (actor_type, action, entity_type, entity_id, after)
+       values ('ADMIN', 'shop_document.verification_decided', 'shop_document', $1, $2)`,
+      [doc.id, JSON.stringify({ status: "REJECTED", note: "Wrong address" })],
+    );
+    const s = await getShopSetup(pool, shop.id);
+    expect(s.papers.shop.find((p) => p.type === "PREMISES")).toMatchObject({ state: "REJECTED", note: "Wrong address" });
+  });
+
   test("a verified, licensed vehicle at a verified shop is READY, and SHOWING once listed", async () => {
     const v = await createBookableVehicle(pool, { status: "INACTIVE" });
     let s = await getShopSetup(pool, v.shopId);
