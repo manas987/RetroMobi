@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { pathParam } from "../../../lib/pathParam.ts";
 import { pool } from "../../../DB/client.ts";
-import { presignDownload, presignUpload } from "../../../lib/storage.ts";
+import { presignDownload, presignUpload, storageConfigured } from "../../../lib/storage.ts";
 import { trackerClient } from "../../../providers/tracker.ts";
 import * as fleetService from "./fleetService.ts";
 
@@ -169,6 +169,10 @@ export async function publishMedia(req: Request, res: Response) {
     req.body.published,
     req.merchantUserId!,
   );
+  if (!updated && !storageConfigured()) {
+    res.status(503).json({ error: "storage_unconfigured", message: "File storage isn't set up on this server, so photos can't be checked or shown." });
+    return;
+  }
   if (!updated) {
     res.status(400).json({ error: "invalid_photo", message: "Upload a JPEG, PNG, WebP, AVIF, or GIF to publish this photo." });
     return;

@@ -28,7 +28,8 @@ export function PhotosTab({ id, base = `/vehicles/${id}/media`, canWrite, mediaT
       await fn();
     } catch (err) {
       setError(err instanceof UploadFailedError ? t("fleet.uploadFailed")
-        : err instanceof PortalApiError && err.code === "invalid_photo" ? t("fleet.photoNotPublished") : errorText(lang, err));
+        : err instanceof PortalApiError && err.code === "invalid_photo" ? t("fleet.photoNotPublished")
+        : err instanceof PortalApiError && err.code === "storage_unconfigured" ? t("fleet.storageUnconfigured") : errorText(lang, err));
     } finally {
       // A photo can be saved even when publishing it was refused, so refresh either way.
       await invalidate();

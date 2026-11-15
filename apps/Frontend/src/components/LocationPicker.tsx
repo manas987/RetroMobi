@@ -52,9 +52,12 @@ export function LocationPicker({
     });
 
     mapRef.current = map;
-    const t = setTimeout(() => map.invalidateSize(), 0);
+    // Leaflet only notices window resizes; the card can change width on its own
+    // (layout settling, container queries), which leaves tiles misplaced.
+    const ro = new ResizeObserver(() => map.invalidateSize());
+    ro.observe(containerRef.current);
     return () => {
-      clearTimeout(t);
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
@@ -115,7 +118,7 @@ export function LocationPicker({
           {locating ? "Locating…" : "Use my current location"}
         </button>
       </div>
-      <div className="relative rounded-row overflow-hidden border border-line-strong h-[220px]">
+      <div className="relative isolate rounded-row overflow-hidden border border-line-strong h-[220px]">
         <div ref={containerRef} className="absolute inset-0" />
       </div>
       {locateError && <p className="text-xs text-danger mt-1">{locateError}</p>}

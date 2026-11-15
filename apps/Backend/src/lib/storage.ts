@@ -79,6 +79,9 @@ export async function presignDownload(key: string, expiresIn = 300): Promise<str
   return getSignedUrl(client, command, { expiresIn });
 }
 
+/** False in local dev without R2 credentials, where uploads take the dev-fallback path. */
+export const storageConfigured = () => getClient() != null;
+
 export async function storedContentType(key: string): Promise<string | null | undefined> {
   const config = getClient();
   if (!config) return undefined;
