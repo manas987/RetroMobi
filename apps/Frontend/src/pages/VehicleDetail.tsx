@@ -303,7 +303,7 @@ export function VehicleDetail() {
                 </section>
               )}
 
-              <ReviewsSection shopId={v.shopId} shopName={v.shopName} />
+              <div className="mt-8"><ReviewsSection shopId={v.shopId} shopName={v.shopName} /></div>
             </div>
           </div>
         )}

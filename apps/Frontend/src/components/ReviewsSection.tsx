@@ -17,10 +17,13 @@ export function ReviewsSection({
   shopId,
   shopName,
   reviewBookingId,
+  fill = false,
 }: {
   shopId: string;
   shopName: string;
   reviewBookingId?: string | null;
+  /** Fill the parent's height on wide screens and scroll the list inside it. */
+  fill?: boolean;
 }) {
   const [revision, setRevision] = useState(0);
   const [openBookingId, setOpenBookingId] = useState(reviewBookingId ?? null);
@@ -50,7 +53,7 @@ export function ReviewsSection({
   }, [reviewBookingId]);
 
   return (
-    <section id="shop-reviews" className="mt-8 scroll-mt-24">
+    <section id="shop-reviews" className={`scroll-mt-24 ${fill ? "flex min-h-0 flex-col lg:h-full" : ""}`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold text-ink">Reviews for {shopName}</h2>
         {reviewBookingId !== undefined && eligible.length > 0 && (
@@ -68,7 +71,7 @@ export function ReviewsSection({
       )}
       {data && reviews.length === 0 && <EmptyState title="No reviews yet" />}
       {reviews.length > 0 && (
-        <div className="rounded-panel border border-line divide-y divide-line">
+        <div className={`rounded-panel border border-line divide-y divide-line ${fill ? "lg:min-h-0 lg:flex-1 lg:overflow-y-auto" : ""}`}>
           {reviews.map((r) =>
             myUserId && r.user_id === myUserId && session ? (
               <MyReviewRow key={String(r.id)} review={r} token={session.accessToken} onChanged={refetch} />
