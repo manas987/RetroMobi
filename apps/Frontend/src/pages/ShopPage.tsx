@@ -82,7 +82,7 @@ export function ShopPage() {
         )}
 
         {shopLoading && (
-          <LoadingSkeleton label="Loading shop details" className="mt-4 grid gap-6 lg:grid-cols-[1fr_440px] xl:grid-cols-[1fr_500px]">
+          <LoadingSkeleton label="Loading shop details" className="mt-4 grid gap-6 md:grid-cols-2 lg:grid-cols-[1fr_440px] xl:grid-cols-[1fr_500px]">
             <div className="space-y-3">
               <SkeletonBlock className="h-8 w-2/5" />
               <SkeletonBlock className="h-4 w-3/5" />
@@ -209,7 +209,7 @@ function ShopHeader({ shop }: { shop: ShopProfile }) {
   const licence = shop.licences[0];
 
   return (
-    <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_440px] xl:grid-cols-[1fr_500px] gap-6 items-start">
+    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_440px] xl:grid-cols-[1fr_500px] gap-6 items-start">
       <div>
         <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-2xl font-semibold text-ink">{shop.name}</h1>
@@ -316,7 +316,7 @@ function ShopPhotos({ urls, name }: { urls: string[]; name: string }) {
 
   if (photos.length === 0) {
     return (
-      <div className="order-first flex aspect-square sm:aspect-[16/10] w-full flex-col items-center justify-center gap-2 rounded-panel border border-line bg-surface-2 p-6 text-center lg:order-none lg:aspect-auto lg:min-h-[320px] lg:self-stretch">
+      <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-panel border border-line bg-surface-2 p-6 text-center md:aspect-auto md:min-h-[320px] md:self-stretch">
         <Camera className="h-6 w-6 text-ink-4" aria-hidden="true" />
         <p className="font-semibold text-ink">No shop photos yet</p>
         <p className="max-w-56 text-sm text-ink-3">The shop hasn't added photos of its storefront.</p>
@@ -327,7 +327,7 @@ function ShopPhotos({ urls, name }: { urls: string[]; name: string }) {
   const more = photos.length - 5;
   const show = (i: number) => setOpen(i);
   return (
-    <div className="order-first flex aspect-square sm:aspect-[16/10] w-full flex-col gap-2 lg:order-none lg:aspect-auto lg:min-h-[320px] lg:self-stretch">
+    <div className="flex aspect-square w-full flex-col gap-2 md:aspect-auto md:min-h-[320px] md:self-stretch">
       <button type="button" onClick={() => show(0)} aria-label={`Open photo 1 of ${photos.length}`}
         className="relative min-h-0 flex-1 overflow-hidden rounded-panel bg-surface-3">
         <img src={photos[0]} alt={`${name}, photo 1`} onError={() => drop(photos[0]!)} className="absolute inset-0 h-full w-full object-cover" />
