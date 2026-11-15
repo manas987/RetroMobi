@@ -41,7 +41,7 @@ export default {
   paper_SHOP_ACT: "शॉप एक्ट या ट्रेड लाइसेंस",
   paper_PREMISES: "किराया समझौता या मालिकाना कागज़",
   paper_LANDLORD_NOC: "मकान मालिक का NOC",
-  preview: "कस्टमर को कैसा दिखता है",
+  preview: "कस्टमर को आपकी दुकान कैसी दिखती है",
   papersButton: "कागज़ ({n}/{total})",
   detailsCard: "दुकान की जानकारी",
   hoursCard: "खुलने का समय",

@@ -40,7 +40,7 @@ export default {
   paper_SHOP_ACT: "Shop Act or trade licence",
   paper_PREMISES: "Rent agreement or ownership deed",
   paper_LANDLORD_NOC: "Landlord's NOC",
-  preview: "See how customers see it",
+  preview: "See how customers see your shop",
   papersButton: "Papers ({n}/{total})",
   detailsCard: "Shop details",
   hoursCard: "Opening hours",
