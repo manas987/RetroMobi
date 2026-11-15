@@ -28,7 +28,7 @@ import { can as hasPermission, type Permission } from "../../lib/permissions";
 import { setLang, useT, type TKey } from "../../i18n";
 import { errorText, useMerchantQuery } from "./query";
 import { Button, ErrorNote, Field, INPUT, Sheet } from "./ui/ui";
-import { GetListedChip } from "./setup/GetListedChip";
+import { GetListedChip, useSetupPending } from "./setup/GetListedChip";
 import { InvitesForYou } from "./staff/InvitesForYou";
 
 interface MerchantCtx {
@@ -169,6 +169,8 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
 
   // Close the phone menu whenever the page changes.
   useEffect(() => setMenuOpen(false), [path]);
+  const setupPending = useSetupPending(token,
+    shopId && hasPermission(String(shops.find((s) => s.id === shopId)?.role ?? "") || null, "fleet:read") ? shopId : null);
 
   if (!session) return null;
 
@@ -309,8 +311,9 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
           onClick={() => setMenuOpen(true)}
           className="flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium text-ink-3"
         >
-          <span className="inline-flex h-8 w-12 items-center justify-center">
+          <span className="relative inline-flex h-8 w-12 items-center justify-center">
             <Menu className="h-5 w-5" aria-hidden />
+            {setupPending && <span className="absolute right-2.5 top-1 h-2.5 w-2.5 rounded-full bg-amber-edge" aria-label={t("setup.chipTitle")} />}
           </span>
           {t("common.more")}
         </button>

@@ -42,8 +42,14 @@ export interface SetupData {
   vehicles: SetupVehicle[];
 }
 
-/** Sidebar progress chip. Sits outside the page context, so it takes its inputs as props. */
-export function GetListedChip({ collapsed, token, shopId }: { collapsed: boolean; token: string; shopId: string }) {
+/** True while this shop still has setup steps left; drives the phone "More" tab dot. */
+export function useSetupPending(token: string, shopId: string | null) {
+  const q = useMerchantQuery<SetupData>(shopId ? `/shops/${shopId}/setup` : null, token);
+  return q.data != null && !q.data.done;
+}
+
+/** Sidebar progress chip, also the phone Home banner. Sits outside the page context, so it takes its inputs as props. */
+export function GetListedChip({ collapsed, token, shopId, className = "mx-3 mb-2" }: { collapsed: boolean; token: string; shopId: string; className?: string }) {
   const { t } = useT();
   const q = useMerchantQuery<SetupData>(`/shops/${shopId}/setup`, token);
   if (!q.data || q.data.done) return null;
@@ -59,7 +65,7 @@ export function GetListedChip({ collapsed, token, shopId }: { collapsed: boolean
     );
   }
   return (
-    <Link href="/merchant/setup" className="mx-3 mb-2 block rounded-2xl bg-amber/20 p-3">
+    <Link href="/merchant/setup" className={`${className} block rounded-2xl bg-amber/20 p-3`}>
       <p className="flex items-center gap-2 text-sm font-semibold text-ink">
         <Rocket className="h-4 w-4" aria-hidden />
         {label}

@@ -19,6 +19,7 @@ import { istDay, rupees } from "../../lib/format";
 import { bookingStage, STAGE_TONE, type BookingStage, type Tone } from "../../lib/bookingStage";
 import { useT } from "../../i18n";
 import { MerchantLayout, useMerchantShop } from "./Layout";
+import { GetListedChip } from "./setup/GetListedChip";
 import { useMerchantQuery } from "./query";
 import { HandoverSheet, renterName, ReturnSheet, WalkinSheet } from "./bookingActions";
 import { NextStep } from "./bookings/BookingRow";
@@ -150,6 +151,9 @@ function OverviewBody() {
           </Button>
         )}
       </header>
+
+      {/* Phones have no sidebar, so the get-listed guide sits here too. */}
+      {shopId && can("fleet:read") && <div className="lg:hidden"><GetListedChip collapsed={false} token={token} shopId={shopId} className="" /></div>}
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
         <StatCard icon={CalendarClock} tone="attention" label={t("overview.statPickups")} href="/merchant/bookings?tab=today"
