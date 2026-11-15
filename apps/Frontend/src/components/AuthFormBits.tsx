@@ -43,6 +43,21 @@ export function ErrorBox({ text }: { text: string }) {
   return <p className="mb-4 text-sm text-danger bg-danger-soft rounded-row px-3 py-2">{text}</p>;
 }
 
+/** A sign-in step: Enter submits it. The browser skips Enter while the submit button is disabled. */
+export function AuthForm({ onSubmit, children }: { onSubmit: () => void; children: React.ReactNode }) {
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+    >
+      {children}
+    </form>
+  );
+}
+
+/** Without `onClick` it submits the surrounding form (see AuthForm). */
 export function SubmitButton({
   busy,
   disabled,
@@ -51,12 +66,12 @@ export function SubmitButton({
 }: {
   busy: boolean;
   disabled?: boolean;
-  onClick: () => void;
+  onClick?: () => void;
   children: React.ReactNode;
 }) {
   return (
     <button
-      type="button"
+      type={onClick ? "button" : "submit"}
       disabled={busy || disabled}
       onClick={onClick}
       className="mt-2 w-full h-11 rounded-row bg-ink text-surface font-semibold text-sm disabled:opacity-40 hover:bg-ink-2 transition-colors"

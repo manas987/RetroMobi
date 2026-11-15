@@ -4,7 +4,7 @@ import { AuthLayout } from "../../components/AuthLayout";
 import { PhoneInput, DEFAULT_COUNTRY } from "../../components/PhoneInput";
 import type { Country } from "../../lib/countries";
 import { OtpInput } from "../../components/OtpInput";
-import { BackRow, ErrorBox, ResendRow, SubmitButton, TextField } from "../../components/AuthFormBits";
+import { AuthForm, BackRow, ErrorBox, ResendRow, SubmitButton, TextField } from "../../components/AuthFormBits";
 import { useCountdown } from "../../lib/useCountdown";
 import { usePortalSession, portalFetch, PortalApiError } from "../../lib/portal";
 
@@ -42,6 +42,9 @@ export function MerchantLogin() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // An error belongs to the step it happened on.
+  useEffect(() => setError(null), [step]);
+
   async function run(fn: () => Promise<void>) {
     setError(null);
     setBusy(true);
@@ -57,6 +60,7 @@ export function MerchantLogin() {
   const sendOtp = () =>
     run(async () => {
       await portalFetch("merchant", "/auth/otp/send", { method: "POST", body: { phone } });
+      setCode("");
       resend.start();
       setStep("otp");
     });
@@ -80,7 +84,7 @@ export function MerchantLogin() {
     run(async () => {
       const result = await portalFetch<Extract<VerifyResult, { status: "LOGIN" }>>("merchant", "/auth/signup/complete", {
         method: "POST",
-        body: { signupTicket, deviceId, name },
+        body: { signupTicket, deviceId, name: name.trim() },
       });
       setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
       navigate("/merchant");
@@ -93,19 +97,19 @@ export function MerchantLogin() {
       tagline="Every vehicle you list is named on your Rent-a-Motorcycle licence, visible to riders before they book."
     >
       {step === "phone" && (
-        <div>
+        <AuthForm onSubmit={sendOtp}>
           <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Merchant sign-in</h1>
           <p className="text-sm text-ink-3 mb-6">Sign in or set up your shop with your phone number.</p>
           {error && <ErrorBox text={error} />}
           <PhoneInput value={localPhone} onChange={setLocalPhone} country={country} onCountryChange={setCountry} autoFocus />
-          <SubmitButton busy={busy} onClick={sendOtp} disabled={localPhone.length < 10}>
+          <SubmitButton busy={busy} disabled={localPhone.length < 10}>
             Continue
           </SubmitButton>
-        </div>
+        </AuthForm>
       )}
 
       {step === "otp" && (
-        <div>
+        <AuthForm onSubmit={verifyOtp}>
           <BackRow onBack={() => setStep("phone")} />
           <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Verify your number</h1>
           <p className="text-sm text-ink-3 mb-6">
@@ -113,24 +117,24 @@ export function MerchantLogin() {
           </p>
           {error && <ErrorBox text={error} />}
           <OtpInput value={code} onChange={setCode} />
-          <SubmitButton busy={busy} onClick={verifyOtp} disabled={code.length < 6}>
+          <SubmitButton busy={busy} disabled={code.length < 6}>
             Verify
           </SubmitButton>
           <ResendRow resend={resend} onResend={sendOtp} />
-        </div>
+        </AuthForm>
       )}
 
       {step === "signup" && (
-        <div>
+        <AuthForm onSubmit={completeSignup}>
           <BackRow onBack={() => setStep("phone")} />
           <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Almost there</h1>
           <p className="text-sm text-ink-3 mb-6">New number — tell us your name to finish setting up.</p>
           {error && <ErrorBox text={error} />}
           <TextField label="Your name" value={name} onChange={setName} autoFocus />
-          <SubmitButton busy={busy} onClick={completeSignup} disabled={!name}>
+          <SubmitButton busy={busy} disabled={!name.trim()}>
             Create account
           </SubmitButton>
-        </div>
+        </AuthForm>
       )}
     </AuthLayout>
   );

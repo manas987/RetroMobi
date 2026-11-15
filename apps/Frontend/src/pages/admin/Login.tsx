@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { AuthLayout } from "../../components/AuthLayout";
 import { PhoneInput, DEFAULT_COUNTRY } from "../../components/PhoneInput";
 import type { Country } from "../../lib/countries";
 import { OtpInput } from "../../components/OtpInput";
-import { BackRow, ErrorBox, ResendRow, SubmitButton } from "../../components/AuthFormBits";
+import { AuthForm, BackRow, ErrorBox, ResendRow, SubmitButton } from "../../components/AuthFormBits";
 import { useCountdown } from "../../lib/useCountdown";
 import { usePortalSession, portalFetch, PortalApiError } from "../../lib/portal";
 
@@ -21,6 +21,9 @@ export function AdminLogin() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // An error belongs to the step it happened on.
+  useEffect(() => setError(null), [step]);
+
   async function run(fn: () => Promise<void>) {
     setError(null);
     setBusy(true);
@@ -36,6 +39,7 @@ export function AdminLogin() {
   const sendOtp = () =>
     run(async () => {
       await portalFetch("admin", "/auth/otp/send", { method: "POST", body: { phone } });
+      setCode("");
       resend.start();
       setStep("otp");
     });
@@ -57,20 +61,20 @@ export function AdminLogin() {
       tagline="Licensing, verification and dispute oversight for the whole marketplace."
     >
       {step === "phone" && (
-        <div>
+        <AuthForm onSubmit={sendOtp}>
           <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Internal sign-in</h1>
           <p className="text-sm text-ink-3 mb-1">Admin accounts are provisioned ahead of time.</p>
           <p className="text-sm text-ink-3 mb-6">There's no self-serve signup here.</p>
           {error && <ErrorBox text={error} />}
           <PhoneInput value={localPhone} onChange={setLocalPhone} country={country} onCountryChange={setCountry} autoFocus />
-          <SubmitButton busy={busy} onClick={sendOtp} disabled={localPhone.length < 10}>
+          <SubmitButton busy={busy} disabled={localPhone.length < 10}>
             Continue
           </SubmitButton>
-        </div>
+        </AuthForm>
       )}
 
       {step === "otp" && (
-        <div>
+        <AuthForm onSubmit={verifyOtp}>
           <BackRow onBack={() => setStep("phone")} />
           <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Verify your number</h1>
           <p className="text-sm text-ink-3 mb-6">
@@ -78,11 +82,11 @@ export function AdminLogin() {
           </p>
           {error && <ErrorBox text={error} />}
           <OtpInput value={code} onChange={setCode} />
-          <SubmitButton busy={busy} onClick={verifyOtp} disabled={code.length < 6}>
+          <SubmitButton busy={busy} disabled={code.length < 6}>
             Verify
           </SubmitButton>
           <ResendRow resend={resend} onResend={sendOtp} />
-        </div>
+        </AuthForm>
       )}
     </AuthLayout>
   );
