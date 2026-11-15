@@ -35,15 +35,21 @@ export const hoursInvalid = (h: Hours) => {
   return open.length === 0 || open.some((x) => x.closesAt <= x.opensAt);
 };
 
+/** Monday's hours copied to every day. */
+export const sameEveryDay = (value: Hours): Hours => Object.fromEntries(DAY_ORDER.map((d) => [d, value[1] ?? { ...DEFAULT_SLOT }]));
+
 export function HoursEditor({
   value,
   onChange,
   heading = true,
+  toolbar = true,
 }: {
   value: Hours;
   onChange: (h: Hours) => void;
   /** Off inside the hours popup, whose title already says "Opening hours". */
   heading?: boolean;
+  /** Off when the page puts "Same time every day" in its own card header. */
+  toolbar?: boolean;
 }) {
   const { t, date, time } = useT();
   const set = (d: number, s: Slot) => onChange({ ...value, [d]: s });
@@ -52,12 +58,12 @@ export function HoursEditor({
     [...new Set([...HALF_HOURS, current])].sort().map((v) => ({ value: v, label: time(`2024-01-01T${v}:00+05:30`) }));
   return (
     <div className="mb-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        {heading ? <span className="text-sm font-medium text-ink">{t("setup.hoursTitle")}</span> : <span />}
-        <Button variant="ghost" onClick={() => onChange(Object.fromEntries(DAY_ORDER.map((d) => [d, value[1] ?? { ...DEFAULT_SLOT }])))}>
-          {t("setup.sameEveryDay")}
-        </Button>
-      </div>
+      {toolbar && (
+        <div className="mb-2 flex items-center justify-between gap-2">
+          {heading ? <span className="text-sm font-medium text-ink">{t("setup.hoursTitle")}</span> : <span />}
+          <Button variant="ghost" onClick={() => onChange(sameEveryDay(value))}>{t("setup.sameEveryDay")}</Button>
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         {DAY_ORDER.map((d) => {
           const s = value[d];

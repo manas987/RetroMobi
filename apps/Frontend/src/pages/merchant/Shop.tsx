@@ -11,7 +11,7 @@ import { errorText, useInvalidateMerchant, useMerchantQuery, useUrlParam } from 
 import { ShopPapersTab } from "./shop/ShopPapersTab";
 import { Button, Card, Chip, EmptyState, ErrorNote, Field, INPUT, LoadingRows, PageHeader, PHONE, Tabs } from "./ui/ui";
 import { VERIFY_TONE } from "./shop/BranchCard";
-import { HoursEditor, hoursFromShop, hoursInvalid, hoursPayload } from "./shop/HoursSheet";
+import { HoursEditor, hoursFromShop, hoursInvalid, hoursPayload, sameEveryDay } from "./shop/HoursSheet";
 import { PhotosTab } from "./fleet/tabs/PhotosTab";
 
 export function MerchantShop() {
@@ -207,9 +207,10 @@ function ShopEditor({ shop, shopId, write, lockedState }: { shop: Row; shopId: s
 
       <div className="flex min-w-0 flex-col gap-4 xl:min-h-0">
         <PhotosTab id={shopId} base={`/shops/${shopId}/media`} canWrite={write} mediaType={false} scroll className="xl:max-h-[45%] xl:min-h-0 xl:shrink-0" />
-        <Card scroll className="xl:min-h-0 xl:flex-1" title={t("shop.hoursCard")}>
+        <Card scroll className="xl:min-h-0 xl:flex-1" title={t("shop.hoursCard")}
+          action={write && <Button variant="ghost" onClick={() => { setSaved(false); setHours(sameEveryDay(hours)); }}>{t("setup.sameEveryDay")}</Button>}>
           <fieldset disabled={ro} className="min-w-0">
-            <HoursEditor value={hours} onChange={(h) => { setSaved(false); setHours(h); }} heading={false} />
+            <HoursEditor value={hours} onChange={(h) => { setSaved(false); setHours(h); }} heading={false} toolbar={false} />
           </fieldset>
         </Card>
       </div>
