@@ -1,0 +1,9 @@
+{
+  "name": "retromobi-mobile",
+  "private": true,
+  "workspaces": ["user", "merchant", "shared"],
+  "scripts": {
+    "check-types": "bun run --filter '*' check-types",
+    "test": "bun test --cwd shared"
+  }
+}

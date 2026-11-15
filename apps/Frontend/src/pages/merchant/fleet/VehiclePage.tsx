@@ -58,7 +58,7 @@ function VehicleBody() {
   const tabs = TABS.filter((x) => can(x.needs));
   // A link to a tab this role can't see lands on Overview.
   const tab = tabs.some((x) => x.key === rawTab) ? rawTab : "overview";
-  const canBook = vehicleNow(vehicleId, staged).avail === "FREE" && sv?.priceSet && can("bookings:write");
+  const canBook = vehicleNow(v, staged).avail === "FREE" && sv?.priceSet && can("bookings:write");
   const toggle = stage === "READY" || stage === "SHOWING";
 
   return (
@@ -71,7 +71,7 @@ function VehicleBody() {
         subtitle={<span className="tnum">{String(v.registration_number ?? "")}</span>}
         actions={
           <>
-            <AvailChip id={vehicleId} staged={staged} />
+            <AvailChip v={v} staged={staged} />
             {/* The switch's own label already says it; don't repeat it as a chip. */}
             {stage && !(toggle && can("fleet:write")) && <Chip tone={STAGE_TONE[stage]}>{t(`fleet.stage_${stage}` as const)}</Chip>}
             {toggle && can("fleet:write") && (

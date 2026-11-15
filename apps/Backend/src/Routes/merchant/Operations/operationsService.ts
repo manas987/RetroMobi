@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
 import { composeTotal, priceRental } from "../../../lib/pricing.ts";
+import { notBlocked } from "../../../lib/vehicleBookingRules.ts";
 
 export class WalkinUnavailableError extends Error {}
 export class VehicleUnavailableError extends Error {}
@@ -148,10 +149,11 @@ export async function createWalkinRental(
 
     // Not `status = 'ACTIVE'`: that column is the marketplace listing switch.
     // A shop rents its unlisted vehicles at the counter too -- the fleet is
-    // useful whether or not it's on RetroMobi.
+    // useful whether or not it's on RetroMobi. A block (servicing) does stop it,
+    // same as online.
     const vehicleCheck = await client.query(
-      `select id from vehicles where id = $1 and deleted_at is null`,
-      [input.vehicleId],
+      `select v.id from vehicles v where v.id = $1 and v.deleted_at is null and ${notBlocked("v.id")}`,
+      [input.vehicleId, input.pickupAt, input.returnAt],
     );
     if (vehicleCheck.rows.length === 0) {
       throw new VehicleUnavailableError(`vehicle ${input.vehicleId} is not available`);

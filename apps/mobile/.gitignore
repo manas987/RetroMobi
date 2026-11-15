@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+dist/
+/user/android
+/user/ios
+/merchant/android
+/merchant/ios
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+expo-env.d.ts

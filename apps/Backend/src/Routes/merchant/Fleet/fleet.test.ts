@@ -11,6 +11,7 @@ import {
   assignTracker,
   attachDocumentFile,
   createVehicle,
+  listVehicles,
   moveVehicle,
   softDeleteVehicle,
 } from "./fleetService.ts";
@@ -29,6 +30,22 @@ afterAll(async () => {
 });
 
 describe("merchant fleet", () => {
+
+  test("the fleet list says how long a vehicle is blocked right now, and nothing for past or future blocks", async () => {
+    const v = await createBookableVehicle(pool);
+    const at = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+    const block = (from: number, to: number) =>
+      pool.query(`insert into vehicle_unavailability (vehicle_id, start_at, end_at) values ($1, $2, $3)`, [v.id, at(from), at(to)]);
+    const until = async () => (await listVehicles(pool, v.shopId)).find((x) => x.id === v.id)!.blocked_until;
+
+    await block(-48, -24);
+    await block(24, 48);
+    expect(await until()).toBeNull();
+
+    const end = at(5);
+    await pool.query(`insert into vehicle_unavailability (vehicle_id, start_at, end_at) values ($1, $2, $3)`, [v.id, at(-1), end]);
+    expect(new Date(await until()).toISOString()).toBe(end);
+  });
   test("a new vehicle is INACTIVE by default and rejects an unknown model", async () => {
     const merchant = await createMerchant(pool);
     const shop = await createShop(pool, merchant.id, {

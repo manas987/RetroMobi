@@ -61,6 +61,8 @@ export default {
   avail_FREE: "Free",
   avail_OUT: "With customer",
   avail_TODAY: "Goes out today",
+  avail_BLOCKED: "Blocked",
+  blockedTill: "Blocked till {when}",
   backAt: "Back {when}",
   goesAt: "Goes out {when}",
   missedAt: "Customer was due {when}",

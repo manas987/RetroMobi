@@ -3,7 +3,7 @@ export default {
   generic: "Something went wrong. Try again.",
   forbidden: "Your role can't do this. Ask the shop owner.",
   invalid_request: "Some details are missing or wrong. Check and try again.",
-  vehicle_unavailable: "This vehicle can't be booked for that time. It may already be booked, or it has no daily price yet.",
+  vehicle_unavailable: "This vehicle can't be booked for that time. It may already be booked or blocked for that time, or it has no daily price yet.",
   invalid_duration: "Check the pickup and return times.",
   booking_not_returnable: "This booking can't be marked returned right now. Refresh and check.",
   identity_already_checked: "ID has already been checked for this booking.",

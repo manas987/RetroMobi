@@ -16,14 +16,15 @@ export function useWhen() {
   return (iso: unknown) => (istDay(new Date(String(iso))) === today ? time(iso) : date(iso, { weekday: "short", day: "numeric" }));
 }
 
-/** The availability chip: free, going out, with a customer, or late. */
-export function AvailChip({ id, staged }: { id: unknown; staged: Staged[] }) {
+/** The availability chip: free, going out, with a customer, blocked, or late. */
+export function AvailChip({ v, staged }: { v: Row; staged: Staged[] }) {
   const { t } = useT();
   const when = useWhen();
-  const { avail, out, goes, late, missed } = vehicleNow(id, staged);
+  const { avail, blockedUntil, out, goes, late, missed } = vehicleNow(v, staged);
   if (late) return <Chip tone="bad">{t("fleet.avail_LATE")}</Chip>;
   if (missed) return <Chip tone="bad">{t("status.stage_PICKUP_LATE")}</Chip>;
   if (avail === "OUT") return <Chip tone="info">{t("fleet.avail_OUT", { when: when(out!.b.scheduled_return_at) })}</Chip>;
+  if (avail === "BLOCKED") return <Chip tone="muted">{t("fleet.avail_BLOCKED", { when: when(blockedUntil) })}</Chip>;
   if (avail === "TODAY") return <Chip tone="attention">{t("fleet.avail_TODAY", { when: when(goes!.b.scheduled_pickup_at) })}</Chip>;
   return <Chip tone="good">{t("fleet.avail_FREE")}</Chip>;
 }
@@ -43,7 +44,7 @@ export function VehicleCard({
   const { t } = useT();
   const act = useListingActions();
   const id = String(v.id);
-  const { avail, late, missed } = vehicleNow(id, staged);
+  const { avail, late, missed } = vehicleNow(v, staged);
   const write = can("fleet:write");
   const hasPrice = v.amount != null;
   const fixHref = `/merchant/setup?vehicle=${id}`;
@@ -90,7 +91,7 @@ export function VehicleCard({
           <p className="truncate text-base font-semibold text-ink">{String(v.make ?? "")} {String(v.model ?? "")}</p>
           <p className="tnum truncate text-sm text-ink-3">{String(v.registration_number ?? "")}</p>
         </div>
-        <AvailChip id={id} staged={staged} />
+        <AvailChip v={v} staged={staged} />
       </div>
 
       {hasPrice ? (

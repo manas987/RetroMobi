@@ -358,10 +358,11 @@ function FleetNowCard({
 
     const rows = list
       .map((v) => {
-        const { avail: a, out, goes, next, missed } = vehicleNow(v.id, staged);
+        const { avail: a, blockedUntil, out, goes, next, missed } = vehicleNow(v, staged);
         const price = v.amount == null ? t("overview.noPrice") : t("common.perDay", { amount: rupees(Number(v.amount)) });
         const detail =
           a === "OUT" ? t("overview.backAt", { when: when(out!.b.scheduled_return_at) })
+          : a === "BLOCKED" ? t("overview.blockedTill", { when: when(blockedUntil) })
           : missed ? t("overview.missedAt", { when: when(goes!.b.scheduled_pickup_at) })
           : a === "TODAY" ? t("overview.goesAt", { when: when(goes!.b.scheduled_pickup_at) })
           : next ? `${price} · ${t("overview.nextBooking", { when: when(next.b.scheduled_pickup_at) })}`
@@ -371,14 +372,14 @@ function FleetNowCard({
       .sort((x, y) => AVAIL_ORDER[x.a] - AVAIL_ORDER[y.a]);
 
     const tally = [
-      ...(["FREE", "TODAY", "OUT"] as const).map((a) => ({
+      ...(["FREE", "TODAY", "OUT", "BLOCKED"] as const).map((a) => ({
         a: a as string,
         tone: AVAIL_TONE[a] as Tone,
         label: t(`overview.avail_${a}` as const),
         n: rows.filter((r) => r.a === a && !r.missed).length,
       })),
       { a: "MISSED", tone: "bad" as Tone, label: t("status.stage_PICKUP_LATE"), n: rows.filter((r) => r.missed).length },
-    ].filter((x) => x.a !== "MISSED" || x.n > 0);
+    ].filter((x) => (x.a !== "MISSED" && x.a !== "BLOCKED") || x.n > 0);
 
     return (
       <>

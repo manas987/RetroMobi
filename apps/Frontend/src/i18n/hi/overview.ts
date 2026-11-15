@@ -63,6 +63,8 @@ export default {
   avail_FREE: "खाली",
   avail_OUT: "ग्राहक के पास",
   avail_TODAY: "आज जाएगी",
+  avail_BLOCKED: "ब्लॉक",
+  blockedTill: "{when} तक ब्लॉक",
   backAt: "वापसी {when}",
   goesAt: "जाएगी {when}",
   missedAt: "कस्टमर को {when} आना था",

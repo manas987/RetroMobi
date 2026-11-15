@@ -17,6 +17,10 @@ function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === UNIQUE_VIOLATION;
 }
 
+/** End of the block (servicing etc.) covering right now, null when none. */
+const BLOCKED_UNTIL = `(select max(u.end_at) from vehicle_unavailability u
+  where u.vehicle_id = v.id and u.start_at <= now() and u.end_at > now()) as blocked_until`;
+
 export async function listVehicles(pool: Pool, shopId: string) {
   // `vehicle_pricing` is a LEFT join on purpose: adding a vehicle writes the
   // row and its pricing in two separate calls, so a vehicle whose second call
@@ -25,7 +29,7 @@ export async function listVehicles(pool: Pool, shopId: string) {
   // place to fix it.
   const { rows } = await pool.query(
     `select v.*, m.make, m.model,
-            vp.amount, vp.weekend_amount, vp.security_deposit_amount, vp.late_fee_amount
+            vp.amount, vp.weekend_amount, vp.security_deposit_amount, vp.late_fee_amount, ${BLOCKED_UNTIL}
        from vehicles v
        join vehicle_models m on m.id = v.model_id
        left join vehicle_pricing vp on vp.vehicle_id = v.id
@@ -38,7 +42,7 @@ export async function listVehicles(pool: Pool, shopId: string) {
 
 export async function getVehicle(pool: Pool, vehicleId: string) {
   const { rows } = await pool.query(
-    `select v.*, m.make, m.model
+    `select v.*, m.make, m.model, ${BLOCKED_UNTIL}
        from vehicles v
        join vehicle_models m on m.id = v.model_id
       where v.id = $1 and v.deleted_at is null`,

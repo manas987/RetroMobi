@@ -1,0 +1,25 @@
+import type en from "../en/nav";
+
+export default {
+  groupToday: "आज",
+  groupWork: "रोज़ का काम",
+  groupMoney: "पैसा",
+  groupShop: "आपकी दुकान",
+  overview: "होम",
+  bookings: "बुकिंग",
+  fleet: "गाड़ियाँ",
+  support: "मदद और चैट",
+  earnings: "कमाई",
+  reports: "रिपोर्ट",
+  branches: "दुकान की जानकारी",
+  documents: "लाइसेंस और कागज़ात",
+  shopAndPapers: "दुकान और कागज़",
+  shop: "दुकान",
+  groupAllShops: "सभी दुकानें",
+  allBranches: "ब्रांच",
+  allVehicles: "सभी गाड़ियाँ",
+  staff: "स्टाफ",
+  activity: "गतिविधि",
+  collapse: "मेन्यू छोटा करें",
+  expand: "मेन्यू बड़ा करें",
+} satisfies Record<keyof typeof en, string>;

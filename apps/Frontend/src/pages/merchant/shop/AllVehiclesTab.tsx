@@ -26,6 +26,7 @@ interface Branch {
 
 interface Item {
   id: string;
+  row: Row;
   name: string;
   plate: string;
   amount: number | null;
@@ -86,6 +87,7 @@ export function AllVehiclesTab() {
       const id = String(v.id);
       return {
         id,
+        row: v,
         name: `${String(v.make ?? "")} ${String(v.model ?? "")}`.trim(),
         plate: String(v.registration_number ?? ""),
         amount: v.amount == null ? null : Number(v.amount),
@@ -187,7 +189,7 @@ function Chips({ item }: { item: Item }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {item.stage && <Chip tone={STAGE_TONE[item.stage]}>{t(`fleet.stage_${item.stage}` as const)}</Chip>}
-      <AvailChip id={item.id} staged={item.staged} />
+      <AvailChip v={item.row} staged={item.staged} />
     </div>
   );
 }

@@ -46,7 +46,7 @@ export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
       <Card title={t("fleet.rightNow")} icon={CalendarCheck}>
-        <div className="mb-3"><AvailChip id={id} staged={staged} /></div>
+        <div className="mb-3"><AvailChip v={v} staged={staged} /></div>
         {next.length === 0 ? (
           <p className="text-sm text-ink-3">{t("fleet.noUpcoming")}</p>
         ) : (

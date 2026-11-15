@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
 import { createBookableVehicle, insertBooking, uniquePhone, futureWindow } from "../../../test/fixtures.ts";
-import { WalkinUnavailableError, createWalkinRental, listBookings } from "./operationsService.ts";
+import { VehicleUnavailableError, WalkinUnavailableError, createWalkinRental, listBookings } from "./operationsService.ts";
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -60,6 +60,26 @@ describe("merchant walk-in rentals", () => {
       returnAt,
     });
     expect(result.id).toBeTruthy();
+  });
+
+  test("a vehicle blocked for servicing can't be rented at the counter during the block", async () => {
+    const vehicle = await createBookableVehicle(pool);
+    const { pickupAt, returnAt } = futureWindow(720, 2);
+    await pool.query(`insert into vehicle_unavailability (vehicle_id, start_at, end_at, reason) values ($1, $2, $3, 'Servicing')`,
+      [vehicle.id, pickupAt, returnAt]);
+    const walkin = (p: Date, r: Date) => createWalkinRental(pool, {
+      merchantUserId: "00000000-0000-0000-0000-000000000000",
+      vehicleId: vehicle.id,
+      walkinName: "Counter Customer",
+      walkinPhone: uniquePhone(),
+      walkinDlNumber: "DL3",
+      pickupAt: p,
+      returnAt: r,
+    });
+    await expect(walkin(pickupAt, returnAt)).rejects.toBeInstanceOf(VehicleUnavailableError);
+    // Right after the block ends it's free again.
+    const after = new Date(returnAt.getTime() + 3_600_000);
+    expect((await walkin(after, new Date(after.getTime() + 86_400_000))).id).toBeTruthy();
   });
 
   test("double-booking the same vehicle window is rejected by the exclusion constraint", async () => {

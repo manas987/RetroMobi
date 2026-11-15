@@ -1,0 +1,27 @@
+import type en from "../en/support";
+
+export default {
+  subtitle: "बुकिंग, पेमेंट या ऐप के बारे में RetroMobi सपोर्ट से बात करें।",
+  startChat: "चैट शुरू करें",
+  conversation: "चैट",
+  catBOOKING: "कोई बुकिंग",
+  catAPP_HELP: "ऐप चलाने में मदद",
+  catOTHER: "कुछ और",
+  solved: "हल हो गया",
+  open: "चालू",
+  waitingReply: "आपके जवाब का इंतज़ार",
+  empty: "अभी कोई चैट नहीं। बुकिंग या पेमेंट में कुछ गड़बड़ हो तो चैट शुरू करें, RetroMobi सपोर्ट यहीं जवाब देगा।",
+  noMessages: "अभी कोई मैसेज नहीं। बताइए क्या हुआ, सपोर्ट यहीं जवाब देगा।",
+  fromSupport: "RetroMobi सपोर्ट",
+  typeMessage: "मैसेज लिखें",
+  send: "भेजें",
+  attach: "फ़ोटो या फ़ाइल जोड़ें",
+  attached: "{name} जोड़ी",
+  attachFailed: "फ़ाइल अपलोड नहीं हुई। आपका मैसेज बिना फ़ाइल के भेज दिया गया।",
+  newTitle: "चैट शुरू करें",
+  whatAbout: "किस बारे में है?",
+  whichBooking: "कौन सी बुकिंग?",
+  pickBooking: "बुकिंग चुनें",
+  firstMessage: "क्या हुआ?",
+  start: "चैट शुरू करें",
+} satisfies Record<keyof typeof en, string>;
