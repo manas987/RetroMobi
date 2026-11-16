@@ -5,17 +5,14 @@ export function useCountdown(seconds: number) {
   const [remaining, setRemaining] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  function start() {
-    setRemaining(seconds);
+  function start(duration = seconds) {
+    const end = Date.now() + Math.max(0, duration) * 1000;
+    setRemaining(Math.max(0, Math.ceil(duration)));
     if (timer.current) clearInterval(timer.current);
     timer.current = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) {
-          if (timer.current) clearInterval(timer.current);
-          return 0;
-        }
-        return r - 1;
-      });
+      const next = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      setRemaining(next);
+      if (!next && timer.current) clearInterval(timer.current);
     }, 1000);
   }
 

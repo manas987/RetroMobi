@@ -8,7 +8,7 @@ import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
 import { createBookableVehicle, createRider, createUser, futureWindow } from "../../../test/fixtures.ts";
 import { createPaymentIntent, handlePaymentWebhook } from "../Payments/paymentsService.ts";
-import { BookingNotCancellableError, cancelBooking, createHold } from "./bookingsService.ts";
+import { BookingNotCancellableError, cancelBooking, createHold, listMyBookings } from "./bookingsService.ts";
 
 const { Pool } = pg;
 
@@ -152,4 +152,75 @@ describe("cancelBooking refunds", () => {
       cancelBooking(pool, { userId: b.userId, bookingId: b.bookingId }, fakeCashfree),
     ).rejects.toBeInstanceOf(BookingNotCancellableError);
   });
+});
+
+test("pickup licence fallback is scoped, blocks handover until approved, and refunds one refused booking once", async () => {
+  const { approvePickupLicence, assertHandoverAllowed, IdentityCheckMissingError } = await import("../../merchant/Operations/identityService.ts");
+  const { createMerchant, createShop } = await import("../../../test/fixtures.ts");
+  const previous = process.env.PICKUP_LICENCE_FALLBACK;
+  process.env.PICKUP_LICENCE_FALLBACK = "true";
+  try {
+    const user = await createUser(pool);
+    const merchant = await createMerchant(pool);
+    const stranger = await createMerchant(pool);
+    const shop = await createShop(pool, merchant.id);
+    const items = [];
+    const sessions = [];
+    for (let i = 0; i < 2; i++) {
+      const rider = await createRider(pool, user.id, { verified: false });
+      const vehicle = await createBookableVehicle(pool, { shopId: shop.id });
+      const session = await pool.query(
+        `insert into rider_verification_sessions (rider_id, user_id, method, provider, state, rejection_code, verification_id, policy_version, consent_text, consent_at, expires_at)
+         values ($1, $2, 'DL_NUMBER', 'TEST', 'MANUAL_REVIEW_REQUIRED', $3, $4, 'v1', 'test consent', now(), now() + interval '1 day') returning id`,
+        [rider.id, user.id, i === 0 ? "PROVIDER_OUTAGE" : "LICENCE_INVALID", crypto.randomUUID()],
+      );
+      sessions.push(session.rows[0].id);
+      items.push({ vehicleId: vehicle.id, riderId: rider.id, pickupLicenceAccepted: true as const });
+    }
+    const window = futureWindow(40, 1);
+    await expect(createHold(pool, { userId: user.id, items, ...window })).rejects.toThrow("not eligible");
+    await pool.query("update rider_verification_sessions set rejection_code = 'PROVIDER_UNAVAILABLE' where id = $1", [sessions[1]]);
+    await expect(createHold(pool, { userId: user.id, items, ...window })).rejects.toThrow("not eligible");
+    await pool.query("update rider_verification_sessions set rejection_code = 'PROVIDER_OUTAGE' where id = $1", [sessions[1]]);
+    await expect(createHold(pool, { userId: user.id, items: items.map(({ vehicleId, riderId }) => ({ vehicleId, riderId })), ...window })).rejects.toThrow("not eligible");
+    const held = await createHold(pool, { userId: user.id, items, ...window });
+    const refuseId = held.bookings[0]!.id;
+    const approveId = held.bookings[1]!.id;
+    await createPaymentIntent(pool, { groupId: held.groupId, userId: user.id }, fakeCashfree);
+    await handlePaymentWebhook(pool, {
+      providerEventId: `evt_pickup_licence_${held.groupId}`,
+      type: "PAYMENT_SUCCESS", orderId: `order_${held.groupId}`, payload: {},
+    }, fakeCashfree);
+
+    const client = await pool.connect();
+    try {
+      await expect(assertHandoverAllowed(client, { bookingId: approveId, requireIdentityCheck: true })).rejects.toBeInstanceOf(IdentityCheckMissingError);
+      await expect(approvePickupLicence(pool, stranger.id, shop.id, approveId)).rejects.toThrow();
+      await approvePickupLicence(pool, merchant.id, shop.id, approveId);
+      await assertHandoverAllowed(client, { bookingId: approveId, requireIdentityCheck: true });
+    } finally { client.release(); }
+
+    const refusal = { merchantUserId: merchant.id, shopId: shop.id, reason: "MISSING" as const };
+    await expect(cancelBooking(pool, { bookingId: approveId, refusal }, fakeCashfree)).rejects.toBeInstanceOf(BookingNotCancellableError);
+    await expect(cancelBooking(pool, { bookingId: refuseId, refusal, now: new Date(window.pickupAt.getTime() - 1) }, fakeCashfree)).rejects.toThrow("between scheduled pickup and return");
+    const listed = await listMyBookings(pool, user.id);
+    expect(listed.find((row) => row.id === approveId)?.pickup_licence_checked).toBe(true);
+    expect(listed.find((row) => row.id === refuseId)?.pickup_licence_checked).toBe(false);
+    let refundCalls = 0;
+    const provider = { ...fakeCashfree, refund: async (args: { refundId: string }) => {
+      refundCalls++;
+      return fakeCashfree.refund(args);
+    } };
+    const args = { bookingId: refuseId, refusal, now: window.pickupAt };
+    const [first, retry] = await Promise.all([cancelBooking(pool, args, provider), cancelBooking(pool, args, provider)]);
+    expect(first).toEqual(retry);
+    expect(first.refundAmount).toBe(200_000);
+    expect(refundCalls).toBe(1);
+    const { rows } = await pool.query("select id, deleted_at, pickup_licence_ack_at from bookings where group_id = $1", [held.groupId]);
+    expect(rows.filter((row) => row.deleted_at).map((row) => row.id)).toEqual([refuseId]);
+    expect(rows.every((row) => row.pickup_licence_ack_at)).toBe(true);
+  } finally {
+    if (previous === undefined) delete process.env.PICKUP_LICENCE_FALLBACK;
+    else process.env.PICKUP_LICENCE_FALLBACK = previous;
+  }
 });

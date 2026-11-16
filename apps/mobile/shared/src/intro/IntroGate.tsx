@@ -13,10 +13,11 @@ const KEY = "retromobi_intro_seen_v1";
  * A blank white layer covers the app while the flag is being read, so the
  * app never flashes before the intro: keep the splash screen up until `onReady` fires.
  */
-export function IntroGate({ slides, labels, subtitle, onReady, children }: {
+export function IntroGate({ slides, labels, subtitle, onReady, children, quick = false }: {
   slides: IntroSlide[];
   labels: { next: string; skip: string; start: string };
   subtitle?: string;
+  quick?: boolean;
   /** The flag has been read; safe to hide the splash screen. */
   onReady: () => void;
   children: ReactNode;
@@ -44,7 +45,7 @@ export function IntroGate({ slides, labels, subtitle, onReady, children }: {
       {children}
       {stage !== "done" && (
         <View style={styles.cover}>
-          {stage === "logo" && <LogoIntro subtitle={subtitle} onDone={() => setStage("slides")} />}
+          {stage === "logo" && <LogoIntro quick={quick} subtitle={subtitle} onDone={() => setStage("slides")} />}
           {stage === "slides" && <IntroSlides slides={slides} labels={labels} onDone={finish} />}
         </View>
       )}

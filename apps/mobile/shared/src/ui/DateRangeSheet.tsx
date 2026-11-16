@@ -12,14 +12,14 @@ import { Text } from "./Text";
 
 const times = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 
-export function DateRangeSheet({ open, onClose, value, onChange, lang = "en" }: {
-  open: boolean; onClose: () => void; value?: DateWindow; onChange: (window: DateWindow) => void; lang?: Lang;
+export function DateRangeSheet({ open, onClose, value, onChange, lang = "en", monochrome = false }: {
+  open: boolean; onClose: () => void; value?: DateWindow; onChange: (window: DateWindow) => void; lang?: Lang; monochrome?: boolean;
 }) {
-  return open ? <RangeEditor onClose={onClose} value={value} onChange={onChange} lang={lang} /> : null;
+  return open ? <RangeEditor onClose={onClose} value={value} onChange={onChange} lang={lang} monochrome={monochrome} /> : null;
 }
 
-function RangeEditor({ onClose, value, onChange, lang }: {
-  onClose: () => void; value?: DateWindow; onChange: (window: DateWindow) => void; lang: Lang;
+function RangeEditor({ onClose, value, onChange, lang, monochrome }: {
+  onClose: () => void; value?: DateWindow; onChange: (window: DateWindow) => void; lang: Lang; monochrome: boolean;
 }) {
   const today = istDay(new Date());
   const pickup = value ? splitIstBookingTime(value.pickupAt) : null;
@@ -60,9 +60,11 @@ function RangeEditor({ onClose, value, onChange, lang }: {
     }>
       <View style={{ gap: space[3] }}>
         <Text size="sm" color="ink2">
-          {!from || to ? (hi ? "पिकअप की तारीख चुनें" : "Choose your pick-up date") : (hi ? "वापसी की तारीख चुनें" : "Choose your return date")}
+          {to ? (hi ? "अब पिकअप और वापसी का समय चुनें" : "Check your pick-up and return times")
+            : from ? (hi ? "वापसी की तारीख चुनें" : "Choose your return date")
+            : (hi ? "पिकअप की तारीख चुनें" : "Choose your pick-up date")}
         </Text>
-        <MonthGrid month={month} onMonthChange={setMonth} lang={lang} min={today}
+        <MonthGrid monochrome={monochrome} month={month} onMonthChange={setMonth} lang={lang} min={today}
           selected={from ? (to ? { from, to } : from) : undefined}
           onPress={(day) => {
             // The shared range rule uses local calendar parts; noon is only a calendar marker here.

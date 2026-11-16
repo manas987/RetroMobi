@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
-import { colors, radius, space } from "../theme";
+import { useT } from "../i18n";
+import { colors, HIT, radius, space } from "../theme";
 import { Text } from "./Text";
 import { Button } from "./Button";
 
@@ -14,7 +15,7 @@ import { Button } from "./Button";
  * - The body scrolls and rises above the keyboard.
  * - Pass `busy` while a request runs so the sheet can't be closed mid-save.
  */
-export function Sheet({ open, onClose, title, children, footer, busy = false, scroll = true, closeLabel = "Close" }: {
+export function Sheet({ open, onClose, title, children, footer, busy = false, scroll = true, dismissible = true, closeLabel }: {
   open: boolean;
   onClose: () => void;
   title: string;
@@ -23,22 +24,24 @@ export function Sheet({ open, onClose, title, children, footer, busy = false, sc
   footer?: ReactNode;
   busy?: boolean;
   scroll?: boolean;
+  dismissible?: boolean;
   closeLabel?: string;
 }) {
+  const { t } = useT();
   const insets = useSafeAreaInsets();
-  const close = () => { if (!busy) onClose(); };
+  const close = () => { if (!busy && dismissible) onClose(); };
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <Pressable style={styles.scrim} onPress={close} accessibilityLabel={closeLabel} accessibilityRole="button" />
+      <KeyboardAvoidingView style={styles.fill} behavior="padding">
+        <Pressable style={styles.scrim} onPress={close} accessible={false} disabled={busy || !dismissible} />
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, space[4]) }]} accessibilityViewIsModal>
           <View style={styles.head}>
             <Text weight="bold" size="lg" style={{ flex: 1 }} accessibilityRole="header">{title}</Text>
-            <Pressable onPress={close} hitSlop={8} style={styles.close} accessibilityRole="button" accessibilityLabel={closeLabel}>
+            {dismissible && <Pressable onPress={close} disabled={busy} accessibilityState={{ disabled: busy }} style={styles.close} accessibilityRole="button" accessibilityLabel={closeLabel ?? t("common.close")}>
               <X size={20} color={colors.ink2} />
-            </Pressable>
+            </Pressable>}
           </View>
-          {scroll ? <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>{children}</ScrollView> : children}
+          {scroll ? <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>{children}</ScrollView> : children}
           {footer && <View style={styles.footer}>{footer}</View>}
         </View>
       </KeyboardAvoidingView>
@@ -78,7 +81,7 @@ const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFill, backgroundColor: colors.scrim },
   sheet: { maxHeight: "90%", backgroundColor: colors.surface, borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet },
   head: { flexDirection: "row", alignItems: "center", gap: space[3], paddingLeft: space[5], paddingRight: space[3], paddingVertical: space[3], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  close: { height: 44, width: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.button },
+  close: { height: HIT, width: HIT, alignItems: "center", justifyContent: "center", borderRadius: radius.button },
   body: { padding: space[5] },
   footer: { paddingHorizontal: space[5], paddingTop: space[3], borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
 });

@@ -20,9 +20,11 @@ export function CounterRow({ b, stage, onHandover, onReturn, onDetails }: {
         {b.source === "OFFLINE" && <Chip tone="muted" label={t("common.walkin")} />}
       </View>
       <Text size="sm" color="ink2">{t(going ? "overview.pickupAt" : "overview.returnAt", { time: `${date(at)}, ${time(at)}` })}</Text>
-      {action === "handover" && can("bookings:write") && <Button label={t(b.source === "OFFLINE" ? "actions.handoverWalkin" : b.identity_checked_at ? "actions.waitingVideo" : "actions.handover")}
-        variant={b.identity_checked_at ? "secondary" : "primary"} onPress={() => onHandover(b)} />}
-      {action === "return" && can("bookings:return") && <Button label={t("actions.markReturned")} variant="primary" onPress={() => onReturn(b)} />}
+      {action === "handover" && b.source !== "OFFLINE" && !!b.id_checked
+        ? <Chip tone="info" label={t("actions.waitingVideo")} />
+        : action === "handover" && can("bookings:write") && <Button label={t(b.source === "OFFLINE" ? "actions.handoverWalkin" : "actions.handover")}
+          variant="primary" onPress={() => onHandover(b)} />}
+      {action === "return" && can("bookings:return") && <Button label={t("actions.markReturned")} variant="dark" onPress={() => onReturn(b)} />}
       {onDetails && <Button label={t("actions.details")} variant="ghost" onPress={onDetails} />}
     </View>
   </Card>;

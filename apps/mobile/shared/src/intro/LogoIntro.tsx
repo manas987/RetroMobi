@@ -18,7 +18,7 @@ const TOTAL_MS = 2100;
  *
  * With "reduce motion" on, the finished logo is shown still for a moment.
  */
-export function LogoIntro({ subtitle, onDone }: { subtitle?: string; onDone: () => void }) {
+export function LogoIntro({ subtitle, onDone, quick = false }: { subtitle?: string; quick?: boolean; onDone: () => void }) {
   const reduced = useReducedMotion();
   const wheels = useSharedValue(reduced ? 1 : 0);
   const frame = useSharedValue(reduced ? 1 : 0);
@@ -27,12 +27,12 @@ export function LogoIntro({ subtitle, onDone }: { subtitle?: string; onDone: () 
   useEffect(() => {
     if (!reduced) {
       const ease = Easing.out(Easing.cubic);
-      wheels.value = withTiming(1, { duration: 650, easing: ease });
-      frame.value = withDelay(350, withTiming(1, { duration: 700, easing: ease }));
-      word.value = withDelay(950, withTiming(1, { duration: 450, easing: ease }));
+      wheels.value = withTiming(1, { duration: quick ? 280 : 650, easing: ease });
+      frame.value = withDelay(quick ? 160 : 350, withTiming(1, { duration: quick ? 320 : 700, easing: ease }));
+      word.value = withDelay(quick ? 410 : 950, withTiming(1, { duration: quick ? 240 : 450, easing: ease }));
     }
     // A plain timer, not an animation callback: it fires even if animations are off.
-    const timer = setTimeout(onDone, reduced ? 900 : TOTAL_MS);
+    const timer = setTimeout(onDone, quick ? (reduced ? 120 : 800) : (reduced ? 900 : TOTAL_MS));
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -16,7 +16,7 @@ function Items<V extends string>({ value, onChange, options, segmented }: Props<
 }
 
 export function Tabs<V extends string>(props: Props<V>) {
-  return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}><Items {...props} /></ScrollView>;
+  return <ScrollView showsVerticalScrollIndicator={false} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}><Items {...props} /></ScrollView>;
 }
 
 export function Segmented<V extends string>(props: Props<V>) {

@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { useState } from "react";
 import { CheckCircle2, ShieldAlert, ShieldCheck, ThumbsUp, TriangleAlert, Video } from "lucide-react";
 import { portalFetch, type Row } from "../../lib/portal";
@@ -98,6 +99,7 @@ interface Identity {
   licenceExpiresOn: string | null;
   photoUrl: string | null;
   alreadyChecked: boolean;
+  pickupLicenceRequired?: boolean;
 }
 
 /**
@@ -107,7 +109,7 @@ interface Identity {
  */
 function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void }) {
   const { t, lang, date } = useT();
-  const { token } = useMerchantShop();
+  const { token, shopId } = useMerchantShop();
   const invalidate = useInvalidateMerchant();
   const q = useMerchantQuery<Identity>(`/bookings/${booking.id}/identity`, token);
   const [photo, setPhoto] = useState<boolean | null>(null);
@@ -120,6 +122,10 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
   if (q.isPending) return <LoadingRows />;
   if (q.isError) return <ErrorNote text={errorText(lang, q.error)} onRetry={() => q.refetch()} />;
   const id = q.data;
+  if (id.pickupLicenceRequired && !id.alreadyChecked) {
+    return <PickupLicence booking={booking} shopId={shopId} token={token} riderName={id.riderName}
+      onDone={() => { void invalidate(); onClose(); }} />;
+  }
 
   if (outcome === "failed") {
     return (
@@ -562,4 +568,59 @@ function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => vo
       </Button>
     </div>
   );
+}
+
+function PickupLicence({ booking, shopId, token, riderName, onDone }: {
+  booking: Row; shopId: string | null; token: string; riderName: string | null; onDone: () => void;
+}) {
+  const { lang, t, date, time } = useT();
+  const hi = lang === "hi";
+  const labels = hi ? ["मूल लाइसेंस देखा", "नाम और फोटो राइडर से मेल खाते हैं", "लाइसेंस वाहन और किराये की अवधि के लिए मान्य है"]
+    : ["Original licence seen", "Name and photo match the rider", "Licence covers the vehicle and rental period"];
+  const [checks, setChecks] = useState([false, false, false]);
+  const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function decide(refuse: boolean) {
+    if (!shopId || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await portalFetch("merchant", `/shops/${shopId}/bookings/${booking.id}/pickup-licence`, {
+        method: "POST", token, body: refuse ? { decision: "refuse", reason }
+          : { decision: "approve", originalSeen: true, photoMatched: true, validForVehicleAndDates: true },
+      });
+      onDone();
+    } catch (err) {
+      setError(errorText(lang, err));
+    } finally { setBusy(false); }
+  }
+  return <div className="space-y-4">
+    <p className="font-semibold">{hi ? "पिकअप पर मूल लाइसेंस जाँचें" : "Check the original licence at pickup"}</p>
+    <p>{riderName}</p>
+    <p className="text-sm text-ink-2">{vehicleLabel(booking)}<br />
+      {t("actions.return")} · {date(String(booking.scheduled_return_at))} · {time(String(booking.scheduled_return_at))}</p>
+    {confirming ? <>
+      <p>{hi ? "वाहन न दें। राइडर पर सामान्य रद्दीकरण नियम लागू होंगे।" : "Do not hand over the vehicle. The usual cancellation charges apply to the rider."}</p>
+      <Button variant="danger" disabled={busy} onClick={() => void decide(true)}>{hi ? "बुकिंग रद्द करें" : "Refuse and cancel booking"}</Button>
+      <Button variant="secondary" disabled={busy} onClick={() => setConfirming(false)}>{hi ? "वापस" : "Go back"}</Button>
+    </> : <>
+      {labels.map((label, i) => <label key={label} className="flex items-center gap-2">
+        <input type="checkbox" checked={checks[i]} onChange={(event) => setChecks(checks.map((value, j) => j === i ? event.target.checked : value))} />{label}
+      </label>)}
+      <Button variant="primary" disabled={!checks.every(Boolean) || busy} onClick={() => void decide(false)}>{hi ? "लाइसेंस जाँच पूरी करें" : "Approve licence check"}</Button>
+      <Select ariaLabel={hi ? "बुकिंग रद्द करने का कारण" : "Reason for refusal"} value={reason} onChange={setReason}
+        options={[
+          { value: "", label: hi ? "कारण चुनें" : "Choose reason for refusal" },
+          { value: "MISSING", label: hi ? "मूल लाइसेंस नहीं है" : "Original licence missing" },
+          { value: "INVALID", label: hi ? "लाइसेंस मान्य नहीं" : "Licence does not cover this rental" },
+          { value: "MISMATCH", label: hi ? "लाइसेंस मेल नहीं खाता" : "Licence does not match the rider" },
+        ]} />
+      <Button variant="secondary" disabled={!reason || busy} onClick={() => setConfirming(true)}>{hi ? "रद्द करने की समीक्षा करें" : "Review refusal"}</Button>
+      <div><Link href={`/merchant/support?booking=${booking.id}`} className="underline">{hi ? "विवाद या दुकान की समस्या के लिए सहायता" : "Get help with a dispute or shop issue"}</Link></div>
+    </>}
+    {error && <ErrorNote text={error} />}
+  </div>;
 }

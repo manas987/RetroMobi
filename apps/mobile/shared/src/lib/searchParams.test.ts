@@ -47,3 +47,8 @@ test("the default window is never in the past", () => {
   expect(Date.parse(pickupAt)).toBeGreaterThan(Date.now());
   expect(Date.parse(returnAt)).toBeGreaterThan(Date.parse(pickupAt));
 });
+
+test("default dates roll at 10am IST, independent of the phone's local timezone", () => {
+  expect(defaultWindow(new Date("2026-11-15T04:29:00Z")).pickupAt).toBe("2026-11-15T10:00:00+05:30");
+  expect(defaultWindow(new Date("2026-11-15T04:30:00Z")).pickupAt).toBe("2026-11-16T10:00:00+05:30");
+});

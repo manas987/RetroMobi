@@ -32,7 +32,7 @@ export function SelectOptions<V extends string>({ options, value, onChange }: {
   options: readonly SelectOption<V>[]; value: V | null; onChange: (value: V) => void;
 }) {
   return (
-    <FlatList keyboardShouldPersistTaps="handled" data={options} keyExtractor={(item) => item.value}
+    <FlatList showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" data={options} keyExtractor={(item) => item.value}
       contentContainerStyle={styles.list}
       renderItem={({ item, index }) => (
         <Fragment>

@@ -7,6 +7,8 @@ import type { ExpoConfig } from "expo/config";
  * uploaded to a store, so the owner must confirm it before that.
  */
 const APP_ID = "com.retromobi.rider";
+const googleIOS = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+const reversedGoogleIOS = googleIOS?.endsWith(".apps.googleusercontent.com") ? googleIOS.split(".").reverse().join(".") : undefined;
 
 const config: ExpoConfig = {
   name: "RetroMobi",
@@ -21,6 +23,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: APP_ID,
     supportsTablet: false,
+    infoPlist: { LSApplicationQueriesSchemes: ["upi", "phonepe", "tez", "paytm", "paytmmp", "bhim", "credpay"] },
   },
   android: {
     package: APP_ID,
@@ -33,8 +36,16 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "@rnmapbox/maps",
+    ["expo-location", { locationWhenInUsePermission: "RetroMobi uses your location to show scooters near you. You can also just pick a city." }],
     ["expo-splash-screen", { backgroundColor: "#ffffff", image: "./assets/images/splash-icon.png", imageWidth: 120 }],
     "expo-secure-store",
+    ["expo-image-picker", {
+      cameraPermission: "RetroMobi uses the camera to record the scooter’s condition at pickup and to take a rider photo.",
+      microphonePermission: "The pickup video is recorded with sound.",
+      photosPermission: "Choose a photo or video you already took.",
+    }],
+    ...(reversedGoogleIOS ? [["@react-native-google-signin/google-signin", { iosUrlScheme: reversedGoogleIOS }] as [string, Record<string, string>]] : []),
   ],
   experiments: {
     typedRoutes: true,

@@ -11,17 +11,16 @@ configureApi({ portal: "user", baseUrl: process.env.EXPO_PUBLIC_API_URL });
 // Hold the splash until fonts, the saved session and the intro flag are read.
 void SplashScreen.preventAutoHideAsync();
 
-// The website's "how it works" steps (pages/Home.tsx STEPS), three of them.
 const SLIDES: IntroSlide[] = [
   {
     title: "Find your ride",
     body: "Pick your city and dates. Explore scooters near you, with no sign-up until you book.",
-    image: require("../../assets/images/how-search.jpg"),
+    image: require("../../assets/images/hero-himalaya.jpg"),
   },
   {
-    title: "Know before you pay",
-    body: "See the deposit, rental terms and return policy before booking. Clear details, fewer surprises.",
-    image: require("../../assets/images/how-pay.jpg"),
+    title: "Bring your licence",
+    body: "Choose a rider and bring their original driving licence to pickup.",
+    image: require("../../assets/images/how-search.jpg"),
   },
   {
     title: "Record. Ride. Return.",
@@ -48,7 +47,7 @@ export default function RootLayout() {
     <AppProviders>
       <CartProvider>
       <StatusBar style="dark" />
-      <IntroGate slides={SLIDES} labels={{ next: "Next", skip: "Skip", start: "Start exploring" }} onReady={() => setIntroRead(true)}>
+      <IntroGate quick slides={SLIDES} labels={{ next: "Next", skip: "Skip", start: "Start exploring" }} onReady={() => setIntroRead(true)}>
         <Stack
           screenOptions={{
             headerTintColor: colors.ink,
@@ -58,7 +57,13 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: colors.surface },
           }}
         >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="browse" options={{ title: "Browse vehicles" }} />
+          <Stack.Screen name="cart" options={{ presentation: "modal", title: "Your cart" }} />
+          <Stack.Screen name="login" options={{ presentation: "modal", title: "Sign in" }} />
+          <Stack.Screen name="checkout/index" options={{ presentation: "card", title: "Checkout" }} />
+          <Stack.Screen name="checkout/pay/[groupId]" options={{ presentation: "card", title: "Payment" }} />
+          <Stack.Screen name="rider/[riderId]/verify" options={{ presentation: "card", title: "Driving licence check" }} />
         </Stack>
       </IntroGate>
       </CartProvider>

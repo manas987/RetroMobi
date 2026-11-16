@@ -39,7 +39,7 @@ function ReturnFlow({ booking, onClose }: { booking: Row; onClose: () => void })
       <Button variant="primary" icon={ThumbsUp} label={t(walkin ? "actions.returnFineWalkin" : "actions.returnFine")} busy={busy} onPress={() => send(false)} />
       {!walkin && <Button icon={TriangleAlert} label={t("actions.returnDamage")} disabled={busy || deposit <= 0} onPress={() => setClaiming(true)} />}
     </View>;
-  return <Sheet open title={t("actions.returnTitle")} onClose={receipt ? () => {} : onClose} closeLabel={t("common.close")} busy={busy} footer={footer}>
+  return <Sheet open title={t("actions.returnTitle")} onClose={onClose} dismissible={!receipt} closeLabel={t("common.close")} busy={busy} footer={footer}>
     {receipt ? <Card icon={CheckCircle2} title={t("actions.receiptTitle")} style={{ backgroundColor: colors.verifiedSoft }}>
       {receipt.claimed ? <Text>{t("actions.claimDone")}</Text>
         : walkin ? <Text>{t("actions.receiptWalkin")}</Text>

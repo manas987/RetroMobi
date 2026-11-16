@@ -14,7 +14,7 @@ const API_VERSION = "2023-12-18";
 
 /** A normalised DL check. `SANDBOX_UNAVAILABLE` is not a vendor status -- see getConfig. */
 export interface LicenceResult {
-  status: "VERIFIED" | "REJECTED" | "SANDBOX_UNAVAILABLE";
+  status: "VERIFIED" | "REJECTED" | "SANDBOX_UNAVAILABLE" | "PROVIDER_OUTAGE";
   holderName?: string;
   /** The RTO's own status string, e.g. "Active". Eligibility reads this; it is not our status. */
   licenceStatus?: string;
@@ -38,6 +38,7 @@ export type DigilockerStatus =
   | "AUTHENTICATED"
   | "EXPIRED"
   | "CONSENT_DENIED"
+  | "PROVIDER_OUTAGE"
   | "SANDBOX_UNAVAILABLE";
 
 export interface KycClient {
@@ -58,7 +59,7 @@ export interface KycClient {
   digilockerDocument(args: { verificationId: string }): Promise<{
     photoBase64?: string;
     xmlFileUrl?: string;
-  } | null>;
+  } | "PROVIDER_OUTAGE" | null>;
 }
 
 function getConfig(): { clientId: string; clientSecret: string; baseUrl: string } | null {
@@ -95,6 +96,16 @@ function headers(clientId: string, clientSecret: string) {
   };
 }
 
+async function lookup(url: string, options: RequestInit) {
+  try {
+    const response = await fetch(url, { ...options, signal: AbortSignal.timeout(10_000) });
+    return response.status === 429 || response.status >= 500 ? null : response;
+  } catch (err) {
+    if (err instanceof TypeError || (err instanceof Error && err.name === "TimeoutError")) return null;
+    throw err;
+  }
+}
+
 /**
  * `cov_details` is an array in the docs with no documented item shape, so the
  * key carrying the class code is read defensively rather than guessed at. A
@@ -128,13 +139,13 @@ export const kycClient: KycClient = {
     if (!config) {
       if (!devAutoVerify()) {
         console.log(
-          `[dev-fallback] KYC.verifyLicence not configured — reporting SANDBOX_UNAVAILABLE for ${licenceNumber}. ` +
+          `[dev-fallback] KYC.verifyLicence not configured — reporting SANDBOX_UNAVAILABLE. ` +
             `Set KYC_DEV_AUTO_VERIFY=true to fake a pass locally.`,
         );
         return { status: "SANDBOX_UNAVAILABLE" };
       }
       console.log(
-        `[dev-fallback] KYC_DEV_AUTO_VERIFY is on — FAKING a VERIFIED licence for ${licenceNumber}. ` +
+        `[dev-fallback] KYC_DEV_AUTO_VERIFY is on — FAKING a VERIFIED licence. ` +
           `No real check happened.`,
       );
       return {
@@ -149,7 +160,7 @@ export const kycClient: KycClient = {
       };
     }
     const { clientId, clientSecret, baseUrl } = config;
-    const response = await fetch(`${baseUrl}/driving-license`, {
+    const response = await lookup(`${baseUrl}/driving-license`, {
       method: "POST",
       headers: headers(clientId, clientSecret),
       // `verification_id` is ours and required: max 50 chars, alphanumeric plus
@@ -160,6 +171,7 @@ export const kycClient: KycClient = {
         dob,
       }),
     });
+    if (!response) return { status: "PROVIDER_OUTAGE" };
     if (response.status === 404) return null;
     if (!response.ok) {
       throw new Error(
@@ -250,10 +262,11 @@ export const kycClient: KycClient = {
       return { status: "AUTHENTICATED", userDetails: { name: "DEV FAKE HOLDER" } };
     }
     const { clientId, clientSecret, baseUrl } = config;
-    const response = await fetch(
+    const response = await lookup(
       `${baseUrl}/digilocker?verification_id=${encodeURIComponent(verificationId)}`,
       { method: "GET", headers: headers(clientId, clientSecret) },
     );
+    if (!response) return { status: "PROVIDER_OUTAGE" };
     if (response.status === 404) return null;
     if (!response.ok) {
       throw new Error(
@@ -280,10 +293,11 @@ export const kycClient: KycClient = {
       return null;
     }
     const { clientId, clientSecret, baseUrl } = config;
-    const response = await fetch(
+    const response = await lookup(
       `${baseUrl}/digilocker/document/DRIVING_LICENSE?verification_id=${encodeURIComponent(verificationId)}`,
       { method: "GET", headers: headers(clientId, clientSecret) },
     );
+    if (!response) return "PROVIDER_OUTAGE";
     if (response.status === 404) return null;
     if (!response.ok) {
       throw new Error(

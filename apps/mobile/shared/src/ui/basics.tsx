@@ -29,7 +29,7 @@ export function Chip({ tone: t, label, icon: Icon }: { tone: Tone; label: string
   return (
     <View style={[styles.chip, { backgroundColor: tone[t].bg }]}>
       {Icon && <Icon size={14} color={tone[t].fg} />}
-      <Text size="xs" weight="bold" style={{ color: tone[t].fg }} numberOfLines={1}>{label}</Text>
+      <Text size="xs" weight="bold" style={{ color: tone[t].fg, flexShrink: 1 }}>{label}</Text>
     </View>
   );
 }

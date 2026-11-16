@@ -30,7 +30,6 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const shopId = current ? String(current.id) : null;
   const role = current?.role ? String(current.role) : null;
   function setShopId(id: string) {
-    if (!shops.some((shop) => shop.id === id)) return;
     setStored(id);
     void AsyncStorage.setItem(STORAGE_KEY, id).catch(() => {});
   }

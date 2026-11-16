@@ -75,16 +75,4 @@ export function useSession(): Session | null {
   );
 }
 
-/**
- * Reads the `uid`/`mid` claim out of an access token without verifying it --
- * the server verifies on every request, this only answers "which row is mine".
- */
-export function decodeJwtSubject(token: string): string | null {
-  try {
-    const part = token.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/");
-    const payload = JSON.parse(globalThis.atob(part)) as { uid?: string; mid?: string };
-    return payload.uid ?? payload.mid ?? null;
-  } catch {
-    return null;
-  }
-}
+export { decodeJwtSubject } from "../lib/jwt";

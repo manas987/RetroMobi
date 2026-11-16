@@ -42,7 +42,7 @@ export async function uploadFile<T>(opts: {
   signal?: AbortSignal;
 }): Promise<T> {
   const contentType = opts.file.mimeType || "application/octet-stream";
-  const presign = () => api<PresignResult>(opts.presignPath, { method: "POST", body: { contentType } });
+  const presign = () => api<PresignResult>(opts.presignPath, { method: "POST", body: { contentType }, signal: opts.signal });
 
   let presigned = await presign();
   if (!presigned.devFallback) {
@@ -70,5 +70,5 @@ export async function uploadFile<T>(opts: {
     }
   }
 
-  return api<T>(opts.confirmPath, { method: "POST", body: { storageKey: presigned.storageKey, ...opts.confirmBody } });
+  return api<T>(opts.confirmPath, { method: "POST", body: { storageKey: presigned.storageKey, ...opts.confirmBody }, signal: opts.signal });
 }

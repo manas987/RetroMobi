@@ -62,7 +62,7 @@ export function Button({
       {...rest}
     >
       {busy ? <ActivityIndicator color={colors[fill.fg]} /> : Icon ? <Icon size={20} color={colors[fill.fg]} /> : null}
-      <Text weight="bold" size={size === "lg" ? "md" : "base"} color={fill.fg} numberOfLines={1}>
+      <Text weight="bold" size={size === "lg" ? "md" : "base"} color={fill.fg} center style={{ flexShrink: 1 }}>
         {label}
       </Text>
     </Pressable>
@@ -70,7 +70,7 @@ export function Button({
 }
 
 const styles = StyleSheet.create({
-  base: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[2], borderRadius: radius.button, borderWidth: 1 },
+  base: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[2], paddingVertical: space[2], borderRadius: radius.button, borderWidth: 1 },
   md: { minHeight: 48, paddingHorizontal: space[4] },
   lg: { minHeight: 56, paddingHorizontal: space[6] },
   full: { alignSelf: "stretch" },

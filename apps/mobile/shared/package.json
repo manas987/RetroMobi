@@ -13,6 +13,8 @@
     "@tanstack/react-query": "*",
     "expo-crypto": "*",
     "expo-file-system": "*",
+    "expo-image": "*",
+    "expo-router": "*",
     "expo-network": "*",
     "expo-secure-store": "*",
     "lucide-react-native": "*",

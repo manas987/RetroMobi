@@ -403,10 +403,9 @@ export async function verifyByDlNumber(
     dob: input.dob,
   });
 
-  if (result?.status === "SANDBOX_UNAVAILABLE") {
-    // The plan's intent, now that the state exists: an outage is not a
-    // rejection and must never be an approval either.
-    return failDocument(pool, sessionId, "MANUAL_REVIEW_REQUIRED", "PROVIDER_UNAVAILABLE");
+  if (result?.status === "PROVIDER_OUTAGE" || result?.status === "SANDBOX_UNAVAILABLE") {
+    return failDocument(pool, sessionId, "MANUAL_REVIEW_REQUIRED",
+      result.status === "PROVIDER_OUTAGE" ? "PROVIDER_OUTAGE" : "PROVIDER_UNAVAILABLE");
   }
   if (!result) {
     return failDocument(pool, sessionId, "DOCUMENT_FAILED", "LICENCE_NOT_FOUND");
@@ -478,6 +477,9 @@ export async function completeDigilocker(
   }
 
   const live = await kyc.digilockerStatus({ verificationId: session.verification_id });
+  if (live?.status === "PROVIDER_OUTAGE") {
+    return failDocument(pool, sessionId, "MANUAL_REVIEW_REQUIRED", "PROVIDER_OUTAGE");
+  }
   if (!live || live.status === "SANDBOX_UNAVAILABLE") {
     return failDocument(pool, sessionId, "MANUAL_REVIEW_REQUIRED", "PROVIDER_UNAVAILABLE");
   }
@@ -492,6 +494,9 @@ export async function completeDigilocker(
   }
 
   const document = await kyc.digilockerDocument({ verificationId: session.verification_id });
+  if (document === "PROVIDER_OUTAGE") {
+    return failDocument(pool, sessionId, "MANUAL_REVIEW_REQUIRED", "PROVIDER_OUTAGE");
+  }
   if (!document?.xmlFileUrl) {
     return failDocument(pool, sessionId, "MANUAL_REVIEW_REQUIRED", "DOCUMENT_UNAVAILABLE");
   }

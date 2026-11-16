@@ -23,7 +23,7 @@ AppState.addEventListener("change", (state) => focusManager.setFocused(state ===
 
 // Queries pause while offline and resume on reconnect instead of failing.
 onlineManager.setEventListener((setOnline) => {
-  const sub = Network.addNetworkStateListener((state) => setOnline(state.isConnected !== false));
+  const sub = Network.addNetworkStateListener((state) => setOnline(state.isConnected !== false && state.isInternetReachable !== false));
   return () => sub.remove();
 });
 

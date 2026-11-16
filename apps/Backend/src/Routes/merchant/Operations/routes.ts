@@ -6,6 +6,7 @@ import * as controller from "./controller.ts";
 import {
   CreateWalkinSchema,
   IdentityCheckSchema,
+  PickupLicenceDecisionSchema,
   ListBookingsQuerySchema,
   ReturnSchema,
 } from "./schema.ts";
@@ -44,6 +45,12 @@ router.post(
   requirePermission("bookings:write"),
   validate(IdentityCheckSchema),
   controller.identityCheck,
+);
+router.post(
+  "/shops/:shopId/bookings/:id/pickup-licence",
+  requirePermission("bookings:write"),
+  validate(PickupLicenceDecisionSchema),
+  controller.pickupLicenceDecision,
 );
 router.post(
   "/bookings/:bookingId/pickup",

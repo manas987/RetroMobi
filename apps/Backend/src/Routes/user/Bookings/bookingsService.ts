@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { composeTotal, priceRental, refundForCancellation } from "../../../lib/pricing.ts";
+import { isPickupLicenceOutage, PICKUP_LICENCE_ACK, pickupLicenceRejections } from "../../../lib/pickupLicence.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import { notify } from "../../../lib/notify.ts";
 import { extensionWindowAvailable, notBlocked, PUBLIC_LISTING_ELIGIBLE, VEHICLE_LICENCE_JOIN } from "../../../lib/vehicleBookingRules.ts";
@@ -7,6 +8,7 @@ import {
   evaluateRiderForVehicle,
   flagSessionForReview,
   istDate,
+  policyVersion,
 } from "../../../lib/licenceGate.ts";
 import { appBaseUrl, cashfreeMode, type CashfreeClient } from "../../../providers/cashfree.ts";
 import { handleExtensionPaymentSuccess } from "../Payments/paymentsService.ts";
@@ -91,7 +93,7 @@ export async function createHold(
   pool: Pool,
   input: {
     userId: string;
-    items: Array<{ vehicleId: string; riderId: string }>;
+    items: Array<{ vehicleId: string; riderId: string; pickupLicenceAccepted?: true }>;
     pickupAt: Date;
     returnAt: Date;
     couponCode?: string;
@@ -140,6 +142,7 @@ export async function createHold(
     // read by nothing, so a gearless-scooter licence could book a motorcycle.
     // lib/licenceGate.ts is shared with the handover gate so the two cannot
     // drift apart.
+    const pickupSessions = new Map<string, string>();
     for (const item of items) {
       const gate = await evaluateRiderForVehicle(client, {
         userId,
@@ -148,6 +151,28 @@ export async function createHold(
         rentalStart: istDate(pickupAt),
         rentalEnd: istDate(returnAt),
       });
+
+      if (gate.outcome === "FAIL" && gate.reasons.includes("NO_LICENCE") && item.pickupLicenceAccepted) {
+        const { rows: attempts } = await client.query(
+          `select s.id, s.state, s.rejection_code, s.expires_at > now() as current,
+                  exists (select 1 from rider_verification_sessions past
+                    where past.rider_id = r.id and past.rejection_code = any($6::text[])) as known_ineligible
+             from rider_verification_sessions s
+             join riders r on r.id = s.rider_id and r.deleted_at is null
+             join vehicles v on v.id = $3 and v.deleted_at is null
+             join vehicle_models m on m.id = v.model_id
+             join vehicle_class_licence_rules rule on rule.vehicle_class = m.class and rule.policy_version = $4
+            where s.rider_id = $1 and s.user_id = $2 and r.user_id = $2
+              and (r.dob is null or extract(year from age($5::date, r.dob)) >= rule.min_age_years)
+            order by s.created_at desc, s.id desc limit 1 for share of s`,
+          [item.riderId, input.userId, item.vehicleId, policyVersion(), istDate(pickupAt), pickupLicenceRejections],
+        );
+        const attempt = attempts[0];
+        if (attempt && isPickupLicenceOutage(attempt)) {
+          pickupSessions.set(item.riderId, attempt.id);
+          continue;
+        }
+      }
 
       if (gate.outcome === "FAIL") {
         throw new LicenceInvalidError(
@@ -225,8 +250,8 @@ export async function createHold(
           `insert into bookings
              (group_id, rider_id, vehicle_id, source, scheduled_pickup_at, scheduled_return_at,
               status, rental_amount, security_deposit_amount, platform_fee, tax_amount,
-              discount_amount, total_amount)
-           values ($1, $2, $3, 'ONLINE', $4, $5, 'HOLD', $6, $7, $8, $9, $10, $11)
+              discount_amount, total_amount, pickup_verification_session_id, pickup_licence_ack_at)
+           values ($1, $2, $3, 'ONLINE', $4, $5, 'HOLD', $6, $7, $8, $9, $10, $11, $12, case when $12::uuid is not null then now() end)
            returning id`,
           [
             groupId,
@@ -240,9 +265,18 @@ export async function createHold(
             totals.taxAmount,
             totals.discountAmount,
             totals.totalAmount,
+            pickupSessions.get(item.riderId) ?? null,
           ],
         );
-        bookings.push({ id: insertResult.rows[0].id, vehicleId: item.vehicleId });
+        const bookingId = insertResult.rows[0].id;
+        bookings.push({ id: bookingId, vehicleId: item.vehicleId });
+        if (pickupSessions.has(item.riderId)) {
+          await writeAudit(client, {
+            actorType: "CUSTOMER", actorId: input.userId, action: "booking.pickup_licence_acknowledged",
+            entityType: "booking", entityId: bookingId,
+            after: { sessionId: pickupSessions.get(item.riderId), terms: PICKUP_LICENCE_ACK },
+          });
+        }
       } catch (err: any) {
         if (err.code === EXCLUSION_VIOLATION) {
           if (err.constraint === "no_overlapping_rider_bookings") {
@@ -304,7 +338,9 @@ export async function createHold(
 // function shipped the first time.
 export async function cancelBooking(
   pool: Pool,
-  input: { userId: string; bookingId: string; now?: Date },
+  input: ({ userId: string } | {
+    refusal: { merchantUserId: string; shopId: string; reason: "MISSING" | "INVALID" | "MISMATCH" };
+  }) & { bookingId: string; now?: Date },
   cashfree?: CashfreeClient,
 ): Promise<{ refundAmount: number; penaltyAmount: number; refundId: string | null }> {
   const now = input.now ?? new Date();
@@ -313,16 +349,46 @@ export async function cancelBooking(
   try {
     await client.query("BEGIN");
 
+    const refusal = "refusal" in input ? input.refusal : undefined;
     const { rows } = await client.query(
-      `select b.id, b.group_id, b.status, b.actual_pickup_at, b.scheduled_pickup_at,
-              b.rental_amount, b.platform_fee, b.tax_amount, b.security_deposit_amount
+      `select b.id, b.group_id, b.status, b.actual_pickup_at, b.scheduled_pickup_at, b.scheduled_return_at,
+              b.rental_amount, b.platform_fee, b.tax_amount, b.security_deposit_amount,
+              b.total_amount, b.deleted_at, b.pickup_verification_session_id, g.user_id
          from bookings b
          join booking_groups g on g.id = b.group_id
-        where b.id = $1 and g.user_id = $2 and b.deleted_at is null`,
-      [input.bookingId, input.userId],
+         join vehicles v on v.id = b.vehicle_id
+        where b.id = $1 and (
+          g.user_id = $2 and b.deleted_at is null
+          or v.shop_id = $3 and exists (
+            select 1 from shop_members sm where sm.shop_id = v.shop_id and sm.merchant_user_id = $4
+              and sm.status = 'ACTIVE' and sm.deleted_at is null
+          )
+        )
+        for update of g, b`,
+      [input.bookingId, "userId" in input ? input.userId : null, refusal?.shopId ?? null, refusal?.merchantUserId ?? null],
     );
-    if (rows.length === 0) throw new Error("booking not found");
     const booking = rows[0];
+    if (!booking) throw new BookingNotCancellableError("This booking is unavailable for cancellation.");
+    const refusalReason = refusal ? `PICKUP_LICENCE_${refusal.reason}` : null;
+    if (refusal && booking.deleted_at) {
+      const { rows: recorded } = await client.query(
+        `select refund_amount, penalty_amount, refund_id from booking_cancellations
+          where booking_id = $1 and cancelled_by = 'MERCHANT' and reason = $2`,
+        [input.bookingId, refusalReason],
+      );
+      if (!recorded[0]) throw new BookingNotCancellableError("This booking was already cancelled.");
+      await client.query("COMMIT");
+      return { refundAmount: Number(recorded[0].refund_amount), penaltyAmount: Number(recorded[0].penalty_amount), refundId: recorded[0].refund_id };
+    }
+    if (refusal) {
+      const checked = await client.query("select 1 from pickup_identity_checks where booking_id = $1", [input.bookingId]);
+      if (!booking.pickup_verification_session_id || checked.rowCount || booking.status !== "CONFIRMED") {
+        throw new BookingNotCancellableError("This booking is not awaiting an in-person licence check.");
+      }
+      if (now < booking.scheduled_pickup_at || now >= booking.scheduled_return_at) {
+        throw new BookingNotCancellableError("A refusal can only be recorded between scheduled pickup and return. Contact support for help.");
+      }
+    }
 
     // Cancelling is a soft delete, and soft delete is what releases the exclusion
     // constraint. Allowing it on a COMPLETED or picked-up rental would free a slot
@@ -331,7 +397,7 @@ export async function cancelBooking(
       throw new BookingNotCancellableError(`booking ${input.bookingId} has already been picked up`);
     }
 
-    const { refundAmount, penaltyAmount } = refundForCancellation(
+    const { refundAmount: calculatedRefund, penaltyAmount } = refundForCancellation(
       new Date(booking.scheduled_pickup_at),
       now,
       {
@@ -342,6 +408,7 @@ export async function cancelBooking(
       },
     );
 
+    const refundAmount = refusal ? Math.min(calculatedRefund, Number(booking.total_amount)) : calculatedRefund;
     await client.query(`update bookings set deleted_at = now() where id = $1`, [input.bookingId]);
 
     // A HOLD never had a SUCCEEDED payment, so there is nothing to refund and no
@@ -353,6 +420,7 @@ export async function cancelBooking(
       [booking.group_id],
     );
     const paymentId = paymentRows[0]?.id ?? null;
+    if (refusal && !paymentId) throw new BookingNotCancellableError("No successful payment was found for this booking.");
 
     let refundId: string | null = null;
     if (paymentId && refundAmount > 0) {
@@ -379,14 +447,14 @@ export async function cancelBooking(
 
       await notify(client, {
         recipientType: "CUSTOMER",
-        recipientId: input.userId,
+        recipientId: booking.user_id,
         channel: "SMS",
         template: "refund_processed",
         payload: { bookingId: input.bookingId, refundAmount },
       });
       await notify(client, {
         recipientType: "CUSTOMER",
-        recipientId: input.userId,
+        recipientId: booking.user_id,
         channel: "EMAIL",
         template: "refund_processed",
         payload: { bookingId: input.bookingId, refundAmount },
@@ -394,9 +462,9 @@ export async function cancelBooking(
     }
 
     await client.query(
-      `insert into booking_cancellations (booking_id, cancelled_by, refund_amount, penalty_amount, refund_id)
-       values ($1, 'CUSTOMER', $2, $3, $4)`,
-      [input.bookingId, refundAmount, penaltyAmount, refundId],
+      `insert into booking_cancellations (booking_id, cancelled_by, refund_amount, penalty_amount, refund_id, reason)
+       values ($1, $5, $2, $3, $4, $6)`,
+      [input.bookingId, refundAmount, penaltyAmount, refundId, refusal ? "MERCHANT" : "CUSTOMER", refusalReason],
     );
 
     // The penalty is what the merchant keeps. UPFRONT already paid them
@@ -433,12 +501,12 @@ export async function cancelBooking(
     ]);
 
     await writeAudit(client, {
-      actorType: "CUSTOMER",
-      actorId: input.userId,
+      actorType: refusal ? "MERCHANT" : "CUSTOMER",
+      actorId: refusal?.merchantUserId ?? booking.user_id,
       action: "booking.cancelled",
       entityType: "booking",
       entityId: input.bookingId,
-      after: { refundAmount, penaltyAmount, refundId },
+      after: { refundAmount, penaltyAmount, refundId, ...(refusal ? { reason: refusalReason } : {}) },
     });
 
     await client.query("COMMIT");
@@ -573,6 +641,9 @@ export async function listMyBookings(pool: Pool, userId: string) {
     `select b.*, m.make, m.model, s.id as shop_id, s.name as shop_name,
             s.address_line1 as shop_address, s.city as shop_city, s.phone as shop_phone, s.landmark as shop_landmark,
             r.name as rider_name,
+            b.pickup_verification_session_id is not null and exists (
+              select 1 from pickup_identity_checks pic where pic.booking_id = b.id
+            ) as pickup_licence_checked,
             exists(select 1 from reviews review where review.booking_id = b.id and review.deleted_at is null) as has_review,
             -- So the list can offer "Complete payment" on a HOLD whose clock is
             -- still running. Without it a customer who closed the tab at the

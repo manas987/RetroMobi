@@ -14,7 +14,7 @@ const config: ExpoConfig = {
   version: "1.0.0",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
-  // Deep links: retromobishops://bookings/<id>
+  // Deep links: retromobishops://booking/<id>
   scheme: "retromobishops",
   // The website has one (light) theme; the app matches it.
   userInterfaceStyle: "light",
@@ -33,8 +33,15 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "@rnmapbox/maps",
+    ["expo-location", { locationWhenInUsePermission: "RetroMobi uses your location to set your shop’s pin on the map." }],
     ["expo-splash-screen", { backgroundColor: "#ffffff", image: "./assets/images/splash-icon.png", imageWidth: 120 }],
     "expo-secure-store",
+    ["expo-image-picker", {
+      cameraPermission: "RetroMobi uses the camera to photograph vehicles, papers and your shop.",
+      photosPermission: "Choose a photo you already took.",
+      microphonePermission: false,
+    }],
   ],
   experiments: {
     typedRoutes: true,

@@ -45,3 +45,9 @@ export const IdentityCheckSchema = z.object({
   dlNumberLast4: z.string().length(4),
   notes: z.string().max(500).optional(),
 });
+
+
+export const PickupLicenceDecisionSchema = z.discriminatedUnion("decision", [
+  z.object({ decision: z.literal("approve"), originalSeen: z.literal(true), photoMatched: z.literal(true), validForVehicleAndDates: z.literal(true) }),
+  z.object({ decision: z.literal("refuse"), reason: z.enum(["MISSING", "INVALID", "MISMATCH"]) }),
+]);

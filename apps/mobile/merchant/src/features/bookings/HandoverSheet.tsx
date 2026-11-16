@@ -1,15 +1,17 @@
 import { useState } from "react";
+import { useRouter } from "expo-router";
 import { View } from "react-native";
 import { Image } from "expo-image";
 import { CheckCircle2, ShieldAlert, ShieldCheck, Video } from "lucide-react-native";
 import {
-  ApiError, Button, Card, ErrorNote, Input, LoadingRows, Segmented, Sheet, Text,
+  ApiError, Button, Card, ErrorNote, Input, LoadingRows, SelectField, Segmented, Sheet, Text,
   api, colors, dateLabel, errorText, radius, space, useT, type Row,
 } from "@retromobi/mobile-shared";
+import { useMerchantShop } from "../../state/shop";
 import { useMerchantQuery } from "../../state/query";
 import { BookingSummary, useCounterWrite } from "./common";
 
-type Identity = { riderName: string | null; riderDob: string | null; licenceNumberMasked: string | null; licenceExpiresOn: string | null; photoUrl: string | null; alreadyChecked: boolean };
+type Identity = { riderName: string | null; riderDob: string | null; licenceNumberMasked: string | null; licenceExpiresOn: string | null; photoUrl: string | null; alreadyChecked: boolean; pickupLicenceRequired?: boolean };
 
 export function HandoverSheet({ booking, onClose }: { booking: Row | null; onClose: () => void }) {
   if (!booking) return null;
@@ -63,6 +65,9 @@ function Online({ booking, onClose }: Props) {
     } });
   };
 
+  if (id?.pickupLicenceRequired && !id.alreadyChecked && !query.isError) {
+    return <PickupLicence booking={booking} riderName={id.riderName} onClose={onClose} />;
+  }
   return <Sheet open title={t("actions.idTitle")} onClose={onClose} closeLabel={t("common.close")} busy={busy}
     footer={result ? <Button label={t(result === "ok" ? "common.done" : "common.close")} onPress={onClose} />
       : id && !query.isError ? <Button variant="primary" icon={ShieldCheck} label={t("actions.idSubmit")} disabled={!valid} busy={busy} onPress={submit} /> : null}>
@@ -90,5 +95,59 @@ function Online({ booking, onClose }: Props) {
           maxLength={4} onChangeText={(v) => setLast4(v.replace(/[^0-9A-Za-z]/g, "").toUpperCase())} />
         {error && <ErrorNote text={error} />}
       </View>}
+  </Sheet>;
+}
+
+function PickupLicence({ booking, riderName, onClose }: Props & { riderName: string | null }) {
+  const { lang, t } = useT();
+  const hi = lang === "hi";
+  const router = useRouter();
+  const { shopId } = useMerchantShop();
+  const { busy, error, run } = useCounterWrite();
+  const [checks, setChecks] = useState<boolean[]>([false, false, false]);
+  const [reason, setReason] = useState<"MISSING" | "INVALID" | "MISMATCH" | null>(null);
+  const [confirmRefusal, setConfirmRefusal] = useState(false);
+  const [result, setResult] = useState<"approved" | "refused">();
+  const copy = hi ? [
+    "मूल ड्राइविंग लाइसेंस देखा", "लाइसेंस का नाम और फोटो राइडर से मेल खाते हैं", "लाइसेंस इस वाहन और किराये की अवधि के लिए मान्य है",
+  ] : ["Original driving licence seen", "Licence name and photo match the rider", "Licence covers this vehicle and is valid through return"];
+  const path = `/shops/${shopId}/bookings/${booking.id}/pickup-licence`;
+  function submit(refuse: boolean) {
+    if (!shopId || (refuse ? !reason : !checks.every(Boolean))) return;
+    void run(async () => {
+      await api(path, { method: "POST", body: refuse
+        ? { decision: "refuse", reason }
+        : { decision: "approve", originalSeen: true, photoMatched: true, validForVehicleAndDates: true } });
+      setResult(refuse ? "refused" : "approved");
+    }, { haptics: true });
+  }
+  return <Sheet open title={hi ? "पिकअप पर लाइसेंस जाँचें" : "Check the licence at pickup"} closeLabel={t("common.close")} onClose={onClose} busy={busy}
+    footer={result ? <Button label={t("common.done")} onPress={onClose} />
+      : confirmRefusal ? <View style={{ gap: space[2] }}>
+        <Button label={hi ? "बुकिंग रद्द करें" : "Refuse and cancel booking"} variant="danger" busy={busy} onPress={() => submit(true)} />
+        <Button label={t("common.cancel")} onPress={() => setConfirmRefusal(false)} disabled={busy} />
+      </View> : <Button label={hi ? "लाइसेंस जाँच पूरी करें" : "Approve licence check"} variant="primary" busy={busy}
+        disabled={!checks.every(Boolean)} onPress={() => submit(false)} />}>
+    <View style={{ gap: space[3] }}>
+      {result === "approved" ? <Text>{t("actions.waitingVideoBody")}</Text>
+        : result === "refused" ? <Text>{hi ? "बुकिंग रद्द हो गई। रिफंड रद्दीकरण नीति के अनुसार होगा।" : "Booking cancelled. Any refund follows the cancellation policy."}</Text>
+        : confirmRefusal ? <Text>{hi ? "वाहन न दें। राइडर पर सामान्य रद्दीकरण नियम लागू होंगे।" : "Do not hand over the vehicle. The usual cancellation charges apply to the rider."}</Text> : <>
+          <BookingSummary booking={{ ...booking, rider_name: riderName ?? booking.rider_name }} />
+          <Text>{hi ? "पिकअप पर मूल लाइसेंस से ये बातें जाँचें।" : "Compare the original licence with the rider in front of you."}</Text>
+          {copy.map((label, index) => <Button key={label} label={checks[index] ? `✓ ${label}` : label}
+            accessibilityRole="checkbox" accessibilityState={{ checked: checks[index] }}
+            onPress={() => setChecks(checks.map((checked, i) => i === index ? !checked : checked))} />)}
+          <SelectField label={hi ? "यदि वाहन नहीं दे सकते" : "If you can’t hand over"} value={reason} onChange={setReason}
+            options={[
+              { value: "MISSING", label: hi ? "मूल लाइसेंस नहीं है" : "Original licence missing" },
+              { value: "INVALID", label: hi ? "लाइसेंस मान्य नहीं" : "Licence does not cover this rental" },
+              { value: "MISMATCH", label: hi ? "लाइसेंस राइडर से मेल नहीं खाता" : "Licence does not match the rider" },
+            ]} />
+          <Button label={hi ? "बुकिंग रद्द करने की समीक्षा करें" : "Review refusal"} disabled={!reason || busy} onPress={() => setConfirmRefusal(true)} />
+          <Button label={hi ? "विवाद या दुकान की समस्या के लिए सहायता" : "Get help with a dispute or shop issue"} variant="ghost"
+            onPress={() => { onClose(); router.push({ pathname: "/chats", params: { booking: String(booking.id) } }); }} />
+        </>}
+      {error && <ErrorNote text={error} />}
+    </View>
   </Sheet>;
 }

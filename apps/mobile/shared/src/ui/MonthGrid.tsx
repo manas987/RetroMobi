@@ -6,10 +6,10 @@ import { monthDays, shiftMonth, type Month } from "../lib/calendar";
 import { colors, HIT, radius, space } from "../theme";
 import { Text } from "./Text";
 
-export function MonthGrid({ month, selected, disabled, onPress, onMonthChange, renderDay, lang = "en", min, max }: {
+export function MonthGrid({ month, selected, disabled, onPress, onMonthChange, renderDay, lang = "en", min, max, monochrome = false }: {
   month: Month; selected?: string | { from: string; to: string }; disabled?: (day: string) => boolean;
   onPress: (day: string) => void; onMonthChange: (month: Month) => void; renderDay?: (day: string) => ReactNode;
-  lang?: Lang; min?: string; max?: string;
+  lang?: Lang; min?: string; max?: string; monochrome?: boolean;
 }) {
   const days = monthDays(month);
   const from = typeof selected === "string" ? selected : selected?.from;
@@ -39,10 +39,10 @@ export function MonthGrid({ month, selected, disabled, onPress, onMonthChange, r
             return (
               <Pressable key={day} disabled={blocked} accessibilityRole="button" accessibilityState={{ selected: edge || inside, disabled: blocked }}
                 accessibilityLabel={formatIstDate(date(day), { weekday: "long", day: "numeric", month: "long", year: "numeric" }, lang)}
-                style={[styles.cell, styles.day, inside && styles.inside, edge && styles.edge]} onPress={() => onPress(day)}>
-                <Text size="sm" weight={edge ? "bold" : "regular"} color={blocked || (!edge && !day.startsWith(monthKey(month))) ? "ink3" : "ink"}>
+                style={[styles.cell, styles.day, inside && (monochrome ? styles.band : styles.inside), monochrome && inside && day === from && styles.bandStart, monochrome && inside && day === to && styles.bandEnd, !monochrome && edge && styles.edge]} onPress={() => onPress(day)}>
+                <View style={monochrome && edge ? styles.blackDay : undefined}><Text size="sm" weight={edge ? "bold" : "regular"} color={monochrome && edge ? "white" : blocked || (!edge && !day.startsWith(monthKey(month))) ? "ink3" : "ink"}>
                   {Number(day.slice(-2))}
-                </Text>
+                </Text></View>
                 {renderDay?.(day)}
               </Pressable>
             );
@@ -66,5 +66,9 @@ const styles = StyleSheet.create({
   day: { minHeight: HIT, alignItems: "center", justifyContent: "center" },
   edge: { borderRadius: radius.row, backgroundColor: colors.amber },
   inside: { backgroundColor: colors.amberSoft },
+  band: { backgroundColor: colors.surface3 },
+  bandStart: { borderTopLeftRadius: radius.full, borderBottomLeftRadius: radius.full },
+  bandEnd: { borderTopRightRadius: radius.full, borderBottomRightRadius: radius.full },
+  blackDay: { width: "100%", maxWidth: 44, aspectRatio: 1, borderRadius: radius.full, backgroundColor: colors.ink, alignItems: "center", justifyContent: "center" },
   monthButton: { width: HIT, height: HIT, alignItems: "center", justifyContent: "center" },
 });

@@ -1,4 +1,4 @@
-import { rupees } from "./format";
+import { istDay, rupees } from "./format";
 import type { SearchCriteria, SortKey } from "./types";
 
 const SORTS: SortKey[] = ["price", "distance", "rating"];
@@ -40,18 +40,13 @@ export function rentalWindowFromSearch(search: string) {
  * whose pickup is already in the past. A fixed "today 10am" meant every default
  * cart built after 10am carried a dead window to checkout.
  */
-export function defaultWindow(): { pickupAt: string; returnAt: string } {
-  const pickup = new Date();
-  pickup.setHours(10, 0, 0, 0);
-  const ret = new Date();
-  ret.setHours(22, 0, 0, 0);
-  if (pickup.getTime() <= Date.now()) {
-    pickup.setDate(pickup.getDate() + 1);
-    ret.setDate(ret.getDate() + 1);
-  }
-  return { pickupAt: toIsoWithOffset(pickup), returnAt: toIsoWithOffset(ret) };
+export function defaultWindow(now = new Date()): { pickupAt: string; returnAt: string } {
+  const today = istDay(now);
+  const day = Date.parse(`${today}T10:00:00+05:30`) <= now.getTime()
+    ? istDay(new Date(now.getTime() + 86_400_000))
+    : today;
+  return { pickupAt: `${day}T10:00:00+05:30`, returnAt: `${day}T22:00:00+05:30` };
 }
-
 /** Always emit an explicit offset. A naked local datetime prices a different
  *  calendar day for anyone whose device clock is not on IST. */
 export function toIsoWithOffset(d: Date): string {

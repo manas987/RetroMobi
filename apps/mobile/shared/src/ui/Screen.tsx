@@ -1,18 +1,21 @@
-import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View, type ViewStyle } from "react-native";
+import { useContext, type ReactNode } from "react";
+import { KeyboardAvoidingView, RefreshControl, ScrollView, StyleSheet, View, type ViewStyle } from "react-native";
+import { HeaderHeightContext } from "expo-router/react-navigation";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 import { useNetworkState } from "expo-network";
+import { useT } from "../i18n";
 import { colors, space } from "../theme";
 import { Text } from "./Text";
 
 /** Shown at the top of every screen while the phone has no connection. */
 export function OfflineBanner() {
+  const { lang } = useT();
   const net = useNetworkState();
   // `undefined` while the first reading is pending: say nothing until we know.
-  if (net.isConnected !== false) return null;
+  if (net.isConnected !== false && net.isInternetReachable !== false) return null;
   return (
     <View style={styles.offline} accessibilityRole="alert">
-      <Text size="sm" color="surface" center>You're offline. Showing what was loaded last.</Text>
+      <Text size="sm" color="surface" center>{lang === "hi" ? "इंटरनेट नहीं है। पिछली बार लोड हुई जानकारी दिख रही है।" : "You're offline. Showing what was loaded last."}</Text>
     </View>
   );
 }
@@ -49,14 +52,15 @@ export function Screen({
   contentStyle?: ViewStyle;
 }) {
   const pad = padded ? styles.pad : undefined;
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors[background] }]} edges={edges}>
       <OfflineBanner />
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
         {scroll ? (
-          <ScrollView
+          <ScrollView showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[pad, contentStyle]}
+            contentContainerStyle={[styles.scrollContent, pad, contentStyle]}
             refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink3} /> : undefined}
           >
             {children}
@@ -72,6 +76,7 @@ export function Screen({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
   pad: { padding: space[4], paddingBottom: space[8] },
   offline: { backgroundColor: colors.ink2, paddingVertical: space[2], paddingHorizontal: space[4] },
   footer: { paddingHorizontal: space[4], paddingVertical: space[3], borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, backgroundColor: colors.surface },
