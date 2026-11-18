@@ -1,39 +1,81 @@
 import { useState } from "react";
-import { FileText, Plus, ScrollText } from "lucide-react";
+import { Briefcase, ChevronRight, FileText, Plus, ScrollText, Store } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { portalFetch, PortalApiError, type Row } from "../../../lib/portal";
 import { uploadFile } from "../../../lib/upload";
 import type { Tone } from "../../../lib/bookingStage";
 import { useT, type TKey } from "../../../i18n";
 import { useMerchantShop } from "../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { Button, Card, Chip, ConfirmSheet, EmptyState, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "../ui/ui";
-import { DocUpload } from "../setup/DocUpload";
+import { Button, Card, Chip, ConfirmSheet, EmptyState, ErrorNote, DateInput, Field, INPUT, LoadingRows, Select, Sheet } from "../ui/ui";
+import { newestByType, PaperSlot, STATUS_TONE } from "./PaperSlot";
 import { useLicenceForm } from "../setup/LicenceStep";
 
-const DOC_TYPES = ["PAN", "GSTIN", "AADHAAR", "BANK_PROOF", "OTHER"] as const;
-const STATUS_TONE: Record<string, Tone> = { ACTIVE: "good", VERIFIED: "good", PENDING: "info", REJECTED: "bad", EXPIRED: "bad" };
+/** Business-wide papers asked for by name. Other types (older uploads) stay listed under "Other papers". */
+const BUSINESS = [
+  { type: "BUSINESS_REG", required: true },
+  { type: "PAN", required: true },
+  { type: "GSTIN", required: false, hint: "shop.hint_GSTIN" },
+  { type: "UDYAM", required: false, hint: "shop.hint_UDYAM" },
+] as const;
+const NAMED: string[] = BUSINESS.map((b) => b.type);
 
 export function PapersTab() {
-  const { token, shopId, can } = useMerchantShop();
+  const { token, shopId, shops, setShopId, can } = useMerchantShop();
   const { t } = useT();
+  const [, navigate] = useLocation();
   const licences = useMerchantQuery<{ licences: Row[] }>("/licences", token);
   const docs = useMerchantQuery<{ documents: Row[] }>("/merchant-documents", token);
-  const [sheet, setSheet] = useState<"licence" | "doc" | null>(null);
+  const [sheet, setSheet] = useState<"licence" | null>(null);
   const write = can("shop:write");
+  const newest = newestByType(docs.data?.documents);
+  const others = (docs.data?.documents ?? []).filter((d) => !NAMED.includes(String(d.type)));
 
   return (
-    <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
-      <Card title={t("shop.licenceCard")} icon={ScrollText} action={write && <Button icon={Plus} onClick={() => setSheet("licence")}>{t("shop.addLicence")}</Button>}>
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:min-h-0 xl:flex-1 xl:grid-cols-3">
+      <Card scroll className="xl:min-h-0" title={t("shop.licenceCard")} icon={ScrollText} action={write && <Button icon={Plus} onClick={() => setSheet("licence")}>{t("shop.addLicence")}</Button>}>
+        <p className="mb-3 text-sm text-ink-3">{t("shop.licenceCardHint")}</p>
         <List q={licences} rows={licences.data?.licences} base="/licences" title={(r) => String(r.licence_number)} write={write} empty={t("shop.noLicences")} />
       </Card>
-      <Card title={t("shop.otherCard")} icon={FileText} action={write && <Button icon={Plus} onClick={() => setSheet("doc")}>{t("shop.addPaper")}</Button>}>
-        <List q={docs} rows={docs.data?.documents} base="/merchant-documents" title={(r) => t(`shop.paper_${String(r.type)}` as TKey)} write={write} empty={t("shop.noPapers")} />
+      <Card scroll className="xl:min-h-0" title={t("shop.businessCard")} icon={Briefcase}>
+        <p className="mb-3 text-sm text-ink-3">{t("shop.businessCardHint")}</p>
+        {docs.isPending ? <LoadingRows rows={2} /> : docs.isError ? <ErrorNote onRetry={() => docs.refetch()} /> : (
+          <div className="flex flex-col gap-3">
+            {BUSINESS.map((b) => (
+              <PaperSlot key={b.type} type={b.type} base="/merchant-documents" title={t(`shop.paper_${b.type}` as TKey)}
+                hint={"hint" in b ? t(b.hint) : undefined} required={b.required} row={newest.get(b.type)} canWrite={write} />
+            ))}
+            {others.length > 0 && (
+              <>
+                <h3 className="mt-2 text-sm font-semibold text-ink">{t("shop.otherCard")}</h3>
+                <List q={docs} rows={others} base="/merchant-documents" title={(r) => tMaybeLabel(t, r)} write={write} empty="" />
+              </>
+            )}
+            <p className="text-sm text-ink-3">{t("shop.bankHint")} <Link href="/merchant/earnings" className="font-semibold text-ink underline">{t("nav.earnings")}</Link></p>
+          </div>
+        )}
+      </Card>
+      <Card scroll className="xl:min-h-0" title={t("shop.eachShopCard")} icon={Store}>
+        <p className="mb-3 text-sm text-ink-3">{t("shop.eachShopHint")}</p>
+        <ul className="flex flex-col gap-2">
+          {shops.map((s) => (
+            <li key={String(s.id)}>
+              <button type="button" onClick={() => { setShopId(String(s.id)); navigate("/merchant/shop?tab=papers"); }} aria-label={`${t("shop.openPapers")}: ${String(s.name)}`}
+                className="flex min-h-12 w-full items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2 text-left hover:bg-surface-3">
+                <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{String(s.name)}</span>
+                <span className="shrink-0 text-xs font-semibold text-ink-2">{t("shop.openPapers")}</span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-ink-3" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
       </Card>
       <LicenceSheet open={sheet === "licence"} onClose={() => setSheet(null)} token={token} shopId={shopId} />
-      <PaperSheet open={sheet === "doc"} onClose={() => setSheet(null)} token={token} />
     </div>
   );
 }
+
+const tMaybeLabel = (t: ReturnType<typeof useT>["t"], r: Row) => t(`shop.paper_${String(r.type)}` as TKey);
 
 function List({ q, rows, base, title, write, empty }: { q: { isPending: boolean; isError: boolean; refetch: () => unknown }; rows?: Row[]; base: string; title: (r: Row) => string; write: boolean; empty: string }) {
   if (q.isPending) return <LoadingRows rows={2} />;
@@ -75,7 +117,7 @@ function PaperRow({ row: r, base, title, write }: { row: Row; base: string; titl
     <li className="rounded-2xl bg-surface-2 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-ink">{title}</span>
+          <span className="block break-words text-sm font-semibold text-ink">{title}</span>
           <span className="block text-xs text-ink-3">{r.expires_at ? t("shop.validTill", { date: date(r.expires_at, { day: "numeric", month: "short", year: "numeric" }) }) : t("shop.noExpiry")}</span>
         </span>
         <Chip tone={STATUS_TONE[status] ?? "muted"}>{tMaybe(`shop.status_${status}`) ?? t("shop.status_OTHER")}</Chip>
@@ -113,57 +155,6 @@ function LicenceFormBody({ token, shopId, onDone }: { token: string; shopId: str
       {f.form}
       {f.error && <div className="mb-4"><ErrorNote text={f.error} /></div>}
       <Button variant="primary" size="lg" className="w-full" disabled={f.busy || !f.valid} onClick={f.submit}>{f.busy ? t("common.saving") : t("common.save")}</Button>
-    </>
-  );
-}
-
-function PaperSheet({ open, onClose, token }: { open: boolean; onClose: () => void; token: string }) {
-  const { t } = useT();
-  return (
-    <Sheet open={open} onClose={onClose} title={t("shop.addPaper")}>
-      <PaperForm token={token} onDone={onClose} />
-    </Sheet>
-  );
-}
-
-function PaperForm({ token, onDone }: { token: string; onDone: () => void }) {
-  const { t, lang } = useT();
-  const invalidate = useInvalidateMerchant();
-  const [type, setType] = useState<string>(DOC_TYPES[0]);
-  const [number, setNumber] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      const doc = await portalFetch<Row>("merchant", "/merchant-documents", { method: "POST", token, body: { type, documentNumber: number.trim() || undefined, expiresAt: expiresAt || undefined } });
-      if (file) await uploadFile({ portal: "merchant", token, file, presignPath: `/merchant-documents/${doc.id}/upload`, confirmPath: `/merchant-documents/${doc.id}/confirm` });
-      await invalidate();
-      onDone();
-    } catch (err) {
-      // The row exists once the POST returned, so refresh the list either way.
-      await invalidate();
-      setError(errorText(lang, err));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <>
-      <Field label={t("shop.paperType")}>
-        <select className={INPUT} value={type} onChange={(e) => setType(e.target.value)}>
-          {DOC_TYPES.map((d) => <option key={d} value={d}>{t(`shop.paper_${d}` as TKey)}</option>)}
-        </select>
-      </Field>
-      <Field label={`${t("shop.paperNumber")} (${t("common.optional")})`}><input className={INPUT} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
-      <Field label={`${t("setup.licenceExpiry")} (${t("common.optional")})`}><input className={INPUT} type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /></Field>
-      <DocUpload label={t("shop.paperFile")} accept="image/*,application/pdf" capture busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
-      {error && <div className="mb-4"><ErrorNote text={error} /></div>}
-      <Button variant="primary" size="lg" className="w-full" disabled={busy} onClick={save}>{busy ? t("common.saving") : t("common.save")}</Button>
     </>
   );
 }

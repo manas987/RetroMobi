@@ -1,6 +1,13 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import * as Collapsible from "@radix-ui/react-collapsible";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as RSelect from "@radix-ui/react-select";
 import { Link } from "wouter";
-import { X, type LucideIcon } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, X, type LucideIcon } from "lucide-react";
+import { enIN } from "react-day-picker/locale/en-IN";
+import { hi } from "react-day-picker/locale/hi";
+import { Calendar } from "../../../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import type { Tone } from "../../../lib/bookingStage";
 import { useT } from "../../../i18n";
 import { istDay } from "../../../lib/format";
@@ -60,7 +67,7 @@ export function Card({
           {action}
         </div>
       )}
-      {scroll ? <div className="min-h-0 flex-1 overflow-y-auto -mx-2 px-2">{children}</div> : children}
+      {scroll ? <div className="relative min-h-0 flex-1 overflow-y-auto -mx-2 px-2">{children}</div> : children}
     </section>
   );
 }
@@ -116,7 +123,7 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
         <h1 className="text-2xl sm:text-3xl font-semibold text-ink">{title}</h1>
         {subtitle && <p className="mt-1 text-base text-ink-2">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }
@@ -197,61 +204,60 @@ export function ErrorNote({ text, onRetry }: { text?: string; onRetry?: () => vo
 }
 
 /**
- * A panel for one task (hand over, return, walk-in). Native <dialog> gives
- * focus trapping, Escape-to-close and a backdrop for free. Full screen on a
- * phone, a right-hand drawer from `sm` up.
+ * A popup for one task (hand over, return, walk-in), centred on every screen
+ * size. Radix Dialog rather than native <dialog>: showModal() puts the dialog
+ * in the top layer and makes the rest of the page inert, so the Select and
+ * date popovers (portalled to <body>) would open behind it and be unclickable.
  */
 export function Sheet({
   open,
   onClose,
   title,
+  size = "lg",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: ReactNode;
+  /** "md" for short confirmations, "lg" for forms. */
+  size?: "md" | "lg";
   children: ReactNode;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
   const { t } = useT();
-
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
-
+  // Callers usually clear their data as they close (`open={booking != null}`),
+  // so keep showing the last open content while the close animation plays
+  // instead of collapsing to an empty box.
+  const shown = useRef({ title, children });
+  if (open) shown.current = { title, children };
   return (
-    <dialog
-      ref={ref}
-      aria-labelledby={titleId}
-      onClose={onClose}
-      onClick={(e) => {
-        if (e.target === ref.current) onClose();
-      }}
-      className="m-0 ml-auto h-dvh max-h-dvh w-full max-w-full sm:max-w-lg bg-surface p-0 backdrop:bg-ink/40 open:flex flex-col"
-    >
-      {open && (
-        <>
-          <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
-            <h2 id={titleId} className="text-lg font-semibold text-ink">
-              {title}
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
+    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[1100] bg-ink/45 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content
+          aria-describedby={undefined}
+          // Focus the popup itself, not its first field or the close button: on a
+          // phone a focused field throws the keyboard over half the form.
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).focus();
+          }}
+          className={`fixed left-1/2 top-1/2 z-[1101] flex max-h-[min(88dvh,760px)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl bg-surface shadow-[0_24px_64px_rgba(18,22,26,0.22)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:duration-200 data-[state=closed]:duration-150 ${
+            size === "md" ? "max-w-md" : "max-w-lg"
+          }`}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line py-3 pl-5 pr-3">
+            <Dialog.Title className="text-lg font-semibold leading-snug text-ink">{shown.current.title}</Dialog.Title>
+            <Dialog.Close
               aria-label={t("common.close")}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-ink-2 hover:bg-surface-3"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-ink-2 hover:bg-surface-3"
             >
               <X className="h-5 w-5" />
-            </button>
+            </Dialog.Close>
           </div>
-          <div className="flex-1 overflow-y-auto px-5 py-5">{children}</div>
-        </>
-      )}
-    </dialog>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">{shown.current.children}</div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -259,13 +265,19 @@ export function Tabs<K extends string>({
   tabs,
   value,
   onChange,
+  end,
 }: {
   tabs: { key: K; label: string; count?: number }[];
   value: K;
   onChange: (key: K) => void;
+  /** Actions on the right of the same row (a link, a button), so the page keeps one bar. */
+  end?: ReactNode;
 }) {
   return (
-    <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-line mb-5 -mx-1 px-1">
+    // The line is an inset shadow, not a border the tabs overlap with -mb-px:
+    // inside overflow-x-auto that 1px overflowed and drew a vertical scrollbar.
+    <div className="mb-5 -mx-1 flex items-center gap-2 px-1 shadow-[inset_0_-1px_0_var(--color-line)]">
+    <div role="tablist" className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -273,7 +285,7 @@ export function Tabs<K extends string>({
           role="tab"
           aria-selected={tab.key === value}
           onClick={() => onChange(tab.key)}
-          className={`min-h-11 px-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px ${
+          className={`min-h-11 px-3 text-sm font-medium whitespace-nowrap border-b-2 ${
             tab.key === value ? "border-ink text-ink" : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
@@ -281,6 +293,8 @@ export function Tabs<K extends string>({
           {tab.count != null && <span className="tnum ml-1.5 text-ink-3">{tab.count}</span>}
         </button>
       ))}
+    </div>
+    {end && <div className="flex shrink-0 items-center gap-2 pb-1">{end}</div>}
     </div>
   );
 }
@@ -295,7 +309,8 @@ export function ViewToggle<K extends string>({
   onChange: (key: K) => void;
 }) {
   return (
-    <div role="group" className="inline-flex rounded-2xl bg-surface-3 p-1">
+    // The track is a shade darker than the page so the pair reads as one switch, not two loose buttons.
+    <div role="group" className="inline-flex rounded-2xl bg-line p-1">
       {options.map((o) => (
         <button
           key={o.key}
@@ -330,6 +345,7 @@ export function BarChart({
   tableLabel,
   legend = true,
   fill = false,
+  note,
 }: {
   data: { label: string; values: number[] }[];
   series: string[];
@@ -339,13 +355,19 @@ export function BarChart({
   legend?: boolean;
   /** Stretch to the parent's remaining height (parent must be a flex column). */
   fill?: boolean;
+  /** How the numbers are counted; shown with the table. */
+  note?: string;
 }) {
   const totals = data.map((d) => d.values.reduce((a, b) => a + b, 0));
   const max = Math.max(1, ...totals);
   const H = 120;
+  // A month of day labels can't fit under the bars on a phone: label every
+  // `step`-th day, counted back from the last so today is always named.
+  const step = data.length > 14 ? Math.ceil(data.length / 10) : 1;
 
   return (
-    <div className={fill ? "flex min-h-0 flex-1 flex-col" : ""}>
+    // `fill` keeps its content height as a minimum, so an open table makes the card scroll instead of overlapping.
+    <div className={`@container ${fill ? "flex flex-1 flex-col" : ""}`}>
       {legend && series.length > 1 && (
         <ul className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs text-ink-2">
           {series.map((s, i) => (
@@ -357,12 +379,12 @@ export function BarChart({
         </ul>
       )}
       <div
-        className={`flex items-end justify-between gap-1 border-b border-line pt-6 ${fill ? "min-h-20 flex-1" : ""}`}
+        className={`flex items-end justify-between gap-1 border-b border-line pt-6 ${fill ? "min-h-36 flex-1 xl:min-h-16" : ""}`}
         style={fill ? undefined : { height: H + 24 }}
         aria-hidden
       >
         {data.map((d, col) => (
-          <div key={d.label} className="group relative flex h-full flex-1 flex-col items-center justify-end">
+          <div key={col} className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end">
             <div className="flex h-full w-full max-w-6 flex-col-reverse gap-0.5">
               {d.values.map((v, i) =>
                 v > 0 ? (
@@ -381,18 +403,24 @@ export function BarChart({
         ))}
       </div>
       <div className="flex justify-between gap-1 mt-1.5" aria-hidden>
-        {data.map((d) => (
-          <span key={d.label} className="flex-1 text-center text-[11px] text-ink-3">
-            {d.label}
+        {data.map((d, i) => (
+          <span
+            key={i}
+            // More than a week of labels on a narrow chart: every other one, still ending on the latest.
+            className={`min-w-0 flex-1 overflow-visible whitespace-nowrap text-center text-[11px] text-ink-3 ${
+              data.length > 7 && step === 1 && (data.length - 1 - i) % 2 === 1 ? "@max-md:invisible" : ""
+            }`}
+          >
+            {(data.length - 1 - i) % step === 0 ? d.label : ""}
           </span>
         ))}
       </div>
-      <details className="mt-3 text-xs text-ink-3">
-        <summary className="cursor-pointer">{tableLabel}</summary>
+      <Reveal label={tableLabel}>
+        {note && <p className="mt-2">{note}</p>}
         <table className="mt-2 w-full text-left">
           <tbody>
             {data.map((d, i) => (
-              <tr key={d.label} className="border-t border-line">
+              <tr key={i} className="border-t border-line">
                 <th className="py-1 font-normal">{d.label}</th>
                 {series.map((s, j) => (
                   <td key={s} className="tnum py-1">
@@ -405,14 +433,34 @@ export function BarChart({
             ))}
           </tbody>
         </table>
-      </details>
+      </Reveal>
     </div>
   );
 }
 
-/** The one text-input look for merchant forms (inputs, selects, textareas). */
+/** "See the numbers": a small text toggle whose panel slides open with a little rebound (`.reveal` in index.css). */
+export function Reveal({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Collapsible.Root className="group/reveal mt-3 text-xs text-ink-3">
+      <Collapsible.Trigger className="inline-flex min-h-6 cursor-pointer items-center gap-1 rounded hover:text-ink">
+        <ChevronDown
+          className="h-3.5 w-3.5 transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-data-[state=open]/reveal:rotate-180"
+          aria-hidden
+        />
+        {label}
+      </Collapsible.Trigger>
+      <Collapsible.Content className="reveal">{children}</Collapsible.Content>
+    </Collapsible.Root>
+  );
+}
+
+/** `E164Input`'s box in INPUT's size and shape (no focus ring, ink border). */
+export const PHONE = "min-h-12 rounded-2xl bg-surface text-base focus-within:ring-0";
+
+/** The one text-input look for merchant forms. Number fields drop the browser's
+ *  tiny spinner arrows: too small to tap, and easy to nudge a price by accident. */
 export const INPUT =
-  "min-h-12 w-full rounded-2xl border border-line-strong bg-surface px-4 text-base text-ink outline-none focus:border-ink";
+  "min-h-12 w-full rounded-2xl border border-line-strong bg-surface px-4 text-base text-ink outline-none focus:border-ink [&[type=number]]:[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 
 export function Field({
   label,
@@ -432,6 +480,165 @@ export function Field({
       {hint && !error && <span className="text-xs text-ink-3">{hint}</span>}
       {error && <span className="text-xs text-danger">{error}</span>}
     </label>
+  );
+}
+
+export type SelectOption<V extends string> = { value: V; label: string; group?: string; disabled?: boolean };
+
+// Radix reserves "" for "nothing chosen", but filters use "" for "All".
+const ALL = "__all";
+
+/** The dropdown for merchant forms and filters, drawn by us rather than the OS. */
+export function Select<V extends string>({
+  value,
+  onChange,
+  options,
+  placeholder,
+  ariaLabel,
+  compact = false,
+  disabled = false,
+  className = "",
+}: {
+  value: V | "";
+  onChange: (v: V) => void;
+  options: SelectOption<V>[];
+  /** Shown while `value` is "" and no option has the value "". */
+  placeholder?: string;
+  ariaLabel?: string;
+  compact?: boolean;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const hasAll = options.some((o) => o.value === "");
+  const groups: { name?: string; items: SelectOption<V>[] }[] = [];
+  for (const o of options) {
+    const last = groups[groups.length - 1];
+    if (last && last.name === o.group) last.items.push(o);
+    else groups.push({ name: o.group, items: [o] });
+  }
+  return (
+    <RSelect.Root
+      value={value === "" ? (hasAll ? ALL : "") : value}
+      onValueChange={(v) => onChange((v === ALL ? "" : v) as V)}
+      disabled={disabled}
+    >
+      <RSelect.Trigger
+        aria-label={ariaLabel}
+        className={`group flex w-full min-w-0 items-center justify-between gap-2 rounded-2xl border border-line-strong bg-surface px-4 text-left text-base text-ink outline-none transition-colors hover:border-ink-3 focus-visible:border-ink data-[state=open]:border-ink disabled:opacity-50 ${
+          compact ? "min-h-11" : "min-h-12"
+        } ${className}`}
+      >
+        <span className="min-w-0 flex-1 truncate leading-normal">
+          <RSelect.Value placeholder={<span className="text-ink-3">{placeholder}</span>} />
+        </span>
+        <ChevronDown aria-hidden className="h-5 w-5 shrink-0 text-ink-3 transition-transform group-data-[state=open]:rotate-180" />
+      </RSelect.Trigger>
+      <RSelect.Portal>
+        <RSelect.Content
+          position="popper"
+          sideOffset={6}
+          collisionPadding={12}
+          className="z-[1150] flex max-h-[min(var(--radix-select-content-available-height),22rem)] min-w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_16px_40px_rgba(18,22,26,0.16)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+        >
+          <RSelect.Viewport className="p-1.5">
+            {groups.map((g, i) => (
+              <RSelect.Group key={`${g.name ?? ""}-${i}`}>
+                {g.name && (
+                  <RSelect.Label className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-ink-3">{g.name}</RSelect.Label>
+                )}
+                {g.items.map((o) => (
+                  <RSelect.Item
+                    key={o.value || ALL}
+                    value={o.value || ALL}
+                    disabled={o.disabled}
+                    className="relative flex min-h-11 cursor-pointer select-none items-center rounded-xl py-2 pl-3 pr-10 text-base text-ink outline-none data-[highlighted]:bg-surface-3 data-[state=checked]:font-semibold data-[disabled]:cursor-default data-[disabled]:text-ink-4"
+                  >
+                    <RSelect.ItemText>{o.label}</RSelect.ItemText>
+                    <RSelect.ItemIndicator className="absolute right-3 inline-flex">
+                      <Check className="h-5 w-5 text-ink" aria-hidden />
+                    </RSelect.ItemIndicator>
+                  </RSelect.Item>
+                ))}
+              </RSelect.Group>
+            ))}
+          </RSelect.Viewport>
+        </RSelect.Content>
+      </RSelect.Portal>
+    </RSelect.Root>
+  );
+}
+
+/**
+ * A calendar date ("YYYY-MM-DD", or "" for none). Days before `min` (default:
+ * today, since every merchant date is an expiry or a future block) can't be
+ * picked; tapping the month title jumps by year for far-off expiries.
+ */
+export function DateInput({
+  value,
+  onChange,
+  min,
+  max,
+  placeholder,
+  ariaLabel,
+  clearable = false,
+}: {
+  value: string;
+  onChange: (day: string) => void;
+  min?: string;
+  max?: string;
+  placeholder?: string;
+  ariaLabel?: string;
+  clearable?: boolean;
+}) {
+  const { t, lang, date } = useT();
+  const [open, setOpen] = useState(false);
+  // Local noon, so no timezone can push the day across midnight.
+  const noon = (day: string) => new Date(`${day}T12:00:00`);
+  const lo = noon(min ?? istDay(new Date()));
+  const selected = value ? noon(value) : undefined;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={ariaLabel}
+          className="group flex min-h-12 w-full items-center gap-3 rounded-2xl border border-line-strong bg-surface px-4 text-left text-base outline-none transition-colors hover:border-ink-3 focus-visible:border-ink data-[state=open]:border-ink"
+        >
+          <CalendarDays className="h-5 w-5 shrink-0 text-ink-3" aria-hidden />
+          <span className={`min-w-0 flex-1 truncate leading-normal ${value ? "text-ink" : "text-ink-3"}`}>
+            {value ? date(`${value}T12:00:00+05:30`, { day: "numeric", month: "long", year: "numeric" }) : (placeholder ?? t("common.pickDate"))}
+          </span>
+          <ChevronDown aria-hidden className="h-5 w-5 shrink-0 text-ink-3 transition-transform group-data-[state=open]:rotate-180" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="rounded-2xl">
+        <Calendar
+          mode="single"
+          selected={selected}
+          defaultMonth={selected ?? lo}
+          captionLayout="dropdown"
+          startMonth={lo}
+          endMonth={max ? noon(max) : undefined}
+          disabled={max ? [{ before: lo }, { after: noon(max) }] : { before: lo }}
+          locale={lang === "hi" ? hi : enIN}
+          weekStartsOn={1}
+          pickYearLabel={t("common.pickYear")}
+          classNames={{ today: "[&>button]:font-semibold [&>button]:ring-1 [&>button]:ring-line-strong" }}
+          onSelect={(d) => {
+            if (!d) return;
+            onChange(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+            setOpen(false);
+          }}
+          autoFocus
+        />
+        {clearable && value && (
+          <div className="flex justify-end border-t border-line px-3 py-2">
+            <Button variant="ghost" onClick={() => { onChange(""); setOpen(false); }}>{t("common.clear")}</Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -459,7 +666,7 @@ export function ConfirmSheet({
 }) {
   const { t } = useT();
   return (
-    <Sheet open={open} onClose={onClose} title={title}>
+    <Sheet open={open} onClose={onClose} title={title} size="md">
       <p className="text-base text-ink-2 mb-6">{body}</p>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       <div className="flex flex-col gap-2">

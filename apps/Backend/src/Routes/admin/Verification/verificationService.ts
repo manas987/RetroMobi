@@ -13,6 +13,7 @@ export type VerifiableType =
   | "VEHICLE"
   | "VEHICLE_DOCUMENT"
   | "MERCHANT_DOCUMENT"
+  | "SHOP_DOCUMENT"
   | "SHOP_LICENCE"
   | "RIDER_VERIFICATION";
 
@@ -67,6 +68,17 @@ const QUEUE_QUERIES: Record<VerifiableType, string> = {
            mu.id as merchant_user_id, mu.name as merchant_name, mu.phone as merchant_phone
       from merchant_documents d
       join merchant_users mu on mu.id = d.merchant_user_id
+     where d.status = $1 and d.deleted_at is null
+     order by d.created_at`,
+
+  SHOP_DOCUMENT: `
+    select d.id, d.type, d.document_number, d.issued_at, d.expires_at,
+           d.status, d.storage_key, d.created_at,
+           s.id as shop_id, s.name as shop_name, s.city,
+           mu.id as merchant_user_id, mu.name as merchant_name, mu.phone as merchant_phone
+      from shop_documents d
+      join shops s on s.id = d.shop_id
+      join merchant_users mu on mu.id = s.merchant_user_id
      where d.status = $1 and d.deleted_at is null
      order by d.created_at`,
 
@@ -152,6 +164,7 @@ export class NoFileError extends Error {}
 const FILE_TABLE: Partial<Record<VerifiableType, string>> = {
   VEHICLE_DOCUMENT: "vehicle_documents",
   MERCHANT_DOCUMENT: "merchant_documents",
+  SHOP_DOCUMENT: "shop_documents",
   SHOP_LICENCE: "shop_licenses",
 };
 
@@ -271,6 +284,20 @@ export async function decideMerchantDocument(pool: Pool, adminId: string, docume
   try {
     await client.query("BEGIN");
     await decide(client, "merchant_documents", documentId, "status", decision, "merchant_document", adminId, false);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function decideShopDocument(pool: Pool, adminId: string, documentId: string, decision: Decision) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await decide(client, "shop_documents", documentId, "status", decision, "shop_document", adminId, false);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");

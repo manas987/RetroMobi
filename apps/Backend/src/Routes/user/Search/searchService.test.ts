@@ -46,6 +46,23 @@ function vehicleIdsIn(results: Array<{ primaryOffer: { vehicleId: string } }>) {
 }
 
 describe("searchVehicles", () => {
+  test("price bounds and histogram use the displayed daily rate for a multi-day rental", async () => {
+    const { shopId, city } = await isolatedCity();
+    const vehicle = await createBookableVehicle(pool, { shopId });
+    const { pickupAt, returnAt } = futureWindow(500, 72);
+    const window = { city, pickupAt, returnAt };
+    const { results: [unfiltered] } = await searchVehicles(pool, window);
+    const { pricePerDay, totalAmount } = unfiltered!.primaryOffer;
+    expect(totalAmount).toBeGreaterThan(pricePerDay);
+
+    const matching = await searchVehicles(pool, { ...window, minPrice: pricePerDay, maxPrice: pricePerDay });
+    expect(vehicleIdsIn(matching.results)).toEqual([vehicle.id]);
+
+    const excluded = await searchVehicles(pool, { ...window, maxPrice: pricePerDay - 1 });
+    expect(excluded.results).toEqual([]);
+    expect(excluded.priceHistogram).toEqual([pricePerDay]);
+  });
+
   test("returns an ACTIVE vehicle that is free for the window", async () => {
     const { shopId, city } = await isolatedCity();
     const v = await createBookableVehicle(pool, { shopId });
@@ -173,11 +190,14 @@ describe("grouping by model", () => {
   test("by default the primary offer is the cheapest one", async () => {
     const { shopId, city } = await isolatedCity();
     const model = await createModel(pool);
-    await createBookableVehicle(pool, { shopId, modelId: model.id, amount: 90_000 });
+    // Weekend rates set too: the fixture defaults both to the same weekend
+    // price, so a window that lands on a weekend made this a coin toss.
+    await createBookableVehicle(pool, { shopId, modelId: model.id, amount: 90_000, weekendAmount: 90_000 });
     const cheapest = await createBookableVehicle(pool, {
       shopId,
       modelId: model.id,
       amount: 30_000,
+      weekendAmount: 30_000,
     });
     const { pickupAt, returnAt } = futureWindow(610);
 

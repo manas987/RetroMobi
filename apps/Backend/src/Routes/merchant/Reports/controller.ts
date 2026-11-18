@@ -5,7 +5,7 @@ import { pathParam } from "../../../lib/pathParam.ts";
 import * as reportsService from "./reportsService.ts";
 
 export async function summary(req: Request, res: Response) {
-  const { from, to } = req.validatedQuery as { from: string; to: string };
+  const { from, to } = req.validatedQuery as { from?: string; to: string };
   const result = await reportsService.shopSummary(
     pool,
     pathParam(req, "shopId"),

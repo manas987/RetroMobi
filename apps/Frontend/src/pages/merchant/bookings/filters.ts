@@ -74,6 +74,43 @@ export function daysCovered(b: Row): string[] {
   return days;
 }
 
+/** One booking's bar within one calendar week. */
+export type Segment = Staged & {
+  /** Column it starts in (0 = the week's first day) and how many it covers. */
+  start: number;
+  span: number;
+  /** Row inside the week; one booking keeps one row all week. */
+  lane: number;
+  /** It began before this week / runs on after it, so that end is flat. */
+  contLeft: boolean;
+  contRight: boolean;
+};
+
+/** Bars for `week` (consecutive day strings), stacked into the fewest rows:
+ *  earliest first, longer first on a tie, each into the first row free. */
+export function weekSegments(items: Staged[], week: string[]): Segment[] {
+  const first = week[0]!;
+  const last = week[week.length - 1]!;
+  const segs: Segment[] = items
+    .flatMap((x) => {
+      const days = daysCovered(x.b);
+      const a = days[0]!;
+      const z = days[days.length - 1]!;
+      if (z < first || a > last) return [];
+      const start = a < first ? 0 : week.indexOf(a);
+      const end = z > last ? week.length - 1 : week.indexOf(z);
+      return [{ ...x, start, span: end - start + 1, lane: 0, contLeft: a < first, contRight: z > last }];
+    })
+    .sort((p, q) => p.start - q.start || q.span - p.span || pickupIso(p.b).localeCompare(pickupIso(q.b)));
+  const laneEnd: number[] = [];
+  for (const s of segs) {
+    const free = laneEnd.findIndex((end) => end < s.start);
+    s.lane = free === -1 ? laneEnd.length : free;
+    laneEnd[s.lane] = s.start + s.span - 1;
+  }
+  return segs;
+}
+
 export interface Filters {
   q: string;
   source: "" | "ONLINE" | "OFFLINE";

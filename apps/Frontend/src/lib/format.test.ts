@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
-import { dateLabel, enumLabel, reviewTimeLabel, rupees } from "./format";
+import { dateLabel, enumLabel, phoneLabel, reviewTimeLabel, rupees } from "./format";
+import { splitPhone, validPhone } from "./countries";
 
 test("reviews use relative times today, Yesterday, and the date for older posts", () => {
   const now = new Date("2026-11-12T08:00:00+05:30");
@@ -48,4 +49,19 @@ test("dateLabel passes through anything that is not a date", () => {
 
 test("rupees still formats integer paise", () => {
   expect(rupees(50_000)).toBe("₹500");
+});
+
+test("Indian mobile numbers are grouped 5 + 5, others are untouched", () => {
+  expect(phoneLabel("+917039408159")).toBe("+91\u00a070394\u00a008159");
+  expect(phoneLabel("+14155550100")).toBe("+14155550100");
+  expect(phoneLabel("7039408159")).toBe("7039408159");
+});
+
+test("splitPhone and validPhone keep the country apart from the number", () => {
+  expect(splitPhone("+919812340001")).toMatchObject({ country: { code: "IN" }, local: "9812340001" });
+  expect(splitPhone("+9779812345678")).toMatchObject({ country: { code: "NP" }, local: "9812345678" });
+  expect(splitPhone("")).toMatchObject({ country: { code: "IN" }, local: "" });
+  expect(validPhone("+919812340001")).toBe(true);
+  expect(validPhone("+91981234000")).toBe(false);
+  expect(validPhone("+6591234567")).toBe(true);
 });

@@ -8,6 +8,7 @@ export default {
   viewCalendar: "कैलेंडर",
   searchPlaceholder: "नाम, फ़ोन या नंबर प्लेट",
   allVehicles: "सारी गाड़ियाँ",
+  allSources: "सारी बुकिंग",
   filterSource: "ऑनलाइन या वॉक-इन",
   filterVehicle: "गाड़ी",
   tabToday: "आज",

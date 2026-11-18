@@ -7,6 +7,7 @@ import {
   WithdrawalStateError,
 } from "../lib/wallet.ts";
 import type { NextFunction, Request, Response } from "express";
+import { ForeignStorageKeyError } from "../lib/storage.ts";
 import {
   EmailTakenError,
   InvalidOtpError,
@@ -85,6 +86,7 @@ import {
 import {
   ShopHasActiveBookingsError,
   ShopNotFoundError,
+  ShopOtherStateError,
 } from "../Routes/merchant/Shops/shopsService.ts";
 import {
   AlreadyMemberError,
@@ -413,6 +415,10 @@ export function errorHandler(
     res.status(404).json({ error: "shop_not_found", message: err.message });
     return;
   }
+  if (err instanceof ShopOtherStateError) {
+    res.status(409).json({ error: "shop_other_state", message: err.message });
+    return;
+  }
   if (err instanceof ShopHasActiveBookingsError) {
     res.status(409).json({ error: "shop_has_active_bookings", message: err.message });
     return;
@@ -543,6 +549,17 @@ export function errorHandler(
   }
   if (err instanceof ReviewNotFoundError) {
     res.status(404).json({ error: "review_not_found", message: err.message });
+    return;
+  }
+
+  // A malformed id in a URL ("/vehicles/abc") only fails once Postgres casts
+  // it. That is the caller's mistake, not a server fault worth a stack trace.
+  if ((err as { code?: string } | null)?.code === "22P02") {
+    res.status(400).json({ error: "invalid_id" });
+    return;
+  }
+  if (err instanceof ForeignStorageKeyError) {
+    res.status(400).json({ error: "invalid_storage_key", message: err.message });
     return;
   }
 

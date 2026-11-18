@@ -1,7 +1,9 @@
 import type { Pool } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
-import { storedContentType } from "../../../lib/storage.ts";
+import { can, type ShopRole } from "../../../lib/permissions.ts";
+import { assertOwnUpload, storedContentType } from "../../../lib/storage.ts";
 import type { TrackerClient } from "../../../providers/tracker.ts";
+import { ShopNotFoundError } from "../Shops/shopsService.ts";
 
 export class VehicleNotFoundError extends Error {}
 export class VehicleHasActiveBookingsError extends Error {}
@@ -15,6 +17,10 @@ function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === UNIQUE_VIOLATION;
 }
 
+/** End of the block (servicing etc.) covering right now, null when none. */
+const BLOCKED_UNTIL = `(select max(u.end_at) from vehicle_unavailability u
+  where u.vehicle_id = v.id and u.start_at <= now() and u.end_at > now()) as blocked_until`;
+
 export async function listVehicles(pool: Pool, shopId: string) {
   // `vehicle_pricing` is a LEFT join on purpose: adding a vehicle writes the
   // row and its pricing in two separate calls, so a vehicle whose second call
@@ -23,7 +29,7 @@ export async function listVehicles(pool: Pool, shopId: string) {
   // place to fix it.
   const { rows } = await pool.query(
     `select v.*, m.make, m.model,
-            vp.amount, vp.weekend_amount, vp.security_deposit_amount, vp.late_fee_amount
+            vp.amount, vp.weekend_amount, vp.security_deposit_amount, vp.late_fee_amount, ${BLOCKED_UNTIL}
        from vehicles v
        join vehicle_models m on m.id = v.model_id
        left join vehicle_pricing vp on vp.vehicle_id = v.id
@@ -36,7 +42,7 @@ export async function listVehicles(pool: Pool, shopId: string) {
 
 export async function getVehicle(pool: Pool, vehicleId: string) {
   const { rows } = await pool.query(
-    `select v.*, m.make, m.model
+    `select v.*, m.make, m.model, ${BLOCKED_UNTIL}
        from vehicles v
        join vehicle_models m on m.id = v.model_id
       where v.id = $1 and v.deleted_at is null`,
@@ -176,6 +182,78 @@ export async function softDeleteVehicle(pool: Pool, merchantUserId: string, vehi
   });
 }
 
+/**
+ * Moves a vehicle to another branch of the same owner. The caller already has
+ * fleet:write on the source shop (route middleware); they need it on the
+ * target too. Bookings have no shop of their own, so the vehicle's past rides
+ * and money show under the new branch from now on (the owner's choice). A
+ * vehicle with a live booking stays put: the customer was told where to collect it.
+ */
+export async function moveVehicle(pool: Pool, merchantUserId: string, vehicleId: string, toShopId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: vRows } = await client.query(
+      `select v.id, v.shop_id, s.merchant_user_id as owner_id, s.name as shop_name
+         from vehicles v join shops s on s.id = v.shop_id
+        where v.id = $1 and v.deleted_at is null
+        for update of v`,
+      [vehicleId],
+    );
+    const vehicle = vRows[0];
+    if (!vehicle) throw new VehicleNotFoundError(`vehicle ${vehicleId} not found`);
+
+    // Another owner's shop, a deleted one, or one where the caller can't manage
+    // vehicles all read as "not found": nothing about other shops leaks.
+    const { rows: tRows } = await client.query(
+      `select s.id, s.name, s.merchant_user_id, m.role
+         from shops s
+         join shop_members m on m.shop_id = s.id and m.merchant_user_id = $2
+                            and m.status = 'ACTIVE' and m.deleted_at is null
+        where s.id = $1 and s.deleted_at is null`,
+      [toShopId, merchantUserId],
+    );
+    const target = tRows[0];
+    if (!target || target.merchant_user_id !== vehicle.owner_id || !can(target.role as ShopRole, "fleet:write")) {
+      throw new ShopNotFoundError(`shop ${toShopId} not found`);
+    }
+    if (target.id === vehicle.shop_id) {
+      await client.query("COMMIT");
+      return getVehicle(pool, vehicleId);
+    }
+
+    const { rows: live } = await client.query(
+      `select 1 from bookings
+        where vehicle_id = $1 and status in ('HOLD', 'CONFIRMED') and deleted_at is null
+        limit 1`,
+      [vehicleId],
+    );
+    if (live.length > 0) throw new VehicleHasActiveBookingsError("vehicle has a live booking and cannot move");
+
+    await client.query(`update vehicles set shop_id = $2, updated_at = now() where id = $1`, [vehicleId, target.id]);
+    // One row per branch, so both activity logs show the move.
+    for (const shopId of [vehicle.shop_id, target.id]) {
+      await writeAudit(client, {
+        actorType: "MERCHANT",
+        actorId: merchantUserId,
+        action: "vehicle.moved",
+        entityType: "vehicle",
+        entityId: vehicleId,
+        shopId,
+        // The activity log reads only `after`, so both ends live there.
+        after: { fromShopId: vehicle.shop_id, from: vehicle.shop_name, toShopId: target.id, to: target.name },
+      });
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  return getVehicle(pool, vehicleId);
+}
+
 export interface RegistrationRecordInput {
   registrationNumber: string;
   registrationDate?: string;
@@ -300,11 +378,20 @@ async function requireDocument(pool: Pool, vehicleId: string, documentId: string
   return rows[0];
 }
 
-export async function attachDocumentFile(pool: Pool, merchantUserId: string, documentId: string, storageKey: string) {
+export async function attachDocumentFile(
+  pool: Pool,
+  merchantUserId: string,
+  vehicleId: string,
+  documentId: string,
+  storageKey: string,
+) {
+  // Pinned to the vehicle in the URL: requirePermission only vouches for that
+  // vehicle's shop, not for whichever document id the caller names.
+  assertOwnUpload(storageKey, `vehicles/${vehicleId}/documents/${documentId}/`);
   const { rows } = await pool.query(
     `update vehicle_documents set storage_key = $1, updated_at = now()
-      where id = $2 and deleted_at is null returning *`,
-    [storageKey, documentId],
+      where id = $2 and vehicle_id = $3 and deleted_at is null returning *`,
+    [storageKey, documentId, vehicleId],
   );
   if (rows.length === 0) throw new VehicleNotFoundError(`document ${documentId} not found`);
   await writeAudit(pool, {
@@ -356,6 +443,7 @@ export async function addMedia(
   vehicleId: string,
   input: { storageKey: string; type: "IMAGE" | "VIDEO"; displayOrder?: number },
 ) {
+  assertOwnUpload(input.storageKey, `vehicles/${vehicleId.toLowerCase()}/media/`);
   const { rows } = await pool.query(
     `insert into vehicle_media (vehicle_id, storage_key, type, display_order)
      values ($1, $2, $3, $4) returning *`,

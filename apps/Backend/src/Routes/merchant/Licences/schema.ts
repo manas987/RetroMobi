@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UPLOAD_CONTENT_TYPE } from "../../../lib/storage.ts";
 
 export const CreateLicenceSchema = z.object({
   licenceNumber: z.string().min(1),
@@ -17,7 +18,7 @@ export const ConfirmUploadSchema = z.object({
 });
 
 export const UploadRequestSchema = z.object({
-  contentType: z.string().min(1),
+  contentType: z.string().regex(UPLOAD_CONTENT_TYPE, "upload a photo, video or PDF"),
 });
 
 export const CreateMerchantDocumentSchema = z.object({

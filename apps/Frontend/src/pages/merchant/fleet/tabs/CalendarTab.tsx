@@ -7,7 +7,7 @@ import { useT } from "../../../../i18n";
 import { useMerchantShop } from "../../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../../query";
 import { renterName } from "../../bookingActions";
-import { Button, Card, Chip, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "../../ui/ui";
+import { Button, Card, Chip, ErrorNote, DateInput, Field, INPUT, LoadingRows, Sheet } from "../../ui/ui";
 import { useStagedBookings } from "../vehicleNow";
 
 export function CalendarTab({ id }: { id: string }) {
@@ -119,8 +119,8 @@ function BlockForm({ id, onDone }: { id: string; onDone: () => void }) {
   return (
     <div>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
-      <Field label={t("common.from")}><input className={INPUT} type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-      <Field label={t("fleet.untilIncl")} error={badRange ? t("fleet.badRange") : undefined}><input className={INPUT} type="date" value={until} onChange={(e) => setUntil(e.target.value)} /></Field>
+      <Field label={t("common.from")}><DateInput value={from} onChange={setFrom} /></Field>
+      <Field label={t("fleet.untilIncl")} error={badRange ? t("fleet.badRange") : undefined}><DateInput value={until} min={from || undefined} onChange={setUntil} /></Field>
       <Field label={`${t("fleet.fReason")} (${t("common.optional")})`} hint={t("fleet.reasonHint")}><input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
       <Button variant="primary" size="lg" className="w-full" disabled={busy || !from || !until || badRange} onClick={save}>{busy ? t("common.saving") : t("fleet.blockThese")}</Button>
     </div>

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "wouter";
 import { handleSessionExpiry, portalFetch, PortalApiError } from "../../lib/portal";
 import { translate, hasKey, type Lang } from "../../i18n";
@@ -11,23 +11,35 @@ import { translate, hasKey, type Lang } from "../../i18n";
 export function useMerchantQuery<T>(
   path: string | null,
   token: string,
-  opts: { refetchInterval?: number } = {},
+  opts: {
+    refetchInterval?: number;
+    /** Keep showing the last result while a new path loads (a range switch), instead of a skeleton. */
+    keepPrevious?: boolean;
+  } = {},
 ) {
   return useQuery<T, Error>({
-    queryKey: ["merchant", path],
+    ...merchantQuery<T>(path ?? "", token, opts.keepPrevious),
+    enabled: path != null,
+    refetchInterval: opts.refetchInterval,
+  });
+}
+
+/** The same query as `useMerchantQuery`, for `useQueries` (one request per shop). */
+export function merchantQuery<T>(path: string, token: string, keepPrevious = false) {
+  return {
+    queryKey: ["merchant", path] as const,
     queryFn: async () => {
       try {
-        return await portalFetch<T>("merchant", path!, { token });
+        return await portalFetch<T>("merchant", path, { token });
       } catch (err) {
         handleSessionExpiry("merchant", err);
         throw err;
       }
     },
-    enabled: path != null,
-    refetchInterval: opts.refetchInterval,
+    placeholderData: keepPrevious ? keepPreviousData : undefined,
     // A 4xx won't fix itself by retrying; a dropped connection on hill data might.
-    retry: (count, err) => !(err instanceof PortalApiError && err.status < 500) && count < 2,
-  });
+    retry: (count: number, err: Error) => !(err instanceof PortalApiError && err.status < 500) && count < 2,
+  };
 }
 
 /** Refetch every merchant query -- small shops, so blunt is fine. */

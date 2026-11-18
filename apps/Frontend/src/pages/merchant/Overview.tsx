@@ -16,11 +16,13 @@ import {
 } from "lucide-react";
 import type { Row } from "../../lib/portal";
 import { istDay, rupees } from "../../lib/format";
-import { bookingStage, nextAction, STAGE_TONE, type BookingStage } from "../../lib/bookingStage";
+import { bookingStage, STAGE_TONE, type BookingStage, type Tone } from "../../lib/bookingStage";
 import { useT } from "../../i18n";
 import { MerchantLayout, useMerchantShop } from "./Layout";
+import { GetListedChip } from "./setup/GetListedChip";
 import { useMerchantQuery } from "./query";
 import { HandoverSheet, renterName, ReturnSheet, WalkinSheet } from "./bookingActions";
+import { NextStep } from "./bookings/BookingRow";
 import { AVAIL_ORDER, AVAIL_TONE, vehicleNow, type Staged } from "./fleet/vehicleNow";
 import { BarChart, Button, Card, Chip, EmptyState, ErrorNote, LoadingRows, SERIES, StatCard, TONE } from "./ui/ui";
 
@@ -50,7 +52,6 @@ function OverviewBody() {
   const { token, shopId, can, myName } = useMerchantShop();
   const { t, date, time, tMaybe } = useT();
   const [walkinOpen, setWalkinOpen] = useState(false);
-  const [walkinVehicle, setWalkinVehicle] = useState<string | undefined>();
   const [handover, setHandover] = useState<Row | null>(null);
   const [returning, setReturning] = useState<Row | null>(null);
 
@@ -92,10 +93,10 @@ function OverviewBody() {
   for (const l of licences.data?.licences ?? []) {
     const number = String(l.licence_number ?? "");
     if (l.status !== "ACTIVE") {
-      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/shop?tab=documents",
+      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/papers",
         text: t("overview.needLicence", { number, status: tMaybe(`overview.licence_${String(l.status)}`) ?? String(l.status) }) });
     } else if (l.expires_at && String(l.expires_at).slice(0, 10) <= soon) {
-      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/shop?tab=documents",
+      needs.push({ key: `lic-${l.id}`, icon: FileWarning, tone: "attention", href: "/merchant/papers",
         text: t("overview.needLicenceExpiring", { number, date: date(`${String(l.expires_at).slice(0, 10)}T12:00:00`) }) });
     }
   }
@@ -122,7 +123,6 @@ function OverviewBody() {
 
   const late = count("OVERDUE");
   const canHandover = can("bookings:write");
-  const canReturn = can("bookings:return");
 
   const upcoming = staged
     .filter((x) => x.stage === "UPCOMING")
@@ -151,6 +151,9 @@ function OverviewBody() {
           </Button>
         )}
       </header>
+
+      {/* Phones have no sidebar, so the get-listed guide sits here too. */}
+      {shopId && can("fleet:read") && <div className="lg:hidden"><GetListedChip collapsed={false} token={token} shopId={shopId} className="" /></div>}
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
         <StatCard icon={CalendarClock} tone="attention" label={t("overview.statPickups")} href="/merchant/bookings?tab=today"
@@ -182,7 +185,6 @@ function OverviewBody() {
               ) : (
                 <ul className="@container flex flex-col gap-2">
                   {todayRows.map(({ b, stage, isPickup, at, late: isLate }) => {
-                    const act = nextAction(stage);
                     return (
                       <li key={String(b.id)} className={`flex flex-col gap-3 rounded-2xl border p-3 @md:flex-row @md:items-center ${isLate ? "border-danger/40 bg-danger-soft/40" : "border-line"}`}>
                         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -205,16 +207,7 @@ function OverviewBody() {
                             </div>
                           </div>
                         </div>
-                        {act === "handover" && canHandover && (
-                          <Button variant="primary" onClick={() => setHandover(b)} className="@md:shrink-0">
-                            {b.source === "OFFLINE" ? t("actions.handoverWalkin") : t("actions.handover")}
-                          </Button>
-                        )}
-                        {act === "return" && canReturn && (
-                          <Button variant="dark" onClick={() => setReturning(b)} className="@md:shrink-0">
-                            {t("actions.markReturned")}
-                          </Button>
-                        )}
+                        <NextStep b={b} stage={stage} onHandover={setHandover} onReturn={setReturning} className="@md:shrink-0" />
                       </li>
                     );
                   })}
@@ -268,8 +261,7 @@ function OverviewBody() {
               </ul>
             )}
           </Card>
-          <FleetNowCard vehicles={vehicles} staged={staged}
-            onBook={canHandover ? (id) => { setWalkinVehicle(id); setWalkinOpen(true); } : undefined} />
+          <FleetNowCard vehicles={vehicles} staged={staged} />
         </div>
 
         {/* ---- column 3: money, then what customers say ---- */}
@@ -279,7 +271,7 @@ function OverviewBody() {
         </div>
       </div>
 
-      <WalkinSheet open={walkinOpen} vehicleId={walkinVehicle} onClose={() => { setWalkinOpen(false); setWalkinVehicle(undefined); }} />
+      <WalkinSheet open={walkinOpen} onClose={() => setWalkinOpen(false)} />
       <HandoverSheet booking={handover} onClose={() => setHandover(null)} />
       <ReturnSheet booking={returning} onClose={() => setReturning(null)} />
     </div>
@@ -334,18 +326,16 @@ function MoneyOrRidesCard({ summary, isOwner }: { summary: ReturnType<typeof use
 
 /**
  * The fleet as the counter needs it when a walk-in arrives: which scooter can
- * go out right now, until when, and at what price -- with a Book button on the
- * free ones. Listing health lives on the Vehicles page; a rejected vehicle
+ * go out right now, until when, and at what price. Booking is the one
+ * "New walk-in" button at the top. Listing health lives on the Vehicles page; a rejected vehicle
  * already shows up under "Needs your attention".
  */
 function FleetNowCard({
   vehicles,
   staged,
-  onBook,
 }: {
   vehicles: ReturnType<typeof useMerchantQuery<{ vehicles: Row[] }>>;
   staged: Staged[];
-  onBook?: (vehicleId: string) => void;
 }) {
   const { t, date, time } = useT();
   const today = istDay(new Date());
@@ -368,57 +358,63 @@ function FleetNowCard({
 
     const rows = list
       .map((v) => {
-        const { avail: a, out, goes, next } = vehicleNow(v.id, staged);
+        const { avail: a, blockedUntil, out, goes, next, missed } = vehicleNow(v, staged);
         const price = v.amount == null ? t("overview.noPrice") : t("common.perDay", { amount: rupees(Number(v.amount)) });
         const detail =
           a === "OUT" ? t("overview.backAt", { when: when(out!.b.scheduled_return_at) })
+          : a === "BLOCKED" ? t("overview.blockedTill", { when: when(blockedUntil) })
+          : missed ? t("overview.missedAt", { when: when(goes!.b.scheduled_pickup_at) })
           : a === "TODAY" ? t("overview.goesAt", { when: when(goes!.b.scheduled_pickup_at) })
           : next ? `${price} · ${t("overview.nextBooking", { when: when(next.b.scheduled_pickup_at) })}`
           : price;
-        return { v, a, detail, late: out?.stage === "OVERDUE" };
+        return { v, a, detail, late: out?.stage === "OVERDUE", missed };
       })
       .sort((x, y) => AVAIL_ORDER[x.a] - AVAIL_ORDER[y.a]);
 
-    const tally = (["FREE", "TODAY", "OUT"] as const).map((a) => ({ a, n: rows.filter((r) => r.a === a).length }));
+    const tally = [
+      ...(["FREE", "TODAY", "OUT", "BLOCKED"] as const).map((a) => ({
+        a: a as string,
+        tone: AVAIL_TONE[a] as Tone,
+        label: t(`overview.avail_${a}` as const),
+        n: rows.filter((r) => r.a === a && !r.missed).length,
+      })),
+      { a: "MISSED", tone: "bad" as Tone, label: t("status.stage_PICKUP_LATE"), n: rows.filter((r) => r.missed).length },
+    ].filter((x) => (x.a !== "MISSED" && x.a !== "BLOCKED") || x.n > 0);
 
     return (
       <>
         {/* Availability at a glance: one bar, three states, labelled. */}
         <div className="mb-1 flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full" aria-hidden>
           {tally.filter((x) => x.n > 0).map((x) => (
-            <span key={x.a} className={TONE[AVAIL_TONE[x.a]].dot} style={{ flexGrow: x.n }} />
+            <span key={x.a} className={TONE[x.tone].dot} style={{ flexGrow: x.n }} />
           ))}
         </div>
         <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1">
           {tally.map((x) => (
             <li key={x.a} className="flex items-center gap-1.5 text-xs text-ink-2 whitespace-nowrap">
-              <span className={`h-2 w-2 rounded-full ${TONE[AVAIL_TONE[x.a]].dot}`} aria-hidden />
+              <span className={`h-2 w-2 rounded-full ${TONE[x.tone].dot}`} aria-hidden />
               <span className="tnum font-semibold text-ink">{x.n}</span>
-              {t(`overview.avail_${x.a}` as const)}
+              {x.label}
             </li>
           ))}
         </ul>
         <ul className="flex flex-col divide-y divide-line">
-          {rows.map(({ v, a, detail, late }) => {
+          {rows.map(({ v, a, detail, late, missed }) => {
             const name = `${String(v.make ?? "")} ${String(v.model ?? "")}`.trim();
             return (
               <li key={String(v.id)} className="flex items-center gap-3 py-2.5">
-                <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${TONE[late ? "bad" : AVAIL_TONE[a]].icon}`}>
+                <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${TONE[late || missed ? "bad" : AVAIL_TONE[a]].icon}`}>
                   <Bike className="h-4 w-4" aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{name}</p>
                   <p className="truncate text-xs text-ink-3">
-                    <span className="tnum">{String(v.registration_number ?? "")}</span> · <span className={late ? "font-semibold text-danger" : ""}>{detail}</span>
+                    <span className="tnum">{String(v.registration_number ?? "")}</span> · <span className={late || missed ? "font-semibold text-danger" : ""}>{detail}</span>
                   </p>
                 </div>
-                {a === "FREE" && onBook && v.amount != null ? (
-                  <Button className="min-h-9 shrink-0 px-3" onClick={() => onBook(String(v.id))} aria-label={t("overview.bookVehicle", { vehicle: name })}>
-                    {t("overview.book")}
-                  </Button>
-                ) : (
-                  <Chip tone={late ? "bad" : AVAIL_TONE[a]}>{late ? t("status.stage_OVERDUE") : t(`overview.avail_${a}` as const)}</Chip>
-                )}
+                <Chip tone={late || missed ? "bad" : AVAIL_TONE[a]}>
+                  {late ? t("status.stage_OVERDUE") : missed ? t("status.stage_PICKUP_LATE") : t(`overview.avail_${a}` as const)}
+                </Chip>
               </li>
             );
           })}

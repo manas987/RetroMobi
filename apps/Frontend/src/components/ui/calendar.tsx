@@ -16,8 +16,12 @@ export function Calendar({
   endMonth,
   captionLayout,
   defaultMonth,
+  pickYearLabel = "Select a year",
   ...props
-}: React.ComponentProps<typeof DayPicker>) {
+}: React.ComponentProps<typeof DayPicker> & { pickYearLabel?: string }) {
+  // Weekday letters and month names follow `locale` when one is passed (the
+  // merchant console's Hindi); everything else stays en-US as before.
+  const localeCode = props.locale?.code ?? "en-US";
   // Blocks navigating to a month that's entirely in the past — the "<" button
   // greys out once there's nowhere earlier left to go.
   const defaultStartMonth = new Date();
@@ -42,6 +46,8 @@ export function Calendar({
         maxDate={endMonth ?? new Date(new Date().getFullYear() + 10, 11, 31)}
         onMonth={setMonth}
         onView={setView}
+        localeCode={localeCode}
+        pickYearLabel={pickYearLabel}
       />
     );
   }
@@ -60,7 +66,7 @@ export function Calendar({
       formatters={{
         // react-day-picker's default short weekday ("Su", "Mo"...) reads
         // wider than Airbnb's narrow single-letter header ("S", "M"...).
-        formatWeekdayName: (date) => date.toLocaleDateString("en-US", { weekday: "narrow" }),
+        formatWeekdayName: (date) => date.toLocaleDateString(localeCode, { weekday: "narrow" }),
       }}
       classNames={{
         // `nav` below is positioned absolute against this element — without
@@ -160,7 +166,11 @@ function GridPicker({
   maxDate,
   onMonth,
   onView,
+  localeCode,
+  pickYearLabel,
 }: {
+  localeCode: string;
+  pickYearLabel: string;
   view: "months" | "years";
   month: Date;
   minDate: Date;
@@ -192,7 +202,7 @@ function GridPicker({
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="flex-1 text-center text-base font-semibold text-ink pr-9">Select a year</span>
+          <span className="flex-1 text-center text-base font-semibold text-ink pr-9">{pickYearLabel}</span>
         </div>
         <div className="grid grid-cols-4 gap-1 max-h-[18rem] overflow-y-auto">
           {years.map((y) => (
@@ -268,7 +278,7 @@ function GridPicker({
             }}
             className={cn(CELL, m === month.getMonth() && CELL_SELECTED, outOfRange(m) && CELL_DISABLED)}
           >
-            {new Date(2000, m, 1).toLocaleDateString("en-US", { month: "long" })}
+            {new Date(2000, m, 1).toLocaleDateString(localeCode, { month: "long" })}
           </button>
         ))}
       </div>

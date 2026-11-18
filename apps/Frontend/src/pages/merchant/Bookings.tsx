@@ -9,7 +9,7 @@ import { BookingCalendar } from "./bookings/BookingCalendar";
 import { BookingList } from "./bookings/BookingList";
 import { BookingSheet } from "./bookings/BookingSheet";
 import type { Filters } from "./bookings/filters";
-import { Button, INPUT, PageHeader, ViewToggle } from "./ui/ui";
+import { Button, INPUT, PageHeader, Select, ViewToggle } from "./ui/ui";
 
 export function MerchantBookings() {
   return (
@@ -73,17 +73,33 @@ function BookingsBody() {
             style={{ paddingLeft: 44 }}
           />
         </div>
-        <select aria-label={t("bookings.filterSource")} value={source} onChange={(e) => setSource(e.target.value as Filters["source"])} className={`${INPUT} sm:w-40`}>
-          <option value="">{t("common.all")}</option>
-          <option value="ONLINE">{t("common.online")}</option>
-          <option value="OFFLINE">{t("common.walkin")}</option>
-        </select>
-        <select aria-label={t("bookings.filterVehicle")} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className={`${INPUT} sm:w-52`}>
-          <option value="">{t("bookings.allVehicles")}</option>
-          {(vehicles.data?.vehicles ?? []).map((v) => (
-            <option key={String(v.id)} value={String(v.id)}>{String(v.make)} {String(v.model)} · {String(v.registration_number)}</option>
-          ))}
-        </select>
+        {/* Side by side on a phone, so the list starts higher. */}
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+        <Select
+          ariaLabel={t("bookings.filterSource")}
+          value={source}
+          onChange={(v) => setSource(v as Filters["source"])}
+          className="sm:w-40"
+          options={[
+            { value: "", label: t("bookings.allSources") },
+            { value: "ONLINE", label: t("common.online") },
+            { value: "OFFLINE", label: t("common.walkin") },
+          ]}
+        />
+        <Select
+          ariaLabel={t("bookings.filterVehicle")}
+          value={vehicleId}
+          onChange={setVehicleId}
+          className="sm:w-60"
+          options={[
+            { value: "", label: t("bookings.allVehicles") },
+            ...(vehicles.data?.vehicles ?? []).map((v) => ({
+              value: String(v.id),
+              label: `${String(v.make)} ${String(v.model)} · ${String(v.registration_number)}`,
+            })),
+          ]}
+        />
+        </div>
       </div>
 
       {view === "list" ? (

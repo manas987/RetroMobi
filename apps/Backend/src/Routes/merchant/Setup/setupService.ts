@@ -1,5 +1,11 @@
 import type { Pool } from "pg";
-import { MIN_VEHICLES_FOR_SHOP, REQUIRED_VEHICLE_DOCS } from "../../../lib/vehicleBookingRules.ts";
+import {
+  ALL_VEHICLE_DOCS,
+  MIN_VEHICLES_FOR_SHOP,
+  REQUIRED_BUSINESS_DOCS,
+  REQUIRED_SHOP_DOCS,
+  requiredVehicleDocs,
+} from "../../../lib/vehicleBookingRules.ts";
 import { ShopNotFoundError } from "../Shops/shopsService.ts";
 
 export type DocState = "MISSING" | "PENDING" | "VERIFIED" | "REJECTED" | "EXPIRED";
@@ -69,7 +75,7 @@ export async function getShopSetup(pool: Pool, shopId: string) {
   const payoutAccount = { status: (payoutRes.rows[0]?.status as string | undefined) ?? "NONE" };
 
   const vehicleRes = await pool.query(
-    `select v.id, m.make, m.model, v.registration_number, v.status, v.verification_status,
+    `select v.id, m.make, m.model, m.fuel_type, v.registration_number, v.status, v.verification_status,
             vp.vehicle_id is not null as price_set,
             (select count(*)::int from vehicle_media vm
               where vm.vehicle_id = v.id and vm.deleted_at is null and vm.type = 'IMAGE') as photo_count,
@@ -97,10 +103,12 @@ export async function getShopSetup(pool: Pool, shopId: string) {
 
   const shopVerified = shop.verification_status === "VERIFIED";
   const vehicles = vehicleRes.rows.map((v) => {
+    const required = requiredVehicleDocs(v.fuel_type);
+    // All six keys always, so a screen reading docs.PUC never meets undefined.
     const docs: Record<string, { state: DocState; id: string | null; note: string | null }> = {};
-    for (const type of REQUIRED_VEHICLE_DOCS) docs[type] = { state: "MISSING", id: null, note: null };
+    for (const type of ALL_VEHICLE_DOCS) docs[type] = { state: "MISSING", id: null, note: null };
     for (const d of v.docs as Array<Record<string, any>>) {
-      if (!(REQUIRED_VEHICLE_DOCS as readonly string[]).includes(d.type)) continue;
+      if (!(ALL_VEHICLE_DOCS as readonly string[]).includes(d.type)) continue;
       const state: DocState = !d.hasFile ? "MISSING" : d.expired ? "EXPIRED" : d.status;
       docs[d.type] = { state, id: d.id, note: d.note ?? null };
     }
@@ -108,14 +116,14 @@ export async function getShopSetup(pool: Pool, shopId: string) {
     const missing: string[] = [];
     if (!v.price_set) missing.push("price");
     if (v.photo_count === 0) missing.push("photo");
-    for (const type of REQUIRED_VEHICLE_DOCS) {
+    for (const type of required) {
       if (["MISSING", "REJECTED", "EXPIRED"].includes(docs[type]!.state)) missing.push(`doc:${type}`);
     }
 
     const ready = v.verification_status === "VERIFIED" && shopVerified && v.licence_linked;
     const broken =
       v.verification_status === "REJECTED" ||
-      REQUIRED_VEHICLE_DOCS.some((t) => ["REJECTED", "EXPIRED"].includes(docs[t]!.state));
+      required.some((t) => ["REJECTED", "EXPIRED"].includes(docs[t]!.state));
     const stage: SetupStage =
       ready && v.status === "ACTIVE"
         ? "SHOWING"
@@ -132,6 +140,8 @@ export async function getShopSetup(pool: Pool, shopId: string) {
       make: v.make as string,
       model: v.model as string,
       registrationNumber: v.registration_number as string,
+      fuelType: (v.fuel_type as string | null) ?? null,
+      requiredDocs: [...required],
       status: v.status as "ACTIVE" | "INACTIVE",
       verificationStatus: v.verification_status as string,
       rejectionNote: (v.rejection_note as string | null) ?? null,
@@ -151,10 +161,44 @@ export async function getShopSetup(pool: Pool, shopId: string) {
     };
   });
 
-  const completeVehicles = vehicles.filter((v) => v.missing.length === 0).length;
+  // Ready = every item in, or already approved by RetroMobi (vehicles listed
+  // before papers were required have no paper rows but are checked and live).
+  // A rejected or expired paper never counts.
+  const paperProblem = (v: (typeof vehicles)[number]) =>
+    v.requiredDocs.some((t) => ["REJECTED", "EXPIRED"].includes(v.docs[t]!.state));
+  const completeVehicles = vehicles.filter(
+    (v) => v.missing.length === 0 || (v.verificationStatus === "VERIFIED" && !paperProblem(v)),
+  ).length;
+  // Newest paper per type; same state rules as the vehicle papers above.
+  const paperRows = async (sql: string, id: string) =>
+    new Map((await pool.query(sql, [id])).rows.map((r) => [r.type as string, r]));
+  const paperQuery = (table: string, owner: string, entity: string) => `
+    select distinct on (type) type, id, status, storage_key is not null as has_file,
+           expires_at is not null and expires_at < ${IST_TODAY} as expired,
+           case when status = 'REJECTED' then ${rejectionNote(entity, "p.id")} end as note
+      from ${table} p where ${owner} = $1 and deleted_at is null
+     order by type, created_at desc`;
+  const toPapers = (types: readonly string[], required: readonly string[], rows: Map<string, any>) =>
+    types.map((type) => {
+      const r = rows.get(type);
+      const state: DocState = !r || !r.has_file ? "MISSING" : r.expired ? "EXPIRED" : r.status;
+      return { type, state, id: (r?.id as string) ?? null, note: (r?.note as string | null) ?? null, required: required.includes(type) };
+    });
+  const papers = {
+    business: toPapers(["BUSINESS_REG", "PAN", "GSTIN", "UDYAM"], REQUIRED_BUSINESS_DOCS,
+      await paperRows(paperQuery("merchant_documents", "merchant_user_id", "merchant_document"), shop.merchant_user_id)),
+    shop: toPapers(["SHOP_ACT", "PREMISES", "LANDLORD_NOC"], REQUIRED_SHOP_DOCS,
+      await paperRows(paperQuery("shop_documents", "shop_id", "shop_document"), shopId)),
+  };
+  const licenceOk = ["ACTIVE", "PENDING"].includes(licence.status);
+  const papersOk = [...papers.business, ...papers.shop]
+    .filter((p) => p.required)
+    .every((p) => p.state === "PENDING" || p.state === "VERIFIED");
+
   const steps = {
     shop: shop.has_address && shop.has_hours,
-    licence: ["ACTIVE", "PENDING"].includes(licence.status),
+    // An already-approved shop keeps the old rule, so new papers never reopen its guide.
+    licence: licenceOk && (shopVerified || papersOk),
     vehicles: completeVehicles > 0,
     payout: ["PENDING", "VERIFIED"].includes(payoutAccount.status),
     submitted: ["PENDING", "VERIFIED"].includes(shop.verification_status),
@@ -170,9 +214,10 @@ export async function getShopSetup(pool: Pool, shopId: string) {
       hasHours: shop.has_hours as boolean,
     },
     licence,
+    papers,
     payoutAccount,
     vehicles,
-    requiredDocs: [...REQUIRED_VEHICLE_DOCS],
+    requiredDocs: [...requiredVehicleDocs(null)],
     minVehiclesForShop: MIN_VEHICLES_FOR_SHOP,
     completeVehicles,
     steps,

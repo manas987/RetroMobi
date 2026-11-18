@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import type { Pool } from "pg";
 import { pool } from "../DB/client.ts";
 import { can, type Permission, type ShopRole } from "../lib/permissions.ts";
 
@@ -11,31 +12,38 @@ declare global {
   }
 }
 
-async function resolveShopId(req: Request): Promise<string | null> {
-  const direct = req.params.shopId ?? (req.body as any)?.shopId ?? (req.query as any)?.shopId;
-  if (!req.params.vehicleId && typeof direct === "string") return direct;
+/**
+ * The shop a request acts on. Every hint in the request (a `:shopId`, a body or
+ * query `shopId`, a vehicle, a booking) must name the same shop: checked one at a
+ * time, a member of shop A could name A next to shop B's vehicle and pass the
+ * check for A. `db` is a parameter so tests can point it at the test database.
+ */
+export async function resolveShopId(db: Pool, req: Request): Promise<string | null> {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const shops: (string | null)[] = [];
 
-  const vehicleId = req.params.vehicleId ?? (req.body as any)?.vehicleId;
+  const direct = req.params.shopId ?? body.shopId ?? (req.query as Record<string, unknown>)?.shopId;
+  if (typeof direct === "string") shops.push(direct);
+
+  const vehicleId = req.params.vehicleId ?? body.vehicleId;
   if (typeof vehicleId === "string") {
-    const { rows } = await pool.query(
-      `select shop_id from vehicles where id = $1 and deleted_at is null`,
-      [vehicleId],
-    );
-    return rows[0]?.shop_id ?? null;
+    const { rows } = await db.query(`select shop_id from vehicles where id = $1 and deleted_at is null`, [vehicleId]);
+    shops.push(rows[0]?.shop_id ?? null);
   }
 
-  const bookingId = req.params.bookingId ?? (req.body as any)?.bookingId;
+  const bookingId = req.params.bookingId ?? body.bookingId;
   if (typeof bookingId === "string") {
-    const { rows } = await pool.query(
+    const { rows } = await db.query(
       `select v.shop_id from bookings b
          join vehicles v on v.id = b.vehicle_id
         where b.id = $1 and b.deleted_at is null`,
       [bookingId],
     );
-    return rows[0]?.shop_id ?? null;
+    shops.push(rows[0]?.shop_id ?? null);
   }
 
-  return null;
+  const first = shops[0];
+  return first && shops.every((s) => s === first) ? first : null;
 }
 
 // Every merchant route is scoped to exactly one shop, but the URL names different
@@ -43,7 +51,7 @@ async function resolveShopId(req: Request): Promise<string | null> {
 // shop from whichever is present, then checks the caller's active membership.
 export function requirePermission(permission: Permission) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const shopId = await resolveShopId(req);
+    const shopId = await resolveShopId(pool, req);
     if (!shopId) {
       res.status(400).json({ error: "shop_scope_required" });
       return;

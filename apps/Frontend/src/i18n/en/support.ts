@@ -10,7 +10,6 @@ export default {
   open: "Open",
   waitingReply: "Waiting for your reply",
   empty: "No chats yet. If something goes wrong with a booking or a payment, start a chat and RetroMobi support will reply here.",
-  pickOne: "Pick a chat to read it.",
   noMessages: "No messages yet. Say what happened and support will reply here.",
   fromSupport: "RetroMobi support",
   typeMessage: "Type a message",

@@ -9,6 +9,8 @@ import { Button, Card, Chip, ErrorNote, LoadingRows, PageHeader } from "./ui/ui"
 import { AddStaffSheet } from "./staff/AddStaffSheet";
 import { MemberCard } from "./staff/MemberCard";
 import { ROLES, RoleCards, type Role } from "./staff/RoleCards";
+import { phoneLabel } from "../../lib/format";
+import { InvitesForYou } from "./staff/InvitesForYou";
 
 export function MerchantStaff() {
   return (
@@ -29,7 +31,6 @@ function StaffBody() {
 
   const members = useMerchantQuery<{ members: Row[] }>(canRead && shopId ? `/shops/${shopId}/members` : null, token);
   const invites = useMerchantQuery<{ invites: Row[] }>(canRead && shopId ? `/shops/${shopId}/invites` : null, token);
-  const mine = useMerchantQuery<{ invites: Row[] }>("/invites", token);
 
   const list = members.data?.members ?? [];
   const counts = Object.fromEntries(ROLES.map((r) => [r, list.filter((m) => m.role === r).length])) as Record<Role, number>;
@@ -43,15 +44,7 @@ function StaffBody() {
     <div className="@container">
       <PageHeader title={t("staff.title")} subtitle={t("staff.subtitle")} actions={addButton} />
 
-      {(mine.data?.invites.length ?? 0) > 0 && (
-        <Card title={t("staff.invitesForYou")} icon={UserPlus} className="mb-6">
-          <div className="flex flex-col gap-3">
-            {mine.data!.invites.map((i) => (
-              <MyInvite key={String(i.id)} invite={i} token={token} onAccepted={reloadShops} />
-            ))}
-          </div>
-        </Card>
-      )}
+      <InvitesForYou token={token} onAccepted={reloadShops} />
 
       {!canRead ? (
         <Card><p className="text-base text-ink-2">{t("staff.noAccess")}</p></Card>
@@ -68,15 +61,29 @@ function StaffBody() {
             ))}
           </div>
 
-          {list.length === 1 && (
-            <Card className="mt-4 @xl:flex-row @xl:items-center @xl:gap-4">
-              <span className="mb-3 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface-3 text-ink-3 @xl:mb-0">
-                <Users className="h-6 w-6" aria-hidden />
-              </span>
-              <p className="mb-3 flex-1 text-base text-ink-2 @xl:mb-0">{t("staff.onlyYou")}</p>
-              {addButton}
-            </Card>
-          )}
+          {/* Waits for the invites so it never flashes in; once one is sent it
+              fades and folds away (grid 1fr -> 0fr) instead of snapping out. */}
+          {list.length === 1 && invites.isSuccess && (() => {
+            const show = invites.data.invites.length === 0;
+            return (
+              <div
+                aria-hidden={!show}
+                inert={!show}
+                className={`grid transition-[grid-template-rows,opacity] delay-150 duration-500 ease-out motion-reduce:transition-none ${show ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+              >
+                {/* Clip only while folding, so the card's shadow isn't cut when shown. */}
+                <div className={`min-h-0 ${show ? "" : "overflow-hidden"}`}>
+                  <Card className="mt-4 @xl:flex-row @xl:items-center @xl:gap-4">
+                    <span className="mb-3 inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface-3 text-ink-3 @xl:mb-0">
+                      <Users className="h-6 w-6" aria-hidden />
+                    </span>
+                    <p className="mb-3 flex-1 text-base text-ink-2 @xl:mb-0">{t("staff.onlyYou")}</p>
+                    {addButton}
+                  </Card>
+                </div>
+              </div>
+            );
+          })()}
 
           {(invites.data?.invites.length ?? 0) > 0 && (
             <Card title={t("staff.waiting")} icon={UserPlus} className="mt-6">
@@ -112,7 +119,7 @@ function InviteRow({ invite: i, canManage, onCancel, errorOf, date }: {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-surface-2 p-3">
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2 text-base font-semibold text-ink">
-          <span className="tnum">{String(i.requested_to)}</span>
+          <span className="tnum">{phoneLabel(String(i.requested_to))}</span>
           <Chip tone="muted">{t(`common.role_${i.role as Role}`)}</Chip>
         </p>
         <p className="text-xs text-ink-3">{t("staff.invitedOn", { date: date(i.created_at) })}</p>
@@ -130,36 +137,3 @@ function InviteRow({ invite: i, canManage, onCancel, errorOf, date }: {
   );
 }
 
-function MyInvite({ invite: i, token, onAccepted }: { invite: Row; token: string; onAccepted: () => void }) {
-  const { t, lang } = useT();
-  const invalidate = useInvalidateMerchant();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function respond(accept: boolean) {
-    setBusy(true);
-    setError(null);
-    try {
-      await portalFetch("merchant", `/invites/${i.id}/respond`, { method: "POST", token, body: { accept } });
-      await invalidate();
-      if (accept) onAccepted();
-    } catch (err) {
-      setError(errorText(lang, err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <p className="text-base text-ink">{t("staff.inviteJoin", { shop: String(i.shop_name ?? ""), role: t(`common.role_${i.role as Role}`) })}</p>
-        {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-      </div>
-      <div className="flex gap-2">
-        <Button variant="primary" disabled={busy} onClick={() => respond(true)}>{t("staff.accept")}</Button>
-        <Button variant="ghost" disabled={busy} onClick={() => respond(false)}>{t("staff.decline")}</Button>
-      </div>
-    </div>
-  );
-}

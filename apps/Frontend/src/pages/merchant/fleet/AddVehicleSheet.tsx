@@ -1,12 +1,13 @@
 import { useState } from "react";
+import * as Collapsible from "@radix-ui/react-collapsible";
 import { Link } from "wouter";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ChevronDown } from "lucide-react";
 import { portalFetch, type Row } from "../../../lib/portal";
 import { enumLabel } from "../../../lib/format";
 import { useT } from "../../../i18n";
 import { useMerchantShop } from "../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { Button, ErrorNote, Field, INPUT, Sheet } from "../ui/ui";
+import { Button, ErrorNote, Field, INPUT, Select, Sheet } from "../ui/ui";
 
 export function AddVehicleSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useT();
@@ -93,16 +94,14 @@ function AddForm({ onClose }: { onClose: () => void }) {
     <div>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       <Field label={t("fleet.fModel")}>
-        <select className={INPUT} value={modelId} onChange={(e) => setModelId(e.target.value)}>
-          <option value="">{t("fleet.pickModel")}</option>
-          {[...byMake].map(([make, list]) => (
-            <optgroup key={make} label={make}>
-              {list.map((m) => (
-                <option key={String(m.id)} value={String(m.id)}>{String(m.model)} ({enumLabel(m.fuel_type)})</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+        <Select
+          value={modelId}
+          onChange={setModelId}
+          placeholder={t("fleet.pickModel")}
+          options={[...byMake].flatMap(([make, list]) =>
+            list.map((m) => ({ value: String(m.id), label: `${String(m.model)} (${enumLabel(m.fuel_type)})`, group: make })),
+          )}
+        />
       </Field>
       <Field label={t("fleet.fPlate")}>
         <input className={INPUT} value={plate} autoCapitalize="characters" onChange={(e) => setPlate(e.target.value.toUpperCase())} />
@@ -111,20 +110,25 @@ function AddForm({ onClose }: { onClose: () => void }) {
         <input className={INPUT} value={color} onChange={(e) => setColor(e.target.value)} />
       </Field>
 
-      <details className="mb-5 rounded-2xl bg-surface-2 p-4">
-        <summary className="min-h-6 cursor-pointer text-sm font-semibold text-ink">{t("fleet.priceLater")}</summary>
-        <div className="mt-4">
-          <Field label={t("fleet.fPerDay")}>
-            <input className={INPUT} type="number" inputMode="numeric" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </Field>
-          <Field label={t("fleet.fDeposit")} error={depositTooHigh ? t("fleet.depositMax") : undefined}>
-            <input className={INPUT} type="number" inputMode="numeric" min="0" value={deposit} onChange={(e) => setDeposit(e.target.value)} />
-          </Field>
-          <Field label={t("fleet.fLateFee")}>
-            <input className={INPUT} type="number" inputMode="numeric" min="0" value={lateFee} onChange={(e) => setLateFee(e.target.value)} />
-          </Field>
-        </div>
-      </details>
+      <Collapsible.Root className="group mb-5 rounded-2xl bg-surface-2 p-4">
+        <Collapsible.Trigger className="flex min-h-6 w-full cursor-pointer items-center justify-between gap-2 text-left text-sm font-semibold text-ink">
+          {t("fleet.priceLater")}
+          <ChevronDown className="h-5 w-5 shrink-0 text-ink-3 transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-data-[state=open]:rotate-180" aria-hidden />
+        </Collapsible.Trigger>
+        <Collapsible.Content className="reveal">
+          <div className="pt-4">
+            <Field label={t("fleet.fPerDay")}>
+              <input className={INPUT} type="number" inputMode="numeric" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </Field>
+            <Field label={t("fleet.fDeposit")} error={depositTooHigh ? t("fleet.depositMax") : undefined}>
+              <input className={INPUT} type="number" inputMode="numeric" min="0" value={deposit} onChange={(e) => setDeposit(e.target.value)} />
+            </Field>
+            <Field label={t("fleet.fLateFee")}>
+              <input className={INPUT} type="number" inputMode="numeric" min="0" value={lateFee} onChange={(e) => setLateFee(e.target.value)} />
+            </Field>
+          </div>
+        </Collapsible.Content>
+      </Collapsible.Root>
 
       <Button variant="primary" size="lg" className="w-full" disabled={busy || !valid} onClick={submit}>
         {busy ? t("common.saving") : t("fleet.addVehicle")}

@@ -7,6 +7,29 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+export class ForeignStorageKeyError extends Error {}
+
+/**
+ * What a merchant may upload as a paper or a vehicle photo/video. The type is
+ * signed into the presigned PUT, so this is what the stored object is served
+ * as: no HTML, SVG or script that a browser would run when someone opens the
+ * download link. octet-stream stays allowed because some phones report no type
+ * for HEIC photos, and browsers download it rather than render it.
+ */
+export const UPLOAD_CONTENT_TYPE = /^(image\/(?!svg)[a-z0-9.+-]+|video\/[a-z0-9.+-]+|application\/(pdf|octet-stream))$/i;
+
+/**
+ * A confirm call names the object the client says it uploaded. It has to be
+ * one this record's own presign handed out (its prefix plus the generated
+ * timestamp or uuid), or a caller who learns another object's key could attach
+ * it to their own record and then download it.
+ */
+export function assertOwnUpload(key: string, prefix: string): void {
+  if (!key.startsWith(prefix) || !/^(?:\d{13}|[0-9a-f-]{36})$/.test(key.slice(prefix.length))) {
+    throw new ForeignStorageKeyError(`storage key is not an upload for ${prefix}`);
+  }
+}
+
 function getClient(): { client: S3Client; bucket: string } | null {
   const accountId = process.env.R2_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
@@ -55,6 +78,9 @@ export async function presignDownload(key: string, expiresIn = 300): Promise<str
   const command = new GetObjectCommand({ Bucket: bucket, Key: key });
   return getSignedUrl(client, command, { expiresIn });
 }
+
+/** False in local dev without R2 credentials, where uploads take the dev-fallback path. */
+export const storageConfigured = () => getClient() != null;
 
 export async function storedContentType(key: string): Promise<string | null | undefined> {
   const config = getClient();

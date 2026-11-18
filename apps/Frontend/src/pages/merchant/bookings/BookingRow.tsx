@@ -1,6 +1,6 @@
-import { CalendarClock, CheckCircle2, RotateCcw } from "lucide-react";
+import { CalendarClock, CheckCircle2, RotateCcw, Video } from "lucide-react";
 import type { Row } from "../../../lib/portal";
-import { istDay } from "../../../lib/format";
+import { istDay, phoneLabel } from "../../../lib/format";
 import { nextAction, STAGE_TONE, type BookingStage, type Tone } from "../../../lib/bookingStage";
 import { useT } from "../../../i18n";
 import { renterName, vehicleLabel } from "../bookingActions";
@@ -26,6 +26,14 @@ export function NextStep({ b, stage, onHandover, onReturn, className = "" }: { b
   const { t } = useT();
   const { can } = useMerchantShop();
   const act = nextAction(stage);
+  // ID checked; the ride starts once the customer records the vehicle video.
+  if (act === "handover" && b.source !== "OFFLINE" && b.id_checked)
+    return (
+      <span className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold ${TONE.info.chip} ${className}`}>
+        <Video className="h-4 w-4 shrink-0" aria-hidden />
+        {t("actions.waitingVideo")}
+      </span>
+    );
   if (act === "handover" && can("bookings:write"))
     return (
       <Button variant="primary" className={className} onClick={(e) => { e.stopPropagation(); onHandover(b); }}>
@@ -55,9 +63,11 @@ export function BookingRow({ b, stage, actions }: { b: Row; stage: BookingStage 
   const p = pickupIso(b);
   const r = returnIso(b);
   const sameDay = istDay(new Date(p)) === istDay(new Date(r));
+  // Non-breaking inside each end, so a narrow row breaks at the arrow, never inside "10:00 am".
+  const keep = (s: string) => s.replace(/ /g, "\u00a0");
   const times = t("bookings.untilDay", {
-    pickup: time(p),
-    ret: sameDay ? time(r) : `${date(r, { weekday: "short", day: "numeric" })}, ${time(r)}`,
+    pickup: keep(time(p)),
+    ret: keep(sameDay ? time(r) : `${date(r, { weekday: "short", day: "numeric" })}, ${time(r)}`),
   });
   const deposit = b.source !== "OFFLINE" && b.deposit_status ? String(b.deposit_status) : null;
   const late = stage === "PICKUP_LATE" || stage === "OVERDUE";
@@ -79,7 +89,7 @@ export function BookingRow({ b, stage, actions }: { b: Row; stage: BookingStage 
         </div>
         {phone && (
           <a href={`tel:${phone}`} onClick={(e) => e.stopPropagation()} className="tnum text-sm text-ink-3 hover:text-ink">
-            {phone}
+            {phoneLabel(phone)}
           </a>
         )}
       </div>

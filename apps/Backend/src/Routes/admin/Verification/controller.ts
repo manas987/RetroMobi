@@ -53,6 +53,11 @@ export async function merchantDocument(req: Request, res: Response) {
   res.status(200).json({ decided: true });
 }
 
+export async function shopDocument(req: Request, res: Response) {
+  await verificationService.decideShopDocument(pool, req.adminId!, pathParam(req, "documentId"), req.body);
+  res.status(200).json({ decided: true });
+}
+
 export async function shopLicence(req: Request, res: Response) {
   await verificationService.decideShopLicence(
     pool,

@@ -98,9 +98,14 @@ describe("assertConfig", () => {
   // The hash is the only thing kept of a licence number, so a guessable hash
   // is the number. See lib/verificationHash.ts.
   test("in production, a missing licence-hash pepper refuses to boot", () => {
-    expect(() => assertConfig({ ...productionValid, DL_HASH_PEPPER: undefined })).toThrow(
+    expect(() => assertConfig({ ...productionValid, ONLINE_LICENCE_CHECK: "true", DL_HASH_PEPPER: undefined })).toThrow(
       /DL_HASH_PEPPER/,
     );
+  });
+
+  // Beta: no licence numbers are stored, so there is nothing to pepper.
+  test("in production without the online licence check, the pepper is optional", () => {
+    expect(() => assertConfig({ ...productionValid, ONLINE_LICENCE_CHECK: undefined, DL_HASH_PEPPER: undefined })).not.toThrow();
   });
 
   test("in production, the fake-licence escape hatch refuses to boot", () => {

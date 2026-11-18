@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Bike,
+  Building2,
   CalendarCheck,
   ChevronsLeft,
   ChevronsRight,
@@ -11,22 +12,25 @@ import {
   Home,
   IndianRupee,
   Languages,
+  LayoutGrid,
   LogOut,
   Menu,
   MessageCircle,
+  ScrollText,
   Store,
   Users,
   type LucideIcon,
   TicketPercent,
 } from "lucide-react";
 import { usePortalSession, portalFetch, PortalApiError, type Row } from "../../lib/portal";
-import { ErrorBox, SubmitButton, TextField } from "../../components/AuthFormBits";
+import { ErrorBox } from "../../components/AuthFormBits";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { can as hasPermission, type Permission } from "../../lib/permissions";
 import { setLang, useT, type TKey } from "../../i18n";
-import { useMerchantQuery } from "./query";
-import { Sheet } from "./ui/ui";
-import { GetListedChip } from "./setup/GetListedChip";
+import { errorText, useMerchantQuery } from "./query";
+import { Button, ErrorNote, Field, INPUT, Sheet } from "./ui/ui";
+import { GetListedChip, useSetupPending } from "./setup/GetListedChip";
+import { InvitesForYou } from "./staff/InvitesForYou";
 
 interface MerchantCtx {
   token: string;
@@ -55,6 +59,8 @@ interface NavItem {
   label: TKey;
   icon: LucideIcon;
   needs?: Permission;
+  /** Only shown to someone who can see two or more shops. */
+  multiOnly?: boolean;
 }
 
 /**
@@ -83,9 +89,18 @@ const NAV: { group: TKey; items: NavItem[] }[] = [
   {
     group: "nav.groupShop",
     items: [
-      { href: "/merchant/shop", label: "nav.shopAndPapers", icon: Store },
+      { href: "/merchant/shop", label: "nav.shop", icon: Store },
       { href: "/merchant/staff", label: "nav.staff", icon: Users, needs: "members:read" },
       { href: "/merchant/activity", label: "nav.activity", icon: History, needs: "members:read" },
+    ],
+  },
+  // Things that span every branch. Last, so the phone tab bar's NAV[0..2] indexes don't move.
+  {
+    group: "nav.groupAllShops",
+    items: [
+      { href: "/merchant/shops", label: "nav.allBranches", icon: Building2 },
+      { href: "/merchant/papers", label: "nav.documents", icon: ScrollText },
+      { href: "/merchant/all-vehicles", label: "nav.allVehicles", icon: LayoutGrid, multiOnly: true },
     ],
   },
 ];
@@ -156,6 +171,8 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
 
   // Close the phone menu whenever the page changes.
   useEffect(() => setMenuOpen(false), [path]);
+  const setupPending = useSetupPending(token,
+    shopId && hasPermission(String(shops.find((s) => s.id === shopId)?.role ?? "") || null, "fleet:read") ? shopId : null);
 
   if (!session) return null;
 
@@ -169,7 +186,8 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
     navigate("/merchant/login");
   };
 
-  const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.needs || can(i.needs)) })).filter(
+  const multi = shops.filter((s) => hasPermission(String(s.role ?? ""), "fleet:read")).length > 1;
+  const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => (!i.needs || can(i.needs)) && (!i.multiOnly || multi)) })).filter(
     (g) => g.items.length > 0,
   );
 
@@ -213,11 +231,14 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
         )}
 
         {shopId && can("fleet:read") && <GetListedChip collapsed={collapsed} token={token} shopId={shopId} />}
-        <NavList groups={groups} path={path} collapsed={collapsed} />
+        <NavList groups={groups} path={path} collapsed={collapsed} dense />
 
-        <div className="border-t border-line p-3 flex flex-col gap-3">
-          {currentShop && <ShopPageLink shopId={String(currentShop.id)} compact={collapsed} />}
-          <LangPill compact={collapsed} />
+        {/* Kept short: the nav above has to fit a 768-900px laptop screen. */}
+        <div className="border-t border-line p-3 flex flex-col gap-2">
+          <div className={`flex gap-2 ${collapsed ? "flex-col" : "items-center"}`}>
+            {currentShop && <ShopPageLink shopId={String(currentShop.id)} compact={collapsed} />}
+            <LangPill compact={collapsed} />
+          </div>
           <UserChip name={myName} role={role} collapsed={collapsed} onSignOut={signOut} />
         </div>
       </aside>
@@ -246,7 +267,10 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
           )}
 
           {!loadError && loaded && shops.length === 0 && (
-            <FirstShopForm token={session.accessToken} onCreated={() => void shopsQ.refetch()} />
+            <div className="max-w-md">
+              <InvitesForYou token={session.accessToken} onAccepted={() => void shopsQ.refetch()} className="mb-4" />
+              <FirstShopForm token={session.accessToken} onCreated={() => void shopsQ.refetch()} />
+            </div>
           )}
 
           {!loadError && loaded && shops.length > 0 && shopId && (
@@ -289,8 +313,9 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
           onClick={() => setMenuOpen(true)}
           className="flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium text-ink-3"
         >
-          <span className="inline-flex h-8 w-12 items-center justify-center">
+          <span className="relative inline-flex h-8 w-12 items-center justify-center">
             <Menu className="h-5 w-5" aria-hidden />
+            {setupPending && <span className="absolute right-2.5 top-1 h-2.5 w-2.5 rounded-full bg-amber-edge" aria-label={t("setup.chipTitle")} />}
           </span>
           {t("common.more")}
         </button>
@@ -309,10 +334,26 @@ export function MerchantLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NavList({ groups, path, collapsed }: { groups: { group: TKey; items: NavItem[] }[]; path: string; collapsed: boolean }) {
+function NavList({
+  groups,
+  path,
+  collapsed,
+  dense = false,
+}: {
+  groups: { group: TKey; items: NavItem[] }[];
+  path: string;
+  collapsed: boolean;
+  /** Desktop sidebar: 40px rows (mouse) so the whole list fits a laptop screen. */
+  dense?: boolean;
+}) {
   const { t } = useT();
+  // On a short screen the list scrolls; never leave the page you're on out of sight.
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+  }, [path]);
   return (
-    <nav className="flex-1 overflow-y-auto p-3 flex flex-col gap-4">
+    <nav ref={ref} className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
       {groups.map((g) => (
         <div key={g.group}>
           {!collapsed && (
@@ -327,7 +368,7 @@ function NavList({ groups, path, collapsed }: { groups: { group: TKey; items: Na
                     href={item.href}
                     title={collapsed ? t(item.label) : undefined}
                     aria-current={active ? "page" : undefined}
-                    className={`flex min-h-11 items-center gap-3 rounded-2xl px-3 text-[15px] ${collapsed ? "justify-center" : ""} ${
+                    className={`flex ${dense ? "min-h-10" : "min-h-11"} items-center gap-3 rounded-2xl px-3 text-[15px] ${collapsed ? "justify-center" : ""} ${
                       active ? "bg-ink text-surface font-medium" : "text-ink-2 hover:bg-surface-3 hover:text-ink"
                     }`}
                   >
@@ -353,10 +394,10 @@ function ShopPageLink({ shopId, compact }: { shopId: string; compact: boolean })
       href={`/shops/${shopId}`}
       target="_blank"
       rel="noreferrer"
-      title={compact ? t("common.yourShopPage") : undefined}
-      className={`flex min-h-10 items-center gap-2 rounded-xl px-3 text-sm text-ink-2 hover:bg-surface-3 hover:text-ink ${compact ? "justify-center" : "justify-between"}`}
+      title={t("common.yourShopPage")}
+      className={`flex min-h-10 min-w-0 flex-1 items-center gap-1.5 rounded-xl px-2.5 text-sm text-ink-2 hover:bg-surface-3 hover:text-ink ${compact ? "justify-center" : ""}`}
     >
-      {compact ? <span className="sr-only">{t("common.yourShopPage")}</span> : t("common.yourShopPage")}
+      {compact ? <span className="sr-only">{t("common.yourShopPage")}</span> : <span className="truncate">{t("common.yourShopPage")}</span>}
       <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
     </a>
   );
@@ -468,7 +509,10 @@ function ShopSwitcher({
       ) : (
         <Select value={shopId ?? ""} onValueChange={onChange}>
           <SelectTrigger className="mt-1 h-auto min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left">
-            <SelectValue className="min-w-0 flex-1">{label(current, true)}</SelectValue>
+            {/* Radix drops SelectValue's className, so the shrinking wrapper is ours. */}
+            <span className="min-w-0 flex-1 overflow-hidden">
+              <SelectValue>{label(current, true)}</SelectValue>
+            </span>
           </SelectTrigger>
           <SelectContent>
             {shops.map((s) => (
@@ -485,7 +529,7 @@ function ShopSwitcher({
 }
 
 function FirstShopForm({ token, onCreated }: { token: string; onCreated: () => void }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const [name, setName] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
   const [city, setCity] = useState("");
@@ -505,25 +549,32 @@ function FirstShopForm({ token, onCreated }: { token: string; onCreated: () => v
       });
       onCreated();
     } catch (err) {
-      setError(err instanceof PortalApiError ? err.message : t("errors.generic"));
+      setError(errorText(lang, err));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="max-w-md bg-surface rounded-card shadow-card p-6">
-      <h1 className="text-2xl font-semibold text-ink mb-1">{t("common.firstShopTitle")}</h1>
-      <p className="text-sm text-ink-2 mb-6">{t("common.firstShopBody")}</p>
-      {error && <ErrorBox text={error} />}
-      <TextField label={t("common.shopName")} value={name} onChange={setName} autoFocus />
-      <TextField label={t("common.address")} value={addressLine1} onChange={setAddressLine1} />
-      <TextField label={t("common.city")} value={city} onChange={setCity} />
-      <TextField label={t("common.state")} value={state} onChange={setState} />
-      <TextField label={t("common.pincode")} value={pincode} onChange={setPincode} />
-      <SubmitButton busy={busy} disabled={!name || !addressLine1 || !city || !state || pincode.length !== 6} onClick={submit}>
-        {t("common.createShop")}
-      </SubmitButton>
+    <div className="rounded-card bg-surface p-6 shadow-card">
+      <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold text-ink">
+        <Store className="h-6 w-6 shrink-0" aria-hidden />
+        {t("common.firstShopTitle")}
+      </h1>
+      <p className="mb-6 text-base text-ink-2">{t("common.firstShopBody")}</p>
+      {error && <div className="mb-4"><ErrorNote text={error} /></div>}
+      <Field label={t("common.shopName")}><input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label={t("common.address")}><input className={INPUT} value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} /></Field>
+      <div className="grid gap-x-3 sm:grid-cols-2">
+        <Field label={t("common.city")}><input className={INPUT} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
+        <Field label={t("common.pincode")}>
+          <input className={`${INPUT} tnum`} inputMode="numeric" maxLength={6} value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))} />
+        </Field>
+      </div>
+      <Field label={t("common.state")}><input className={INPUT} value={state} onChange={(e) => setState(e.target.value)} /></Field>
+      <Button variant="primary" size="lg" className="w-full" disabled={busy || !name || !addressLine1 || !city || !state || pincode.length !== 6} onClick={submit}>
+        {busy ? t("common.saving") : t("common.createShop")}
+      </Button>
     </div>
   );
 }

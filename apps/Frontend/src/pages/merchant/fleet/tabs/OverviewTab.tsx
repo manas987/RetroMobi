@@ -5,14 +5,14 @@ import { portalFetch, type Row } from "../../../../lib/portal";
 import { STAGE_TONE } from "../../../../lib/bookingStage";
 import { useT } from "../../../../i18n";
 import { useMerchantShop } from "../../Layout";
-import { errorText } from "../../query";
+import { errorText, useInvalidateMerchant } from "../../query";
 import { renterName } from "../../bookingActions";
 import { Button, Card, Chip, ConfirmSheet, LoadingRows } from "../../ui/ui";
 import { AvailChip } from "../VehicleCard";
 import { ListingBox, type SetupVehicle } from "../SetupBoard";
 import { useStagedBookings } from "../vehicleNow";
 
-const ITEM_TAB: Record<string, string> = { price: "price", photo: "photos", "doc:RC": "documents", "doc:INSURANCE": "documents", "doc:PUC": "documents" };
+const itemTab = (item: string) => (item.startsWith("doc:") ? "documents" : item === "photo" ? "photos" : "price");
 
 export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
   const { token, can } = useMerchantShop();
@@ -20,6 +20,7 @@ export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
   const [, go] = useLocation();
   const { staged } = useStagedBookings();
   const [confirm, setConfirm] = useState(false);
+  const invalidate = useInvalidateMerchant();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const id = String(v.id);
@@ -33,6 +34,7 @@ export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
     setError(null);
     try {
       await portalFetch("merchant", `/vehicles/${id}`, { method: "DELETE", token });
+      await invalidate();
       go("/merchant/fleet");
     } catch (err) {
       setError(errorText(lang, err));
@@ -44,7 +46,7 @@ export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
       <Card title={t("fleet.rightNow")} icon={CalendarCheck}>
-        <div className="mb-3"><AvailChip id={id} staged={staged} /></div>
+        <div className="mb-3"><AvailChip v={v} staged={staged} /></div>
         {next.length === 0 ? (
           <p className="text-sm text-ink-3">{t("fleet.noUpcoming")}</p>
         ) : (
@@ -65,7 +67,7 @@ export function OverviewTab({ v, sv }: { v: Row; sv?: SetupVehicle }) {
       </Card>
 
       <Card title={t("fleet.listingTitle")} icon={Rocket}>
-        {sv ? <ListingBox v={sv} itemHref={(item) => `/merchant/fleet/${id}?tab=${ITEM_TAB[item] ?? "overview"}`} /> : <LoadingRows rows={2} />}
+        {sv ? <ListingBox v={sv} itemHref={(item) => `/merchant/fleet/${id}?tab=${itemTab(item)}`} /> : <LoadingRows rows={2} />}
       </Card>
 
       {can("fleet:write") && (

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Camera, Download, FileText, Plus, Trash2, Upload } from "lucide-react";
+import { Camera, Download, FileText, Trash2, Upload } from "lucide-react";
 import { portalFetch, type Row } from "../../../../lib/portal";
 import { uploadFile, UploadFailedError } from "../../../../lib/upload";
 import { istDay } from "../../../../lib/format";
@@ -7,11 +7,19 @@ import { useT, type TKey } from "../../../../i18n";
 import type { Tone } from "../../../../lib/bookingStage";
 import { useMerchantShop } from "../../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../../query";
-import { Button, Card, Chip, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "../../ui/ui";
+import { DocUpload } from "../../setup/DocUpload";
+import { Button, Card, Chip, ErrorNote, DateInput, Field, INPUT, LoadingRows, Sheet } from "../../ui/ui";
 import { DOC_LABEL, useSetup } from "../SetupBoard";
 
-const TYPES = ["RC", "INSURANCE", "PUC", "FITNESS", "PERMIT", "TAX"] as const;
-const REQUIRED = ["RC", "INSURANCE", "PUC"];
+/** The five groups from the rental rules. Fitness and road tax are two papers under one heading. */
+const GROUPS = [
+  { key: "RC", types: ["RC"] },
+  { key: "INSURANCE", types: ["INSURANCE"] },
+  { key: "PERMIT", types: ["PERMIT"] },
+  { key: "PUC", types: ["PUC"] },
+  { key: "FITNESS_TAX", types: ["FITNESS", "TAX"] },
+] as const;
+const PETROL = ["RC", "INSURANCE", "PERMIT", "PUC", "FITNESS", "TAX"];
 
 const STATUS: Record<string, { tone: Tone; label: TKey }> = {
   PENDING: { tone: "info", label: "fleet.docPending" },
@@ -27,6 +35,8 @@ export function PapersTab({ id }: { id: string }) {
   const q = useMerchantQuery<{ documents: Row[] }>(`/vehicles/${id}/documents`, token);
   const setup = useSetup().data?.vehicles.find((v) => v.id === id);
   const [adding, setAdding] = useState<string | null>(null); // doc type being added
+  // An electric vehicle needs no PUC and no permit, so those groups drop out.
+  const required: string[] = setup?.requiredDocs ?? PETROL;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const replaceFor = useRef<string | null>(null);
@@ -58,51 +68,72 @@ export function PapersTab({ id }: { id: string }) {
       window.open(r.downloadUrl, "_blank", "noreferrer");
     });
 
-  // Required papers that have no row yet still get a visible slot.
-  const empty = REQUIRED.filter((type) => !docs.some((d) => d.type === type));
+  const filled = (d: Row) => {
+    const type = String(d.type);
+    const expired = d.expires_at != null && String(d.expires_at).slice(0, 10) < today;
+    const st = STATUS[expired ? "EXPIRED" : String(d.status)] ?? STATUS.PENDING!;
+    const note = setup?.docs[type]?.state === "REJECTED" ? setup.docs[type]!.note : null;
+    return (
+      <li key={String(d.id)} className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-2 text-sm font-semibold text-ink"><FileText className="h-4 w-4 text-ink-3" aria-hidden />{DOC_LABEL[type] ? t(DOC_LABEL[type]) : type}</span>
+          {d.storage_key ? <Chip tone={st.tone}>{t(st.label)}</Chip> : <Chip tone="muted">{t("fleet.noFile")}</Chip>}
+          {required.includes(type) && <Chip tone="muted">{t("fleet.neededChip")}</Chip>}
+        </div>
+        <p className="text-xs text-ink-3">
+          {d.document_number ? `${String(d.document_number)} · ` : ""}
+          {d.expires_at ? t(expired ? "fleet.expiredOn" : "fleet.validTo", { date: date(String(d.expires_at).slice(0, 10) + "T12:00:00+05:30", { day: "numeric", month: "short", year: "numeric" }) }) : t("fleet.noExpiry")}
+        </p>
+        {note && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{note}</p>}
+        <div className="flex flex-wrap gap-2">
+          {d.storage_key != null && <Button icon={Download} disabled={busy} onClick={() => view(String(d.id))}>{t("common.view")}</Button>}
+          {write && <Button icon={Upload} disabled={busy} onClick={() => { replaceFor.current = String(d.id); fileInput.current?.click(); }}>{d.storage_key ? t("fleet.replaceFile") : t("common.uploadFile")}</Button>}
+          {write && <button type="button" disabled={busy} onClick={() => remove(String(d.id))} aria-label={t("common.remove")} className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-danger hover:bg-danger-soft"><Trash2 className="h-5 w-5" aria-hidden /></button>}
+        </div>
+      </li>
+    );
+  };
+  const empty = (type: string) => (
+    <li key={type} className="flex flex-col items-start gap-2 rounded-2xl border-2 border-dashed border-line p-4">
+      <span className="flex items-center gap-2 text-sm font-semibold text-ink"><FileText className="h-4 w-4 text-ink-3" aria-hidden />{t(DOC_LABEL[type]!)}</span>
+      <Chip tone="muted">{t("fleet.neededChip")}</Chip>
+      {write && <Button icon={Camera} onClick={() => setAdding(type)}>{t("fleet.addThisPaper")}</Button>}
+    </li>
+  );
+  const groups = GROUPS.filter((g) => g.types.some((type) => required.includes(type)));
+  // Never hide an uploaded paper: one this vehicle doesn't need (an EV's old PUC) is listed last.
+  const extra = docs.filter((d) => !required.includes(String(d.type)));
 
   return (
-    <Card title={t("fleet.papersTitle")} action={write ? <Button icon={Plus} onClick={() => setAdding("INSURANCE")}>{t("fleet.addPaper")}</Button> : undefined}>
+    <Card title={t("fleet.papersTitle")}>
       <p className="mb-4 text-sm text-ink-3">{t("fleet.papersHint")}</p>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       {q.isPending && <LoadingRows rows={3} />}
       {q.isError && <ErrorNote onRetry={() => q.refetch()} />}
 
       {q.data && (
-        <ul className="grid gap-3 md:grid-cols-2">
-          {docs.map((d) => {
-            const type = String(d.type);
-            const expired = d.expires_at != null && String(d.expires_at).slice(0, 10) < today;
-            const st = STATUS[expired ? "EXPIRED" : String(d.status)] ?? STATUS.PENDING!;
-            const note = setup?.docs[type]?.state === "REJECTED" ? setup.docs[type]!.note : null;
-            return (
-              <li key={String(d.id)} className="flex flex-col gap-2 rounded-2xl bg-surface-2 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex items-center gap-2 text-sm font-semibold text-ink"><FileText className="h-4 w-4 text-ink-3" aria-hidden />{DOC_LABEL[type] ? t(DOC_LABEL[type]) : type}</span>
-                  {d.storage_key ? <Chip tone={st.tone}>{t(st.label)}</Chip> : <Chip tone="muted">{t("fleet.noFile")}</Chip>}
-                  {REQUIRED.includes(type) && <Chip tone="muted">{t("fleet.neededChip")}</Chip>}
-                </div>
-                <p className="text-xs text-ink-3">
-                  {d.document_number ? `${String(d.document_number)} · ` : ""}
-                  {d.expires_at ? t(expired ? "fleet.expiredOn" : "fleet.validTo", { date: date(String(d.expires_at).slice(0, 10) + "T12:00:00+05:30", { day: "numeric", month: "short", year: "numeric" }) }) : t("fleet.noExpiry")}
-                </p>
-                {note && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{note}</p>}
-                <div className="flex flex-wrap gap-2">
-                  {d.storage_key != null && <Button icon={Download} disabled={busy} onClick={() => view(String(d.id))}>{t("common.view")}</Button>}
-                  {write && <Button icon={Upload} disabled={busy} onClick={() => { replaceFor.current = String(d.id); fileInput.current?.click(); }}>{d.storage_key ? t("fleet.replaceFile") : t("common.uploadFile")}</Button>}
-                  {write && <button type="button" disabled={busy} onClick={() => remove(String(d.id))} aria-label={t("common.remove")} className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-danger hover:bg-danger-soft"><Trash2 className="h-5 w-5" aria-hidden /></button>}
-                </div>
-              </li>
-            );
-          })}
-          {empty.map((type) => (
-            <li key={type} className="flex flex-col items-start gap-2 rounded-2xl border-2 border-dashed border-line p-4">
-              <span className="flex items-center gap-2 text-sm font-semibold text-ink"><FileText className="h-4 w-4 text-ink-3" aria-hidden />{t(DOC_LABEL[type]!)}</span>
-              <Chip tone="muted">{t("fleet.neededChip")}</Chip>
-              {write && <Button icon={Camera} onClick={() => setAdding(type)}>{t("fleet.addThisPaper")}</Button>}
-            </li>
+        <div className="flex flex-col gap-5">
+          {groups.map((g, i) => (
+            <section key={g.key}>
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink">
+                <span className="tnum inline-flex h-6 w-6 items-center justify-center rounded-full bg-surface-3 text-xs">{i + 1}</span>
+                {t(`fleet.paperGroup_${g.key}`)}
+              </h3>
+              <ul className="grid gap-3 md:grid-cols-2">
+                {g.types.flatMap((type) => {
+                  const rows = docs.filter((d) => d.type === type);
+                  return rows.length ? rows.map(filled) : [empty(type)];
+                })}
+              </ul>
+            </section>
           ))}
-        </ul>
+          {extra.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-sm font-semibold text-ink">{t("fleet.otherPapers")}</h3>
+              <ul className="grid gap-3 md:grid-cols-2">{extra.map(filled)}</ul>
+            </section>
+          )}
+        </div>
       )}
 
       <input ref={fileInput} type="file" accept="image/*,application/pdf" className="sr-only" onChange={(e) => {
@@ -123,7 +154,7 @@ function AddPaper({ id, initialType, onDone }: { id: string; initialType: string
   const { token } = useMerchantShop();
   const { t, lang } = useT();
   const invalidate = useInvalidateMerchant();
-  const [type, setType] = useState(initialType);
+  const type = initialType;
   const [number, setNumber] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -155,16 +186,10 @@ function AddPaper({ id, initialType, onDone }: { id: string; initialType: string
   return (
     <div>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
-      <Field label={t("fleet.fPaperType")}>
-        <select className={INPUT} value={type} onChange={(e) => setType(e.target.value)}>
-          {TYPES.map((k) => <option key={k} value={k}>{t(DOC_LABEL[k]!)}</option>)}
-        </select>
-      </Field>
+      <p className="mb-4 text-base font-semibold text-ink">{t(DOC_LABEL[type]!)}</p>
       <Field label={`${t("fleet.fPaperNumber")} (${t("common.optional")})`}><input className={INPUT} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
-      <Field label={`${t("fleet.fExpires")}${type === "RC" ? ` (${t("common.optional")})` : ""}`}><input className={INPUT} type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /></Field>
-      <Field label={t("common.takePhoto")} hint={file?.name}>
-        <input className="text-sm" type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      </Field>
+      <Field label={`${t("fleet.fExpires")}${type === "RC" ? ` (${t("common.optional")})` : ""}`}><DateInput clearable={type === "RC"} value={expiresAt} onChange={setExpiresAt} /></Field>
+      <DocUpload label={t("fleet.fPaperFile")} accept="image/*,application/pdf" busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
       <Button variant="primary" size="lg" className="w-full" disabled={busy} onClick={save}>{busy ? t("common.saving") : t("common.save")}</Button>
     </div>
   );

@@ -847,6 +847,23 @@ describe("requestExtension (pay-first)", () => {
 });
 
 describe("listMyBookings", () => {
+  test("shop phone is available only for a confirmed current booking", async () => {
+    const customer = await customerWithRider();
+    const vehicle = await createBookableVehicle(pool);
+    await pool.query("update shops set phone = '+919876543210' where id = (select shop_id from vehicles where id = $1)", [vehicle.id]);
+    const group = await pool.query("insert into booking_groups (user_id) values ($1) returning id", [customer.userId]);
+    const window = futureWindow(1350);
+    const booking = await insertBooking(pool, {
+      vehicleId: vehicle.id, pickupAt: window.pickupAt.toISOString(), returnAt: window.returnAt.toISOString(),
+      riderId: customer.riderId, groupId: group.rows[0].id,
+    });
+    await pool.query("update bookings set status = 'HOLD' where id = $1", [booking.id]);
+    expect((await listMyBookings(pool, customer.userId))[0]!.shop_phone).toBeNull();
+    await pool.query("update bookings set status = 'CONFIRMED' where id = $1", [booking.id]);
+    expect((await listMyBookings(pool, customer.userId))[0]!.shop_phone).toBe("+919876543210");
+    await pool.query("update bookings set deleted_at = now() where id = $1", [booking.id]);
+    expect((await listMyBookings(pool, customer.userId))[0]!.shop_phone).toBeNull();
+  });
   test("returns only the caller's own bookings, newest pickup first", async () => {
     const mine = await customerWithRider();
     const someoneElse = await customerWithRider();

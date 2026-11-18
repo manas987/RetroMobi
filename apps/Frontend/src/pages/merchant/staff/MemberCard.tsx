@@ -3,8 +3,9 @@ import type { Row } from "../../../lib/portal";
 import { portalFetch } from "../../../lib/portal";
 import { useT } from "../../../i18n";
 import { errorText, useInvalidateMerchant } from "../query";
-import { Chip, ConfirmSheet, INPUT, Button } from "../ui/ui";
+import { Button, Chip, ConfirmSheet, Select } from "../ui/ui";
 import { ROLES, type Role } from "./RoleCards";
+import { phoneLabel } from "../../../lib/format";
 
 export function Avatar({ name }: { name: string }) {
   return (
@@ -33,7 +34,7 @@ export function MemberCard({
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const phone = String(m.phone ?? "");
-  const name = String(m.name ?? "") || phone;
+  const name = String(m.name ?? "") || phoneLabel(phone);
 
   async function run(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -57,7 +58,7 @@ export function MemberCard({
           <p className="truncate text-base font-semibold text-ink">{name}</p>
           {phone && (
             <a href={`tel:${phone}`} className="tnum text-sm text-ink-2 underline underline-offset-2">
-              {phone}
+              {phoneLabel(phone)}
             </a>
           )}
         </div>
@@ -69,19 +70,15 @@ export function MemberCard({
       </div>
       {canManage && !isSelf && (
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label={t("staff.changeRole", { name })}
-            className={`${INPUT} min-h-11 w-auto flex-1`}
-            value={String(m.role)}
+          <Select
+            compact
+            ariaLabel={t("staff.changeRole", { name })}
+            className="w-auto flex-1"
+            value={m.role as Role}
             disabled={busy}
-            onChange={(e) => run(() => portalFetch("merchant", `/shops/${shopId}/members/${m.id}`, { method: "PATCH", token, body: { role: e.target.value } }))}
-          >
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {t(`common.role_${r}`)}
-              </option>
-            ))}
-          </select>
+            onChange={(role) => run(() => portalFetch("merchant", `/shops/${shopId}/members/${m.id}`, { method: "PATCH", token, body: { role } }))}
+            options={ROLES.map((r) => ({ value: r, label: t(`common.role_${r}`) }))}
+          />
           <Button variant="ghost" className="text-danger" disabled={busy} onClick={() => setConfirmRemove(true)}>
             {t("common.remove")}
           </Button>

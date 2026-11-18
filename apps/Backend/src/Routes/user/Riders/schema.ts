@@ -7,7 +7,7 @@ export const CreateRiderSchema = z.object({
 
 export const UpdateRiderSchema = z.object({
   name: z.string().min(1).optional(),
-  dob: z.string().date().optional(),
+  dob: z.string().date().nullable().optional(),
 });
 
 export const DigilockerInitSchema = z.object({

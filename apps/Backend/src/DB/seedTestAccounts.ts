@@ -72,6 +72,9 @@ let seq = 0;
 const eventId = () => `seed_${Date.now()}_${(seq += 1)}`;
 const reg = (prefix: string) => `${prefix}SEED${Date.now().toString(36).toUpperCase().slice(-4)}${(seq += 1)}`;
 const DAY = 86_400_000;
+// Every online booking carries the customer's two licence statements
+// (lib/pickupLicence.ts); the shop checks the original at pickup.
+const DECLARED = { validLicence: true, cancelIfMissing: true } as const;
 /** 09:00 IST, `days` from today. */
 function at(days: number) {
   const d = new Date(Date.now() + days * DAY);
@@ -180,7 +183,7 @@ async function pastRental(input: {
 }) {
   // Far enough ahead to collide with nothing else the seed books.
   const futureStart = at(200 + (seq += 3));
-  const held = await createHold(pool, {
+  const held = await createHold(pool, { licenceDeclaration: DECLARED,
     userId: input.userId,
     items: [{ vehicleId: input.vehicleId, riderId: input.riderId }],
     pickupAt: futureStart,
@@ -216,7 +219,7 @@ async function pastRental(input: {
 /** A rental that started `startDaysAgo` and is still out: picked up, not returned. */
 async function rentalInProgress(input: { userId: string; riderId: string; vehicleId: string; startDaysAgo: number; nights: number }) {
   const futureStart = at(200 + (seq += 3));
-  const held = await createHold(pool, {
+  const held = await createHold(pool, { licenceDeclaration: DECLARED,
     userId: input.userId,
     items: [{ vehicleId: input.vehicleId, riderId: input.riderId }],
     pickupAt: futureStart,
@@ -416,9 +419,9 @@ async function main() {
 
   // ---- Bookings: main customer ---------------------------------------------------
   // A: unpaid HOLD -- Pay now / cancel.
-  await createHold(pool, { userId: customerId, items: [{ vehicleId: d1!, riderId: rider1.id }], pickupAt: at(2), returnAt: at(4) });
+  await createHold(pool, { licenceDeclaration: DECLARED, userId: customerId, items: [{ vehicleId: d1!, riderId: rider1.id }], pickupAt: at(2), returnAt: at(4) });
   // B: CONFIRMED, platform coupon, two scooters in one checkout -- Confirm pickup, FLAT150 split.
-  const heldB = await createHold(pool, {
+  const heldB = await createHold(pool, { licenceDeclaration: DECLARED,
     userId: customerId,
     items: [{ vehicleId: d2!, riderId: rider1.id }, { vehicleId: d3!, riderId: rider3.id }],
     pickupAt: at(6),
@@ -439,7 +442,7 @@ async function main() {
     claim: { reason: "Scratch on the left body panel, repair quoted at ₹1,800.", amount: 180_000 },
   });
   // E: CONFIRMED at Rishikesh with the shop's long-ride coupon.
-  const heldE = await createHold(pool, {
+  const heldE = await createHold(pool, { licenceDeclaration: DECLARED,
     userId: customerId,
     items: [{ vehicleId: r1!, riderId: rider3.id }],
     pickupAt: at(14),
@@ -448,13 +451,13 @@ async function main() {
   });
   await pay(heldE.groupId, customerId);
   // F: paid, then cancelled more than 24h out -- refund + the shop keeps the penalty.
-  const heldF = await createHold(pool, { userId: customerId, items: [{ vehicleId: r2!, riderId: rider1.id }], pickupAt: at(20), returnAt: at(22) });
+  const heldF = await createHold(pool, { licenceDeclaration: DECLARED, userId: customerId, items: [{ vehicleId: r2!, riderId: rider1.id }], pickupAt: at(20), returnAt: at(22) });
   await pay(heldF.groupId, customerId);
   await cancelBooking(pool, { userId: customerId, bookingId: heldF.bookings[0]!.id }, cashfreeClient);
 
   // ---- Bookings: young rider at Mussoorie ---------------------------------------
   await pastRental({ userId: youngId, riderId: youngRider.id, vehicleId: m1!, merchantId: owner2Id, startDaysAgo: 20, nights: 3 });
-  const heldY = await createHold(pool, { userId: youngId, items: [{ vehicleId: m2!, riderId: youngRider.id }], pickupAt: at(3), returnAt: at(5), couponCode: "YOUTH15" });
+  const heldY = await createHold(pool, { licenceDeclaration: DECLARED, userId: youngId, items: [{ vehicleId: m2!, riderId: youngRider.id }], pickupAt: at(3), returnAt: at(5), couponCode: "YOUTH15" });
   await pay(heldY.groupId, youngId);
 
   // ---- Bookings: Priya -- a finished trip and one she is on right now ----------
@@ -464,9 +467,9 @@ async function main() {
   await requestExtension(pool, { userId: priyaId, bookingId: priyaNow, newReturnAt: at(4) }, cashfreeClient);
 
   // ---- Bookings: Rahul -- one coming up, one cancelled --------------------------
-  const heldR = await createHold(pool, { userId: rahulId, items: [{ vehicleId: m3!, riderId: rahulRider.id }], pickupAt: at(10), returnAt: at(12) });
+  const heldR = await createHold(pool, { licenceDeclaration: DECLARED, userId: rahulId, items: [{ vehicleId: m3!, riderId: rahulRider.id }], pickupAt: at(10), returnAt: at(12) });
   await pay(heldR.groupId, rahulId);
-  const heldRc = await createHold(pool, { userId: rahulId, items: [{ vehicleId: r3!, riderId: rahulRider.id }], pickupAt: at(25), returnAt: at(27) });
+  const heldRc = await createHold(pool, { licenceDeclaration: DECLARED, userId: rahulId, items: [{ vehicleId: r3!, riderId: rahulRider.id }], pickupAt: at(25), returnAt: at(27) });
   await pay(heldRc.groupId, rahulId);
   const rahulCancelled = heldRc.bookings[0]!.id;
   await cancelBooking(pool, { userId: rahulId, bookingId: rahulCancelled }, cashfreeClient);
@@ -484,7 +487,7 @@ async function main() {
     await createReview(pool, aishaId, { bookingId, rating, comment });
   }
   // Five completed rides unlock RIDER5.
-  const heldA = await createHold(pool, { userId: aishaId, items: [{ vehicleId: d5!, riderId: aishaRider.id }], pickupAt: at(8), returnAt: at(10), couponCode: "RIDER5" });
+  const heldA = await createHold(pool, { licenceDeclaration: DECLARED, userId: aishaId, items: [{ vehicleId: d5!, riderId: aishaRider.id }], pickupAt: at(8), returnAt: at(10), couponCode: "RIDER5" });
   await pay(heldA.groupId, aishaId);
 
   // ---- Reviews -------------------------------------------------------------------------

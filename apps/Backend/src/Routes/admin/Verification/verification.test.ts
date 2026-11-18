@@ -3,7 +3,8 @@ import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
 import { createBookableVehicle, createMerchant, uniquePhone } from "../../../test/fixtures.ts";
 import { createShop } from "../../merchant/Shops/shopsService.ts";
-import { decideShop, decideVehicle, listVerificationQueue } from "./verificationService.ts";
+import { decideShop, decideShopDocument, decideVehicle, listVerificationQueue } from "./verificationService.ts";
+import { createShopDocument } from "../../merchant/Shops/shopsService.ts";
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -68,5 +69,19 @@ describe("verification and operational status", () => {
     expect(queue.every((r: any, i: number, arr: any[]) => i === 0 || arr[i - 1].created_at <= r.created_at)).toBe(
       true,
     );
+  });
+
+  test("a shop paper shows in the SHOP_DOCUMENT queue and can be approved", async () => {
+    const merchant = await createMerchant(pool);
+    const shop = await createShop(pool, merchant.id, { name: "A", addressLine1: "1 Road", city: "C", state: "State", pincode: "100001" });
+    const doc = await createShopDocument(pool, merchant.id, shop.id, { type: "SHOP_ACT" });
+    const queue = await listVerificationQueue(pool, "SHOP_DOCUMENT");
+    expect(queue.find((r) => r.id === doc.id)).toMatchObject({ type: "SHOP_ACT", shop_id: shop.id });
+
+    await decideShopDocument(pool, merchant.id, doc.id, { status: "VERIFIED" });
+    const { rows } = await pool.query(`select status from shop_documents where id = $1`, [doc.id]);
+    expect(rows[0].status).toBe("VERIFIED");
+    const audit = await pool.query(`select 1 from audit_logs where entity_id = $1 and action = 'shop_document.verification_decided'`, [doc.id]);
+    expect(audit.rows).toHaveLength(1);
   });
 });

@@ -21,7 +21,7 @@ export function VehiclesStep({ setup, vehicleId, setVehicle, ...p }: StepProps &
   const min = setup.minVehiclesForShop;
 
   return (
-    <StepCard step="vehicles" title={t("setup.vehiclesTitle")} why={t("setup.vehiclesWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={p.next} saveLabel={t("common.continue")} disabled={!setup.steps.vehicles}>
+    <StepCard step="vehicles" title={t("setup.vehiclesTitle")} why={t("setup.vehiclesWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={p.next} saveLabel={t("common.continue")} disabled={!setup.steps.vehicles} missing={[t("setup.need_vehicle")]}>
       {open ? (
         <>
           <button type="button" onClick={() => setVehicle(null)} className="mb-3 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-ink-2">
@@ -44,7 +44,7 @@ export function VehiclesStep({ setup, vehicleId, setVehicle, ...p }: StepProps &
               <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-surface-2 p-3">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-ink">{v.make} {v.model}</span>
-                  <span className="tnum block text-xs text-ink-3">{v.registrationNumber} · {t("setup.doneOf", { n: 5 - v.missing.length })}</span>
+                  <span className="tnum block text-xs text-ink-3">{v.registrationNumber} · {t("setup.doneOf", { n: 2 + v.requiredDocs.length - v.missing.length, total: 2 + v.requiredDocs.length })}</span>
                 </span>
                 <StageChip stage={v.stage} />
                 <Button onClick={() => setVehicle(v.id)}>{t("setup.setUp")}</Button>

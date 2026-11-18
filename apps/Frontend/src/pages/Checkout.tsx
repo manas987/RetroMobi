@@ -5,12 +5,10 @@ import { Footer } from "../components/Footer";
 import { combine, splitIso } from "../components/DateTimeField";
 import { DateRangeField } from "../components/DateRangeField";
 import { ErrorBox, SubmitButton, TextField } from "../components/AuthFormBits";
-import { RiderVerification } from "../components/RiderVerification";
 import { CouponField } from "../components/CouponField";
 import { Modal } from "../components/Modal";
 import { EmptyState, feedbackActionClass, SkeletonRows } from "../components/ContentFeedback";
 import { useCart } from "../lib/cart";
-import { istDay } from "../lib/format";
 import { usePortalSession, usePortalQuery, portalFetch, PortalApiError, type Row } from "../lib/portal";
 import { defaultWindow, toIsoWithOffset } from "../lib/searchParams";
 
@@ -66,39 +64,29 @@ export function Checkout() {
   const [returnDate, setReturnDate] = useState(initReturn.date);
   const [returnTime, setReturnTime] = useState(initReturn.time);
 
-  // One rider per cart item — most groups still have each vehicle attributed
-  // to whoever's actually riding it, since the backend verifies each rider's
-  // own licence independently.
+  // One rider per cart item -- the shop checks that rider's original licence
+  // at pickup, so the booking has to say who is riding what.
   const [riderByVehicle, setRiderByVehicle] = useState<Record<string, string | null>>({});
 
   const [addingRider, setAddingRider] = useState(false);
   const [riderName, setRiderName] = useState("");
-  const [verifyingRiderId, setVerifyingRiderId] = useState<string | null>(null);
+  // usePortalQuery can't refetch, so riders added here are kept alongside the loaded list.
+  const [addedRiders, setAddedRiders] = useState<Row[]>([]);
+  // Beta: no online licence check. Both statements are sent with the hold (LICENCE_DECLARATION on the server).
+  const [validLicence, setValidLicence] = useState(false);
+  const [cancelIfMissing, setCancelIfMissing] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const riders = ridersRes?.riders ?? [];
+  const riders = [...(ridersRes?.riders ?? []), ...addedRiders];
+  const assignedRiders = vehicles.map((v) => riderByVehicle[v.vehicleId]);
+  const allAssigned = assignedRiders.every(Boolean) && new Set(assignedRiders).size === vehicles.length;
+  const declared = validLicence && cancelIfMissing;
 
-  // Mirrors the server's rule exactly -- `expiresOn >= istDate(returnAt)`, both as
-  // YYYY-MM-DD (lib/licenceEligibility.ts). It used to parse the expiry date into a
-  // Date at *local midnight* and compare it to the return date, which blocked any
-  // licence expiring on the return day itself: the button went dead on a licence the
-  // server would have accepted, and the customer had no way to tell why.
-  function riderVerified(riderId: string | null): boolean {
-    const rider = riders.find((r) => r.id === riderId);
-    return (
-      rider?.licence_status === "VERIFIED" &&
-      typeof rider.licence_expires_on === "string" &&
-      rider.licence_expires_on >= istDay(combine(returnDate, returnTime))
-    );
-  }
-
-  const allAssignedAndVerified = vehicles.every((v) => riderVerified(riderByVehicle[v.vehicleId] ?? null));
-
-  // What the hold will be asked for, once every scooter has a verified rider.
+  // What the hold will be asked for, once every scooter has a rider.
   // The coupon step prices exactly this.
-  const cart = allAssignedAndVerified
+  const cart = allAssigned
     ? {
         items: vehicles.map((v) => ({ vehicleId: v.vehicleId, riderId: riderByVehicle[v.vehicleId]! })),
         pickupAt: toIsoWithOffset(combine(pickupDate, pickupTime)),
@@ -128,7 +116,10 @@ export function Checkout() {
       });
       setAddingRider(false);
       setRiderName("");
-      setVerifyingRiderId(String(rider.id));
+      setAddedRiders((prev) => [...prev, rider]);
+      // Straight onto the first vehicle still without a rider.
+      const open = vehicles.find((v) => !riderByVehicle[v.vehicleId]);
+      if (open) setRiderByVehicle((prev) => ({ ...prev, [open.vehicleId]: String(rider.id) }));
     });
 
   const submitHold = () =>
@@ -141,6 +132,7 @@ export function Checkout() {
           pickupAt: toIsoWithOffset(combine(pickupDate, pickupTime)),
           returnAt: toIsoWithOffset(combine(returnDate, returnTime)),
           ...(coupon ? { couponCode: coupon.code } : {}),
+          licenceDeclaration: { validLicence: true, cancelIfMissing: true },
         },
       });
       // The payment step lives at its own URL, loaded from the server, so a
@@ -222,19 +214,7 @@ export function Checkout() {
                               />
                               <span className="text-sm text-ink font-medium">{String(r.name)}</span>
                             </span>
-                            {takenElsewhere ? (
-                              <span className="text-xs text-ink-4">Riding another scooter</span>
-                            ) : r.licence_status === "VERIFIED" ? (
-                              <span className="text-xs text-verified font-medium">Licence verified</span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => setVerifyingRiderId(String(r.id))}
-                                className="text-xs text-amber-edge font-medium hover:underline"
-                              >
-                                Verify licence
-                              </button>
-                            )}
+                            {takenElsewhere && <span className="text-xs text-ink-4">Riding another scooter</span>}
                           </label>
                         );
                       })}
@@ -258,30 +238,6 @@ export function Checkout() {
                 + Add a rider
               </button>}
 
-              <Modal
-                open={Boolean(verifyingRiderId)}
-                onClose={() => setVerifyingRiderId(null)}
-                title="Verify driving licence"
-              >
-                {verifyingRiderId && (
-                  <RiderVerification
-                    riderId={verifyingRiderId}
-                    riderName={String(
-                      riders.find((r) => String(r.id) === verifyingRiderId)?.name ?? "",
-                    )}
-                    token={session!.accessToken}
-                    onDone={() => {
-                      setVerifyingRiderId(null);
-                      // usePortalQuery's state is not shared with the riders
-                      // list here, so a reload is the simplest way to pick up
-                      // the fresh licence status.
-                      window.location.reload();
-                    }}
-                    onCancel={() => setVerifyingRiderId(null)}
-                  />
-                )}
-              </Modal>
-
               <Modal open={addingRider} onClose={() => setAddingRider(false)} title="Add a rider">
                 <TextField label="Rider name" value={riderName} onChange={setRiderName} autoFocus />
                 <SubmitButton busy={busy} onClick={addRider} disabled={!riderName}>
@@ -290,19 +246,53 @@ export function Checkout() {
               </Modal>
             </section>
 
+            <section className="rounded-panel border border-line p-5 mb-5">
+              <h2 className="font-semibold text-ink">3. Driving licence</h2>
+              <p className="text-sm text-ink-3 mt-1 mb-4">
+                No uploads. The shop checks each rider’s original licence when you collect the vehicle.
+              </p>
+              <div className="flex flex-col gap-2">
+                {([
+                  [validLicence, setValidLicence, "Every rider has a valid driving licence for the vehicle they’re riding."],
+                  [cancelIfMissing, setCancelIfMissing, "I’ll bring the original licence to pickup. If the shop can’t check it, the booking is cancelled: the deposit is refunded, the rental isn’t."],
+                ] as const).map(([checked, set, label]) => (
+                  <label
+                    key={label}
+                    className="flex gap-3 items-start rounded-row border border-line-strong px-3 py-3 text-sm text-ink cursor-pointer hover:border-ink-4 has-[:checked]:border-ink has-[:checked]:bg-surface-2 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => set(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-ink)]"
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <details className="mt-3 text-sm">
+                <summary className="cursor-pointer text-ink-2 font-medium hover:text-ink">Cancellation policy</summary>
+                <ul className="mt-2 space-y-1 text-ink-2">
+                  <li>More than 24 hours before pickup · 90% of the rental refunded</li>
+                  <li>2–24 hours before pickup · 50% of the rental refunded</li>
+                  <li>Under 2 hours until pickup, or refused at pickup · No rental refund</li>
+                </ul>
+                <p className="mt-2 text-ink-2">The security deposit is always refunded in full. Platform fees and taxes are not refunded.</p>
+              </details>
+            </section>
             <CouponField token={session.accessToken} cart={cart} applied={coupon} onApplied={setCoupon} />
 
             <button
               type="button"
-              disabled={busy || !allAssignedAndVerified}
+              disabled={busy || !allAssigned || !declared}
               onClick={submitHold}
               className="w-full h-11 rounded-row bg-amber text-on-amber font-semibold disabled:opacity-40 hover:brightness-95 transition-[filter]"
             >
               {busy ? "Working…" : "Continue to payment"}
             </button>
-            {ridersRes && !allAssignedAndVerified && (
+            {ridersRes && (!allAssigned || !declared) && (
               <p className="mt-2 text-xs text-warning text-center">
-                Every scooter needs a rider with a verified licence (covering the full return date) before booking.
+                {!allAssigned ? "Choose a different rider for each scooter" : "Tick both licence statements"} to continue.
               </p>
             )}
           </div>

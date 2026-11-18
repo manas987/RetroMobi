@@ -6,6 +6,7 @@ import * as ticketsService from "../../Tickets/ticketsService.ts";
 import { BookingNotFoundError } from "../../user/Pickup/pickupService.ts";
 import * as pickupService from "../../user/Pickup/pickupService.ts";
 import * as operationsService from "./operationsService.ts";
+import { cancelBooking } from "../../user/Bookings/bookingsService.ts";
 import * as identityService from "./identityService.ts";
 
 export async function list(req: Request, res: Response) {
@@ -79,4 +80,19 @@ export async function identityCheck(req: Request, res: Response) {
     req.body,
   );
   res.status(201).json(result);
+}
+
+export async function pickupLicenceDecision(req: Request, res: Response) {
+  const bookingId = pathParam(req, "id");
+  const merchantUserId = req.merchantUserId!;
+  const shopId = req.shopId!;
+  if (req.body.decision === "refuse") {
+    const result = await cancelBooking(pool, {
+      bookingId, refusal: { merchantUserId, shopId, reason: req.body.reason },
+    }, cashfreeClient);
+    res.json({ ...result, decision: "refused" });
+    return;
+  }
+  await identityService.approvePickupLicence(pool, merchantUserId, shopId, bookingId, req.body.handoverCode);
+  res.json({ decision: "approved" });
 }

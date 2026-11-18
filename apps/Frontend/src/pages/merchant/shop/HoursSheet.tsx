@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Row } from "../../../lib/portal";
 import { portalFetch } from "../../../lib/portal";
 import { useT } from "../../../i18n";
-import { Button, ErrorNote, INPUT, LoadingRows, Sheet } from "../ui/ui";
+import { Button, ErrorNote, LoadingRows, Select, Sheet } from "../ui/ui";
 import { Toggle } from "../../../components/Toggle";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
 
@@ -13,6 +13,7 @@ export type Hours = Record<number, Slot>;
 /** Monday first. */
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const DEFAULT_SLOT = { opensAt: "09:00", closesAt: "19:00" };
+const HALF_HOURS = Array.from({ length: 38 }, (_, i) => `${String(5 + Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
 
 /** From `GET /shops/:id`. A shop with no hours yet starts open 09:00-19:00 every day. */
 export function hoursFromShop(shop: Row | undefined): Hours {
@@ -34,17 +35,35 @@ export const hoursInvalid = (h: Hours) => {
   return open.length === 0 || open.some((x) => x.closesAt <= x.opensAt);
 };
 
-export function HoursEditor({ value, onChange }: { value: Hours; onChange: (h: Hours) => void }) {
-  const { t, date } = useT();
+/** Monday's hours copied to every day. */
+export const sameEveryDay = (value: Hours): Hours => Object.fromEntries(DAY_ORDER.map((d) => [d, value[1] ?? { ...DEFAULT_SLOT }]));
+
+export function HoursEditor({
+  value,
+  onChange,
+  heading = true,
+  toolbar = true,
+}: {
+  value: Hours;
+  onChange: (h: Hours) => void;
+  /** Off inside the hours popup, whose title already says "Opening hours". */
+  heading?: boolean;
+  /** Off when the page puts "Same time every day" in its own card header. */
+  toolbar?: boolean;
+}) {
+  const { t, date, time } = useT();
   const set = (d: number, s: Slot) => onChange({ ...value, [d]: s });
+  // Every half hour from 5 am to 11:30 pm, plus a saved time that's off that grid.
+  const timeOptions = (current: string) =>
+    [...new Set([...HALF_HOURS, current])].sort().map((v) => ({ value: v, label: time(`2024-01-01T${v}:00+05:30`) }));
   return (
     <div className="mb-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-ink">{t("setup.hoursTitle")}</span>
-        <Button variant="ghost" onClick={() => onChange(Object.fromEntries(DAY_ORDER.map((d) => [d, value[1] ?? { ...DEFAULT_SLOT }])))}>
-          {t("setup.sameEveryDay")}
-        </Button>
-      </div>
+      {toolbar && (
+        <div className="mb-2 flex items-center justify-between gap-2">
+          {heading ? <span className="text-sm font-medium text-ink">{t("setup.hoursTitle")}</span> : <span />}
+          <Button variant="ghost" onClick={() => onChange(sameEveryDay(value))}>{t("setup.sameEveryDay")}</Button>
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         {DAY_ORDER.map((d) => {
           const s = value[d];
@@ -56,10 +75,10 @@ export function HoursEditor({ value, onChange }: { value: Hours; onChange: (h: H
                 {name}
               </span>
               {s ? (
-                <span className="flex items-center gap-2">
-                  <input type="time" aria-label={t("setup.opensAt")} value={s.opensAt} onChange={(e) => set(d, { ...s, opensAt: e.target.value })} className={`${INPUT} !min-h-11 !w-auto !px-3 text-sm`} />
-                  <span className="text-ink-3">{t("common.to")}</span>
-                  <input type="time" aria-label={t("setup.closesAt")} value={s.closesAt} onChange={(e) => set(d, { ...s, closesAt: e.target.value })} className={`${INPUT} !min-h-11 !w-auto !px-3 text-sm`} />
+                <span className="flex w-full items-center gap-2 sm:w-auto sm:flex-1">
+                  <Select compact className="flex-1 px-3" ariaLabel={t("setup.opensAt")} value={s.opensAt} onChange={(v) => set(d, { ...s, opensAt: v })} options={timeOptions(s.opensAt)} />
+                  <span className="text-ink-3">{t("setup.timeTo")}</span>
+                  <Select compact className="flex-1 px-3" ariaLabel={t("setup.closesAt")} value={s.closesAt} onChange={(v) => set(d, { ...s, closesAt: v })} options={timeOptions(s.closesAt)} />
                 </span>
               ) : (
                 <span className="text-sm text-ink-3">{t("setup.closedDay")}</span>
@@ -83,7 +102,7 @@ export function HoursSheet({ open, onClose, shopId, token }: { open: boolean; on
   );
 }
 
-function HoursForm({ shop, shopId, token, onClose }: { shop: Row; shopId: string; token: string; onClose: () => void }) {
+export function HoursForm({ shop, shopId, token, onClose }: { shop: Row; shopId: string; token: string; onClose: () => void }) {
   const { t, lang } = useT();
   const invalidate = useInvalidateMerchant();
   const [hours, setHours] = useState(() => hoursFromShop(shop));
@@ -104,7 +123,7 @@ function HoursForm({ shop, shopId, token, onClose }: { shop: Row; shopId: string
   }
   return (
     <>
-      <HoursEditor value={hours} onChange={setHours} />
+      <HoursEditor value={hours} onChange={setHours} heading={false} />
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       <Button variant="primary" size="lg" className="w-full" disabled={busy || hoursInvalid(hours)} onClick={save}>
         {busy ? t("common.saving") : t("common.save")}

@@ -47,3 +47,13 @@ export const IdentityCheckSchema = z.object({
   handoverCode: z.string().regex(/^\d{6}$/),
   notes: z.string().max(500).optional(),
 });
+
+
+export const PickupLicenceDecisionSchema = z.discriminatedUnion("decision", [
+  z.object({
+    decision: z.literal("approve"), originalSeen: z.literal(true), photoMatched: z.literal(true), validForVehicleAndDates: z.literal(true),
+    // The 6-digit code the customer got on WhatsApp / sees on their booking page.
+    handoverCode: z.string().regex(/^\d{6}$/),
+  }),
+  z.object({ decision: z.literal("refuse"), reason: z.enum(["MISSING", "INVALID", "MISMATCH"]) }),
+]);

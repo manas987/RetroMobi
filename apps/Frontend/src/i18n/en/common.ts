@@ -60,4 +60,7 @@ export default {
   whyNeeded: "Why we need this",
   askOwner: "Ask the shop owner to do this.",
   showOlder: "Show older",
+  pickDate: "Pick a date",
+  pickYear: "Pick a year",
+  clear: "Clear",
 };

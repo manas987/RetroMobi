@@ -68,7 +68,7 @@ export function CouponField({
 
   return (
     <section className="rounded-panel border border-line p-5 mb-5">
-      <h2 className="font-semibold text-ink mb-3">3. Coupon</h2>
+      <h2 className="font-semibold text-ink mb-3">4. Coupon</h2>
       {!cart && <p className="text-sm text-ink-3">Pick a rider for every scooter to see coupons for this booking.</p>}
       {cart && applied && (
         <div className="flex items-center justify-between gap-3 rounded-row bg-surface-2 px-4 py-3">

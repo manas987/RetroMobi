@@ -16,13 +16,15 @@ export function useWhen() {
   return (iso: unknown) => (istDay(new Date(String(iso))) === today ? time(iso) : date(iso, { weekday: "short", day: "numeric" }));
 }
 
-/** The availability chip: free, going out, with a customer, or late. */
-export function AvailChip({ id, staged }: { id: unknown; staged: Staged[] }) {
+/** The availability chip: free, going out, with a customer, blocked, or late. */
+export function AvailChip({ v, staged }: { v: Row; staged: Staged[] }) {
   const { t } = useT();
   const when = useWhen();
-  const { avail, out, goes, late } = vehicleNow(id, staged);
+  const { avail, blockedUntil, out, goes, late, missed } = vehicleNow(v, staged);
   if (late) return <Chip tone="bad">{t("fleet.avail_LATE")}</Chip>;
+  if (missed) return <Chip tone="bad">{t("status.stage_PICKUP_LATE")}</Chip>;
   if (avail === "OUT") return <Chip tone="info">{t("fleet.avail_OUT", { when: when(out!.b.scheduled_return_at) })}</Chip>;
+  if (avail === "BLOCKED") return <Chip tone="muted">{t("fleet.avail_BLOCKED", { when: when(blockedUntil) })}</Chip>;
   if (avail === "TODAY") return <Chip tone="attention">{t("fleet.avail_TODAY", { when: when(goes!.b.scheduled_pickup_at) })}</Chip>;
   return <Chip tone="good">{t("fleet.avail_FREE")}</Chip>;
 }
@@ -42,7 +44,7 @@ export function VehicleCard({
   const { t } = useT();
   const act = useListingActions();
   const id = String(v.id);
-  const { avail, late } = vehicleNow(id, staged);
+  const { avail, late, missed } = vehicleNow(v, staged);
   const write = can("fleet:write");
   const hasPrice = v.amount != null;
   const fixHref = `/merchant/setup?vehicle=${id}`;
@@ -50,7 +52,8 @@ export function VehicleCard({
 
   const listing = () => {
     if (!sv || !stage) return null;
-    if (!write) return <Chip tone={STAGE_TONE[stage]}>{t(`fleet.stage_${stage}` as const)}</Chip>;
+    // Wrapped so the chip keeps its own width in the card's column.
+    if (!write) return <div><Chip tone={STAGE_TONE[stage]}>{t(`fleet.stage_${stage}` as const)}</Chip></div>;
     if (stage === "SHOWING" || stage === "READY") {
       const on = stage === "SHOWING";
       return (
@@ -60,7 +63,7 @@ export function VehicleCard({
         </div>
       );
     }
-    if (stage === "CHECKING") return <Chip tone="info">{t("fleet.stage_CHECKING")}</Chip>;
+    if (stage === "CHECKING") return <div><Chip tone="info">{t("fleet.stage_CHECKING")}</Chip></div>;
     if (stage === "NEEDS_FIXING") {
       return (
         <div className="flex items-center gap-3">
@@ -81,14 +84,14 @@ export function VehicleCard({
   return (
     <div className="flex flex-col gap-3 rounded-card bg-surface p-4 shadow-card">
       <div className="flex items-start gap-3">
-        <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${TONE[late ? "bad" : AVAIL_TONE[avail]].icon}`}>
+        <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${TONE[late || missed ? "bad" : AVAIL_TONE[avail]].icon}`}>
           <Bike className="h-5 w-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-semibold text-ink">{String(v.make ?? "")} {String(v.model ?? "")}</p>
           <p className="tnum truncate text-sm text-ink-3">{String(v.registration_number ?? "")}</p>
         </div>
-        <AvailChip id={id} staged={staged} />
+        <AvailChip v={v} staged={staged} />
       </div>
 
       {hasPrice ? (

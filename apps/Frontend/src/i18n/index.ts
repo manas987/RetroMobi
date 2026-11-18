@@ -155,7 +155,8 @@ export function useT() {
             timeZone: "Asia/Kolkata",
             hour: "numeric",
             minute: "2-digit",
-            hour12: true,
+            // Hindi says the part of the day ("शाम 7:00"), not "7:00 pm".
+            ...(lang === "hi" ? { dayPeriod: "short" } : { hour12: true }),
           })
         : "—",
     number: (n: number) => n.toLocaleString(locale),

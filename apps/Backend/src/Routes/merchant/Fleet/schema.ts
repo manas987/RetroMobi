@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UPLOAD_CONTENT_TYPE } from "../../../lib/storage.ts";
 
 export const CreateVehicleSchema = z.object({
   modelId: z.string().uuid(),
@@ -14,6 +15,10 @@ export const UpdateVehicleSchema = z
     status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
   })
   .strict();
+
+// `toShopId`, not `shopId`: requirePermission reads body.shopId as the shop
+// the request is scoped to, which here is the vehicle's current shop.
+export const MoveVehicleSchema = z.object({ toShopId: z.string().uuid() }).strict();
 
 export const RegistrationRecordSchema = z.object({
   registrationNumber: z.string().min(1),
@@ -45,7 +50,7 @@ export const CreateDocumentSchema = z.object({
 });
 
 export const UploadRequestSchema = z.object({
-  contentType: z.string().min(1),
+  contentType: z.string().regex(UPLOAD_CONTENT_TYPE, "upload a photo, video or PDF"),
 });
 
 export const ConfirmUploadSchema = z.object({

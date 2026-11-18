@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
+import { assertOwnUpload } from "../../../lib/storage.ts";
 
 export class LicenceNotFoundError extends Error {}
 export class DocumentNotFoundError extends Error {}
@@ -83,6 +84,7 @@ export async function getLicenceStorageKey(pool: Pool, merchantUserId: string, l
 
 export async function attachLicenceFile(pool: Pool, merchantUserId: string, licenceId: string, storageKey: string) {
   await requireOwnedLicence(pool, merchantUserId, licenceId);
+  assertOwnUpload(storageKey, `licences/${licenceId}/`);
   const { rows } = await pool.query(
     `update shop_licenses set storage_key = $1, updated_at = now() where id = $2 returning *`,
     [storageKey, licenceId],
@@ -224,6 +226,7 @@ async function requireOwnedDocument(pool: Pool, merchantUserId: string, document
 
 export async function attachMerchantDocumentFile(pool: Pool, merchantUserId: string, documentId: string, storageKey: string) {
   await requireOwnedDocument(pool, merchantUserId, documentId);
+  assertOwnUpload(storageKey, `merchant-documents/${documentId}/`);
   const { rows } = await pool.query(
     `update merchant_documents set storage_key = $1, updated_at = now() where id = $2 returning *`,
     [storageKey, documentId],

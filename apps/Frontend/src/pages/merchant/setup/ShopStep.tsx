@@ -4,7 +4,8 @@ import { portalFetch } from "../../../lib/portal";
 import { LocationPicker } from "../../../components/LocationPicker";
 import { useT } from "../../../i18n";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { ErrorNote, Field, INPUT, LoadingRows } from "../ui/ui";
+import { ErrorNote, Field, INPUT, PHONE, LoadingRows } from "../ui/ui";
+import { E164Input } from "../../../components/PhoneInput";
 import { HoursEditor, hoursFromShop, hoursInvalid, hoursPayload } from "../shop/HoursSheet";
 import { StepCard, type StepKey } from "./Stepper";
 
@@ -39,7 +40,14 @@ function ShopForm({ shop, ...p }: StepProps & { shop: Row }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const valid = address.trim() && city.trim() && /^\d{6}$/.test(pincode) && lat != null && lng != null && !hoursInvalid(hours);
+  const missing = [
+    !address.trim() && t("setup.need_address"),
+    !city.trim() && t("setup.need_city"),
+    !/^\d{6}$/.test(pincode) && t("setup.need_pincode"),
+    (lat == null || lng == null) && t("setup.need_pin"),
+    hoursInvalid(hours) && t("setup.need_hours"),
+  ].filter((x): x is string => Boolean(x));
+  const valid = missing.length === 0;
 
   async function save() {
     setBusy(true);
@@ -61,12 +69,12 @@ function ShopForm({ shop, ...p }: StepProps & { shop: Row }) {
   }
 
   return (
-    <StepCard step="shop" title={t("setup.shopTitle")} why={t("setup.shopWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={save} busy={busy} disabled={!valid} error={error}>
+    <StepCard step="shop" title={t("setup.shopTitle")} why={t("setup.shopWhy")} gated={!p.can} onBack={p.back} onNext={p.next} onSave={save} busy={busy} disabled={!valid} missing={missing} error={error}>
       <Field label={t("common.address")}><input className={INPUT} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
       <div className="grid gap-x-3 sm:grid-cols-2">
         <Field label={t("common.city")}><input className={INPUT} value={city} onChange={(e) => setCity(e.target.value)} /></Field>
         <Field label={t("common.pincode")}><input className={INPUT} inputMode="numeric" maxLength={6} value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))} /></Field>
-        <Field label={t("setup.shopPhone")}><input className={INPUT} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+        <Field label={t("setup.shopPhone")}><E164Input value={phone} onChange={setPhone} className={PHONE} placeholder="" /></Field>
         <Field label={t("common.state")}><input className={`${INPUT} bg-surface-3`} readOnly value={String(shop.state ?? "")} /></Field>
       </div>
       <p className="mb-2 text-sm font-medium text-ink">{t("setup.pinLabel")}</p>

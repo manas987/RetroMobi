@@ -21,6 +21,7 @@ const QUEUES = [
   { type: "SHOP", label: "Shops", href: "/admin/merchant-review" },
   { type: "SHOP_LICENCE", label: "Licences", href: "/admin/merchant-review" },
   { type: "MERCHANT_DOCUMENT", label: "Merchant documents", href: "/admin/merchant-review" },
+  { type: "SHOP_DOCUMENT", label: "Shop papers", href: "/admin/merchant-review" },
   { type: "VEHICLE", label: "Vehicles", href: "/admin/vehicle-review" },
   { type: "VEHICLE_DOCUMENT", label: "Vehicle documents", href: "/admin/vehicle-review" },
 ] as const;

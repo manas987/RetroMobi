@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
 import { createBookableVehicle, createMerchant, createModel, createShop, uniqueRegistration } from "../../../test/fixtures.ts";
+import { createShopDocument } from "../Shops/shopsService.ts";
 import { submitVehicleForVerification } from "../Fleet/fleetService.ts";
 import { getShopSetup } from "./setupService.ts";
 
@@ -44,7 +45,7 @@ describe("shop setup checklist", () => {
 
     const s = await getShopSetup(pool, shop.id);
     const v = s.vehicles.find((x) => x.id === id)!;
-    expect(v.missing).toEqual(["price", "photo", "doc:RC", "doc:INSURANCE", "doc:PUC"]);
+    expect(v.missing).toEqual(["price", "photo", "doc:RC", "doc:INSURANCE", "doc:PERMIT", "doc:PUC", "doc:FITNESS", "doc:TAX"]);
     expect(v.stage).toBe("NEEDS_INFO");
     expect(v.canSubmit).toBe(false);
     expect(s.steps.vehicles).toBe(false);
@@ -60,6 +61,9 @@ describe("shop setup checklist", () => {
     await pool.query(`insert into vehicle_media (vehicle_id, storage_key) values ($1, 'k/photo')`, [id]);
     await addDoc(id, "RC");
     await addDoc(id, "INSURANCE");
+    await addDoc(id, "PERMIT");
+    await addDoc(id, "FITNESS");
+    await addDoc(id, "TAX");
     await addDoc(id, "PUC", { file: false });
 
     let v = (await getShopSetup(pool, shop.id)).vehicles.find((x) => x.id === id)!;
@@ -97,6 +101,20 @@ describe("shop setup checklist", () => {
     expect(v.docs.PUC!.state).toBe("EXPIRED");
   });
 
+  test("a rejected shop paper carries the admin's note", async () => {
+    const merchant = await createMerchant(pool);
+    const shop = await createShop(pool, merchant.id);
+    const { rows: [doc] } = await pool.query(
+      `insert into shop_documents (shop_id, type, status, storage_key) values ($1, 'PREMISES', 'REJECTED', 'k') returning id`, [shop.id]);
+    await pool.query(
+      `insert into audit_logs (actor_type, action, entity_type, entity_id, after)
+       values ('ADMIN', 'shop_document.verification_decided', 'shop_document', $1, $2)`,
+      [doc.id, JSON.stringify({ status: "REJECTED", note: "Wrong address" })],
+    );
+    const s = await getShopSetup(pool, shop.id);
+    expect(s.papers.shop.find((p) => p.type === "PREMISES")).toMatchObject({ state: "REJECTED", note: "Wrong address" });
+  });
+
   test("a verified, licensed vehicle at a verified shop is READY, and SHOWING once listed", async () => {
     const v = await createBookableVehicle(pool, { status: "INACTIVE" });
     let s = await getShopSetup(pool, v.shopId);
@@ -107,5 +125,80 @@ describe("shop setup checklist", () => {
     s = await getShopSetup(pool, v.shopId);
     expect(s.vehicles[0]!.stage).toBe("SHOWING");
     expect(s.licence.status).toBe("ACTIVE");
+  });
+
+  test("an approved vehicle counts as ready even without paper rows; an expired paper doesn't", async () => {
+    const v = await createBookableVehicle(pool);
+    let s = await getShopSetup(pool, v.shopId);
+    expect(s.completeVehicles).toBe(1);
+    expect(s.steps.vehicles).toBe(true);
+
+    await addDoc(v.id, "PUC", { status: "VERIFIED", expiresAt: "2020-01-01" });
+    s = await getShopSetup(pool, v.shopId);
+    expect(s.completeVehicles).toBe(0);
+  });
+
+  test("an electric vehicle needs only RC, insurance, fitness and tax; an old PUC doesn't count against it", async () => {
+    const merchant = await createMerchant(pool);
+    const shop = await createShop(pool, merchant.id);
+    const id = await bareVehicle(shop.id);
+    await pool.query(`update vehicle_models set fuel_type = 'ELECTRIC' where id = (select model_id from vehicles where id = $1)`, [id]);
+
+    let v = (await getShopSetup(pool, shop.id)).vehicles.find((x) => x.id === id)!;
+    expect(v.requiredDocs).toEqual(["RC", "INSURANCE", "FITNESS", "TAX"]);
+    expect(v.missing).toEqual(["price", "photo", "doc:RC", "doc:INSURANCE", "doc:FITNESS", "doc:TAX"]);
+    expect(Object.keys(v.docs).sort()).toEqual(["FITNESS", "INSURANCE", "PERMIT", "PUC", "RC", "TAX"]);
+
+    await pool.query(`insert into vehicle_pricing (vehicle_id, amount, weekend_amount) values ($1, 50000, 60000)`, [id]);
+    await pool.query(`insert into vehicle_media (vehicle_id, storage_key) values ($1, 'k/photo')`, [id]);
+    for (const t of ["RC", "INSURANCE", "FITNESS", "TAX"]) await addDoc(id, t);
+    await addDoc(id, "PUC", { status: "VERIFIED", expiresAt: "2020-01-01" });
+    const s = await getShopSetup(pool, shop.id);
+    v = s.vehicles.find((x) => x.id === id)!;
+    expect(v.missing).toEqual([]);
+    expect(v.stage).not.toBe("NEEDS_FIXING");
+    expect(s.completeVehicles).toBe(1);
+  });
+
+  test("a petrol vehicle reports all six paper keys", async () => {
+    const merchant = await createMerchant(pool);
+    const shop = await createShop(pool, merchant.id);
+    const id = await bareVehicle(shop.id);
+    const v = (await getShopSetup(pool, shop.id)).vehicles.find((x) => x.id === id)!;
+    expect(v.requiredDocs).toHaveLength(6);
+    expect(Object.keys(v.docs)).toHaveLength(6);
+  });
+
+  test("an unapproved shop's papers step needs the licence plus the required business and shop papers", async () => {
+    const merchant = await createMerchant(pool);
+    const shop = await createShop(pool, merchant.id);
+    await pool.query(`update shops set verification_status = 'UNVERIFIED' where id = $1`, [shop.id]);
+    await pool.query(
+      `with l as (insert into shop_licenses (merchant_user_id, licence_number, status, storage_key) values ($1, 'L-1', 'PENDING', 'k') returning id)
+       insert into license_shops (license_id, shop_id) select id, $2 from l`,
+      [merchant.id, shop.id],
+    );
+    let s = await getShopSetup(pool, shop.id);
+    expect(s.papers.business.map((p) => p.type)).toEqual(["BUSINESS_REG", "PAN", "GSTIN", "UDYAM"]);
+    expect(s.papers.shop.map((p) => p.type)).toEqual(["SHOP_ACT", "PREMISES", "LANDLORD_NOC"]);
+    expect(s.steps.licence).toBe(false);
+
+    for (const type of ["BUSINESS_REG", "PAN"]) {
+      await pool.query(`insert into merchant_documents (merchant_user_id, type, storage_key) values ($1, $2, 'k')`, [merchant.id, type]);
+    }
+    for (const type of ["SHOP_ACT", "PREMISES"] as const) {
+      const d = await createShopDocument(pool, merchant.id, shop.id, { type });
+      await pool.query(`update shop_documents set storage_key = 'k' where id = $1`, [d.id]);
+    }
+    s = await getShopSetup(pool, shop.id);
+    expect(s.papers.shop.find((p) => p.type === "LANDLORD_NOC")).toMatchObject({ state: "MISSING", required: false });
+    expect(s.steps.licence).toBe(true);
+  });
+
+  test("an approved shop with an active licence keeps its papers step done without the new papers", async () => {
+    const v = await createBookableVehicle(pool);
+    const s = await getShopSetup(pool, v.shopId);
+    expect(s.papers.shop.every((p) => p.state === "MISSING")).toBe(true);
+    expect(s.steps.licence).toBe(true);
   });
 });

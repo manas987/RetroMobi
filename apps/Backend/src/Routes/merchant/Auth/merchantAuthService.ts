@@ -105,7 +105,7 @@ async function consumeOtpChallenge(pool: Pool, phone: string, code: string): Pro
       `update merchant_otp_challenges set attempt_count = attempt_count + 1 where id = $1`,
       [challenge.id],
     );
-    throw new MerchantInvalidOtpError("incorrect code");
+    throw new MerchantInvalidOtpError("That code is incorrect. Check it and try again.");
   }
 
   await pool.query(`update merchant_otp_challenges set consumed_at = now() where id = $1`, [

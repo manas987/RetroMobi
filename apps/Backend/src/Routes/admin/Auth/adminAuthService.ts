@@ -118,7 +118,7 @@ async function consumeOtpChallenge(pool: Pool, phone: string, code: string): Pro
       `update admin_otp_challenges set attempt_count = attempt_count + 1 where id = $1`,
       [challenge.id],
     );
-    throw new AdminInvalidOtpError("incorrect code");
+    throw new AdminInvalidOtpError("That code is incorrect. Check it and try again.");
   }
 
   await pool.query(`update admin_otp_challenges set consumed_at = now() where id = $1`, [

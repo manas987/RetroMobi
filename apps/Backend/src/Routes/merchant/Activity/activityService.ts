@@ -27,7 +27,13 @@ export async function listActivity(
        left join merchant_users mu on a.actor_type = 'MERCHANT' and mu.id = a.actor_id
        left join shop_members sm on sm.shop_id = a.shop_id and sm.merchant_user_id = a.actor_id and sm.deleted_at is null
        left join bookings b on a.entity_type = 'booking' and b.id = a.entity_id
-       left join vehicles v on v.id = case when a.entity_type = 'vehicle' then a.entity_id else b.vehicle_id end
+       -- Paper uploads and RetroMobi's paper decisions are logged against the
+       -- document; name its vehicle like every other vehicle row.
+       left join vehicle_documents vd on a.entity_type = 'vehicle_document' and vd.id = a.entity_id
+       left join vehicles v on v.id = case a.entity_type
+                                       when 'vehicle' then a.entity_id
+                                       when 'vehicle_document' then vd.vehicle_id
+                                       else b.vehicle_id end
        left join vehicle_models vm on vm.id = v.model_id
        left join riders r on r.id = b.rider_id
        left join booking_groups g on g.id = b.group_id

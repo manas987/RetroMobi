@@ -4,7 +4,7 @@ import { useT, type TKey } from "../../../i18n";
 import { useMerchantShop } from "../Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
 import { vehicleLabel } from "../bookingActions";
-import { Button, ErrorNote, Field, INPUT, Sheet } from "../ui/ui";
+import { Button, ErrorNote, Field, INPUT, Select, Sheet } from "../ui/ui";
 
 const CATS = ["BOOKING", "APP_HELP", "OTHER"] as const;
 type Cat = (typeof CATS)[number];
@@ -27,13 +27,10 @@ export function NewChatSheet({ open, onClose, bookingId: preset, onCreated }: { 
     setBusy(true);
     setError(null);
     try {
+      // A booking that already has a chat returns that chat (reopened if closed).
       const ticket = await portalFetch<{ id: string }>("merchant", "/tickets", {
         method: "POST", token,
-        body: { bookingId: category === "BOOKING" ? bookingId : undefined, firstMessage: message.trim() || undefined },
-      });
-      await portalFetch("merchant", `/tickets/${ticket.id}/category`, {
-        method: "POST", token,
-        body: category === "BOOKING" ? { category, bookingId } : { category },
+        body: { category, bookingId: category === "BOOKING" ? bookingId : undefined, firstMessage: message.trim() || undefined },
       });
       await invalidate();
       setMessage("");
@@ -50,18 +47,16 @@ export function NewChatSheet({ open, onClose, bookingId: preset, onCreated }: { 
     <Sheet open={open} onClose={onClose} title={t("support.newTitle")}>
       {error && <div className="mb-4"><ErrorNote text={error} /></div>}
       <Field label={t("support.whatAbout")}>
-        <select className={INPUT} value={category} onChange={(e) => setPicked(e.target.value as Cat)}>
-          {CATS.map((c) => <option key={c} value={c}>{t(`support.cat${c}` as TKey)}</option>)}
-        </select>
+        <Select value={category} onChange={setPicked} options={CATS.map((c) => ({ value: c, label: t(`support.cat${c}` as TKey) }))} />
       </Field>
       {category === "BOOKING" && (
         <Field label={t("support.whichBooking")}>
-          <select className={INPUT} value={bookingId} onChange={(e) => setChosenBooking(e.target.value)}>
-            <option value="">{t("support.pickBooking")}</option>
-            {bookings.data?.bookings.map((b) => (
-              <option key={String(b.id)} value={String(b.id)}>{vehicleLabel(b)} · {date(b.scheduled_pickup_at)}</option>
-            ))}
-          </select>
+          <Select
+            value={bookingId}
+            onChange={setChosenBooking}
+            placeholder={t("support.pickBooking")}
+            options={(bookings.data?.bookings ?? []).map((b) => ({ value: String(b.id), label: `${vehicleLabel(b)} · ${date(b.scheduled_pickup_at)}` }))}
+          />
         </Field>
       )}
       <Field label={`${t("support.firstMessage")} (${t("common.optional")})`}>

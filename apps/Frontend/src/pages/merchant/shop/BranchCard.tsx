@@ -1,20 +1,18 @@
 import { useState } from "react";
-import { Link } from "wouter";
-import { Clock, Pencil, Rocket, Store, Trash2 } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { ArrowRight, Rocket, Store, Trash2 } from "lucide-react";
 import { portalFetch, type Row } from "../../../lib/portal";
 import { can as roleCan } from "../../../lib/permissions";
 import type { Tone } from "../../../lib/bookingStage";
 import { useT, type TKey } from "../../../i18n";
 import { Toggle } from "../../../components/Toggle";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { Button, Card, Chip, ConfirmSheet, ErrorNote, INPUT } from "../ui/ui";
+import { Button, Card, Chip, ConfirmSheet, ErrorNote } from "../ui/ui";
 import type { SetupData } from "../setup/GetListedChip";
-import { BranchSheet } from "./BranchSheet";
-import { HoursSheet } from "./HoursSheet";
 
-const VERIFY_TONE: Record<string, Tone> = { UNVERIFIED: "muted", PENDING: "info", VERIFIED: "good", REJECTED: "bad" };
+export const VERIFY_TONE: Record<string, Tone> = { UNVERIFIED: "muted", PENDING: "info", VERIFIED: "good", REJECTED: "bad" };
 
-export function BranchCard({ shop: s, token, licences, reloadShops, selectShop, goPapers }: { shop: Row; token: string; licences: Row[]; reloadShops: () => void; selectShop: (id: string) => void; goPapers: () => void }) {
+export function BranchCard({ shop: s, token, reloadShops, selectShop }: { shop: Row; token: string; reloadShops: () => void; selectShop: (id: string) => void }) {
   const { t, lang } = useT();
   const invalidate = useInvalidateMerchant();
   const id = String(s.id);
@@ -23,7 +21,8 @@ export function BranchCard({ shop: s, token, licences, reloadShops, selectShop, 
   const canWrite = roleCan(role, "shop:write");
   const canDelete = roleCan(role, "shop:delete");
   const setup = useMerchantQuery<SetupData>(roleCan(role, "fleet:read") ? `/shops/${id}/setup` : null, token);
-  const [sheet, setSheet] = useState<"edit" | "hours" | "remove" | null>(null);
+  const [sheet, setSheet] = useState<"remove" | null>(null);
+  const [, navigate] = useLocation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const open = s.status === "OPEN";
@@ -43,12 +42,6 @@ export function BranchCard({ shop: s, token, licences, reloadShops, selectShop, 
       setBusy(false);
     }
   }
-  const [pick, setPick] = useState("");
-  const covers = (l: Row) => ((l.shops ?? []) as { id?: string }[]).some((x) => String(x.id) === id);
-  const used = licences.filter(covers);
-  const unused = licences.filter((l) => !covers(l));
-  const link = (l: Row) => run(() => portalFetch("merchant", covers(l) ? `/licences/${l.id}/shops/${id}` : `/licences/${l.id}/shops`, covers(l) ? { method: "DELETE", token } : { method: "POST", token, body: { shopId: id } }));
-
   return (
     <Card title={String(s.name)} icon={Store} action={<Chip tone={VERIFY_TONE[verify] ?? "muted"}>{t(`status.verify_${verify}` as TKey)}</Chip>}>
       <p className="mb-3 text-sm text-ink-2">{[s.address_line1, s.city].filter(Boolean).map(String).join(", ")}</p>
@@ -61,55 +54,15 @@ export function BranchCard({ shop: s, token, licences, reloadShops, selectShop, 
         </div>
       )}
 
-      <div className="mb-4">
-        <p className="mb-2 text-sm font-semibold text-ink">{t("shop.licencesTitle")}</p>
-        {licences.length === 0 ? (
-          <p className="text-sm text-ink-3">{t("shop.noLicenceYet")} <button type="button" onClick={goPapers} className="font-semibold text-ink underline">{t("shop.addLicenceLink")}</button></p>
-        ) : (
-          <>
-            {/* Only what covers this branch is listed; other licences sit in one picker,
-                since an owner usually has a single licence for every branch. */}
-            {used.length === 0 ? (
-              <p className="mb-2 text-sm text-ink-3">{t("shop.noLicenceForBranch")}</p>
-            ) : (
-              <ul className="mb-2 flex flex-col gap-2">
-                {used.map((l) => (
-                  <li key={String(l.id)} className="flex items-center justify-between gap-2 rounded-2xl bg-surface-2 px-3 py-2 text-sm">
-                    <span className="min-w-0 truncate text-ink">{String(l.licence_number)}</span>
-                    {canWrite ? (
-                      <Button variant="ghost" disabled={busy} onClick={() => link(l)}>{t("shop.detach")}</Button>
-                    ) : (
-                      <Chip tone="good">{t("shop.covers")}</Chip>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {canWrite && unused.length > 0 && (
-              <div className="flex gap-2">
-                <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label={t("shop.attachPick")} className={`${INPUT} min-h-11 flex-1`}>
-                  <option value="">{t("shop.attachPick")}</option>
-                  {unused.map((l) => <option key={String(l.id)} value={String(l.id)}>{String(l.licence_number)}</option>)}
-                </select>
-                <Button disabled={busy || !pick} onClick={() => { const l = unused.find((x) => String(x.id) === pick); if (l) { setPick(""); link(l); } }}>{t("shop.attach")}</Button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
       {error && <div className="mb-3"><ErrorNote text={error} /></div>}
       <div className="mt-auto flex flex-wrap gap-2">
-        {canWrite && <Button icon={Pencil} onClick={() => setSheet("edit")}>{t("shop.editDetails")}</Button>}
-        {canWrite && <Button icon={Clock} onClick={() => setSheet("hours")}>{t("shop.hours")}</Button>}
+        <Button icon={ArrowRight} onClick={() => { selectShop(id); navigate("/merchant/shop"); }}>{t("shop.openShop")}</Button>
         {canWrite && verify !== "VERIFIED" && (
           <Link href="/merchant/setup" onClick={() => selectShop(id)}><Button variant="primary" icon={Rocket}>{t("shop.getListed")}</Button></Link>
         )}
         {canDelete && <Button variant="ghost" icon={Trash2} className="text-danger" onClick={() => setSheet("remove")}>{t("shop.removeBranch")}</Button>}
       </div>
 
-      <BranchSheet open={sheet === "edit"} onClose={() => setSheet(null)} shop={s} token={token} reloadShops={reloadShops} />
-      <HoursSheet open={sheet === "hours"} onClose={() => setSheet(null)} shopId={id} token={token} />
       <ConfirmSheet
         open={sheet === "remove"}
         onClose={() => { setSheet(null); setError(null); }}

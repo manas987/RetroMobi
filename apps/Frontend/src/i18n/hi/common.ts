@@ -17,7 +17,7 @@ export default {
   online: "ऑनलाइन",
   walkin: "वॉक-इन",
   viewPublicPage: "ग्राहकों को आपकी दुकान कैसी दिखती है, देखें",
-  yourShopPage: "आपकी दुकान का पेज",
+  yourShopPage: "दुकान का पेज",
   shop: "दुकान",
   shopOpen: "दुकान खुली है",
   shopClosed: "दुकान बंद है",
@@ -62,4 +62,7 @@ export default {
   whyNeeded: "यह क्यों चाहिए",
   askOwner: "यह काम दुकान के मालिक से करवाएँ।",
   showOlder: "पुराने देखें",
+  pickDate: "तारीख चुनें",
+  pickYear: "साल चुनें",
+  clear: "हटाएँ",
 } satisfies Record<keyof typeof en, string>;

@@ -82,4 +82,39 @@ describe("shop summary", () => {
     expect(hidden.money).toBeUndefined();
     expect("onlineEarnings" in hidden.days[0]!).toBe(false);
   });
+
+  test("all time starts at the shop's first rental", async () => {
+    const { shopId, a } = await setup();
+    await insertBooking(pool, { vehicleId: a.id, pickupAt: ist("2031-08-20"), returnAt: ist("2031-08-21") });
+    await insertBooking(pool, { vehicleId: a.id, pickupAt: ist("2031-09-02"), returnAt: ist("2031-09-03") });
+
+    const s = await shopSummary(pool, shopId, { to: "2031-09-05" }, false);
+    expect(s.from).toBe("2031-08-20");
+    expect(s.rangeDays).toBe(17);
+    expect(s.totals.online).toBe(2);
+
+    const empty = await setup();
+    const none = await shopSummary(pool, empty.shopId, { to: "2031-09-05" }, false);
+    expect(none.from).toBe("2031-09-05");
+    expect(none.rangeDays).toBe(1);
+  });
+
+  test("each vehicle reports its rides and, for owners, what it earned", async () => {
+    const { merchant, shopId, a, b } = await setup();
+    const online = await insertBooking(pool, { vehicleId: a.id, pickupAt: ist("2031-10-02"), returnAt: ist("2031-10-03") });
+    const walkin = await insertBooking(pool, { vehicleId: a.id, pickupAt: ist("2031-10-04"), returnAt: ist("2031-10-04", 18), source: "OFFLINE" });
+    await pool.query(`update bookings set rental_amount = 50000 where id = $1`, [walkin.id]);
+    await pool.query(
+      `insert into payouts (merchant_user_id, booking_id, stage, amount, status)
+       values ($1, $2, 'UPFRONT', 10000, 'PAID'), ($1, $2, 'BALANCE', 20000, 'FAILED')`,
+      [merchant.id, online.id],
+    );
+
+    const s = await shopSummary(pool, shopId, { from: "2031-10-01", to: "2031-10-05" }, true);
+    expect(s.vehicles.find((v) => v.id === a.id)).toMatchObject({ rides: 2, earnings: 60000 });
+    expect(s.vehicles.find((v) => v.id === b.id)).toMatchObject({ rides: 0, earnings: 0 });
+
+    const hidden = await shopSummary(pool, shopId, { from: "2031-10-01", to: "2031-10-05" }, false);
+    expect("earnings" in hidden.vehicles[0]!).toBe(false);
+  });
 });

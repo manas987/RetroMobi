@@ -3,13 +3,11 @@ import { Camera, CheckCircle2, ChevronDown, FileText, IndianRupee, type LucideIc
 import { portalFetch, PortalApiError, type Row } from "../../../lib/portal";
 import { uploadFile } from "../../../lib/upload";
 import { useT, type TKey } from "../../../i18n";
-import { istDay } from "../../../lib/format";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "../query";
-import { Button, Chip, ErrorNote, Field, INPUT } from "../ui/ui";
+import { Button, Chip, ErrorNote, DateInput, Field, INPUT } from "../ui/ui";
 import { DocUpload } from "./DocUpload";
 import type { DocType, SetupVehicle } from "./GetListedChip";
 
-const DOCS: DocType[] = ["RC", "INSURANCE", "PUC"];
 const toPaise = (rupees: string) => Math.round(Number(rupees) * 100);
 const fromPaise = (p: unknown) => (p == null ? "" : String(Number(p) / 100));
 
@@ -57,7 +55,7 @@ export function VehicleSetup({ vehicle: v, token }: { vehicle: SetupVehicle; tok
       <Row_ icon={Camera} title={t("setup.itemPhoto")} done={!v.missing.includes("photo")} open={open === "photo"} onToggle={() => toggle("photo")}>
         <PhotoForm vehicle={v} token={token} />
       </Row_>
-      {DOCS.map((d) => (
+      {v.requiredDocs.map((d) => (
         <Row_ key={d} icon={FileText} title={t(`setup.doc_${d}` as TKey)} done={!v.missing.includes(`doc:${d}`)} open={open === d} onToggle={() => toggle(d)}>
           <DocForm vehicleId={v.id} type={d} doc={v.docs[d]} token={token} />
         </Row_>
@@ -152,7 +150,7 @@ function PhotoForm({ vehicle: v, token }: { vehicle: SetupVehicle; token: string
   return (
     <>
       <p className="mb-3 text-sm text-ink-2">{t("setup.photoHelp")}</p>
-      <DocUpload label={t("setup.addPhotos")} accept="image/*" capture multiple busy={busy} onFiles={upload} />
+      <DocUpload label={t("setup.addPhotos")} accept="image/*" multiple busy={busy} onFiles={upload} />
       {v.photoCount > 0 && <p className="mb-2 text-sm font-semibold text-verified">{t(v.photoCount === 1 ? "setup.photosAdded_one" : "setup.photosAdded_other", { n: v.photoCount })}</p>}
       {error && <div className="mb-3"><ErrorNote text={error} /></div>}
     </>
@@ -187,8 +185,8 @@ function DocForm({ vehicleId, type, doc, token }: { vehicleId: string; type: Doc
   return (
     <>
       {doc.state !== "MISSING" && <p className="mb-3 rounded-2xl bg-danger-soft px-3 py-2 text-sm text-danger">{doc.note ?? (doc.state === "EXPIRED" ? t("setup.docExpired") : t("setup.docRejected"))}</p>}
-      {needsExpiry && <Field label={t("setup.docExpiry")}><input className={INPUT} type="date" min={istDay(new Date())} value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /></Field>}
-      <DocUpload label={t("setup.docFile")} accept="image/*,application/pdf" capture busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
+      {needsExpiry && <Field label={t("setup.docExpiry")}><DateInput value={expiresAt} onChange={setExpiresAt} /></Field>}
+      <DocUpload label={t("setup.docFile")} accept="image/*,application/pdf" busy={busy} onFiles={(f) => setFile(f[0] ?? null)} />
       {error && <div className="mb-3"><ErrorNote text={error} /></div>}
       <Button className="mb-2" disabled={busy || !file || (needsExpiry && !expiresAt)} onClick={save}>{busy ? t("common.saving") : t("common.save")}</Button>
     </>

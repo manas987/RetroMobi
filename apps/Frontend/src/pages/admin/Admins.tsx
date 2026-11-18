@@ -5,6 +5,8 @@ import { DataTable, StatusPill } from "../../components/DataTable";
 import { ErrorBox, SubmitButton, TextField } from "../../components/AuthFormBits";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { enumLabel } from "../../lib/format";
+import { E164Input } from "../../components/PhoneInput";
+import { validPhone } from "../../lib/countries";
 
 const ROLES = ["SUPPORT", "ADMIN", "SUPER_ADMIN"] as const;
 
@@ -17,7 +19,7 @@ function AdminsBody() {
   const myId = token ? decodeJwtSubject(token) : null;
 
   const [adding, setAdding] = useState(false);
-  const [phone, setPhone] = useState("+91");
+  const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<(typeof ROLES)[number]>("SUPPORT");
   const [busy, setBusy] = useState(false);
@@ -28,7 +30,7 @@ function AdminsBody() {
     setBusy(true);
     try {
       await portalFetch("admin", "/admins", { method: "POST", token, body: { phone, name, role } });
-      setPhone("+91");
+      setPhone("");
       setName("");
       setRole("SUPPORT");
       setAdding(false);
@@ -60,7 +62,10 @@ function AdminsBody() {
       {adding && (
         <div className="rounded-panel border border-line p-5 mb-5 max-w-md">
           {addError && <ErrorBox text={addError} />}
-          <TextField label="Phone" value={phone} onChange={setPhone} />
+          <label className="flex flex-col gap-1.5 mb-4">
+            <span className="text-xs font-medium text-ink-3">Phone</span>
+            <E164Input value={phone} onChange={setPhone} />
+          </label>
           <TextField label="Name" value={name} onChange={setName} />
           <label className="flex flex-col gap-1.5 mb-4">
             <span className="text-xs font-medium text-ink-3">Tier</span>
@@ -78,7 +83,7 @@ function AdminsBody() {
             </Select>
           </label>
           <div className="flex items-center gap-3">
-            <SubmitButton busy={busy} disabled={!name || phone.length < 10} onClick={addAdmin}>
+            <SubmitButton busy={busy} disabled={!name || !validPhone(phone)} onClick={addAdmin}>
               Add admin
             </SubmitButton>
             <button type="button" onClick={() => setAdding(false)} className="text-sm text-ink-3 hover:text-ink">

@@ -21,9 +21,19 @@ export function OtpInput({
   }
 
   function handleChange(i: number, raw: string) {
-    const d = raw.replace(/\D/g, "").slice(-1);
-    setDigit(i, d);
-    if (d && i < length - 1) refs.current[i + 1]?.focus();
+    let typed = raw.replace(/\D/g, "");
+    // Typing into a filled box (cursor beside the old digit): keep the new one.
+    if (typed.length === 2 && digits[i]) typed = typed.startsWith(digits[i]) ? typed[1]! : typed[0]!;
+    // SMS autofill drops the whole code into one box: spread it from here.
+    if (typed.length > 1) {
+      const next = digits.slice();
+      for (let k = 0; k < typed.length && i + k < length; k++) next[i + k] = typed[k]!;
+      onChange(next.join(""));
+      refs.current[Math.min(i + typed.length, length - 1)]?.focus();
+      return;
+    }
+    setDigit(i, typed);
+    if (typed && i < length - 1) refs.current[i + 1]?.focus();
   }
 
   function handleKeyDown(i: number, e: React.KeyboardEvent<HTMLInputElement>) {
@@ -60,8 +70,10 @@ export function OtpInput({
           autoFocus={autoFocus && i === 0}
           type="text"
           inputMode="numeric"
-          maxLength={1}
+          autoComplete={i === 0 ? "one-time-code" : "off"}
+          aria-label={`Digit ${i + 1}`}
           value={d}
+          onFocus={(e) => e.target.select()}
           onChange={(e) => handleChange(i, e.target.value)}
           onKeyDown={(e) => handleKeyDown(i, e)}
           className="w-11 h-12 text-center text-lg font-semibold tnum rounded-row border border-line-strong outline-none focus:border-ink focus:ring-1 focus:ring-ink transition-colors"

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, ChevronRight, Copy, LifeBuoy, MapPin, Phone, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Copy, IdCard, LifeBuoy, MapPin, Phone, X } from "lucide-react";
 import { Header } from "../../components/Header";
 import { Footer } from "../../components/Footer";
 import { usePortalSession, usePortalQuery, portalFetch, type Row } from "../../lib/portal";
@@ -277,8 +277,14 @@ function BookingDetail({ booking: b, token, onChanged }: { booking: Row; token: 
             <div className="mt-4 rounded-row border border-line bg-surface-2 px-4 py-3">
               <p className="text-xs text-ink-2">1. Tell the shop your handover code</p>
               <p className="mt-1 text-3xl font-semibold tracking-[0.3em] text-ink tnum">{String(b.handover_code)}</p>
-              <p className="mt-1 text-xs text-ink-2">We also sent it on WhatsApp. Show your original driving licence too.</p>
+              <p className="mt-1 text-xs text-ink-2">We also sent it on WhatsApp.</p>
             </div>
+          )}
+          {!!b.pickup_licence_ack_at && !b.pickup_licence_checked && (
+            <p className="mt-3 flex items-start gap-2 rounded-row bg-amber-soft px-3 py-2 text-sm text-on-amber">
+              <IdCard size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              Bring {b.rider_name ? `${String(b.rider_name)}’s` : "the rider’s"} original driving licence. The shop checks it before handing over the keys.
+            </p>
           )}
           <div className="mt-4">
             <p className="mb-2 text-xs text-ink-2">{b.handover_code ? "2. " : ""}Once the shop has checked your ID, record the scooter and confirm pickup</p>
@@ -316,6 +322,7 @@ function BookingDetail({ booking: b, token, onChanged }: { booking: Row; token: 
               <div>
                 <p className="font-medium text-ink">{String(b.shop_name ?? "")}</p>
                 <p className="text-ink-2">{address}</p>
+                {b.shop_landmark ? <p className="text-ink-2">{String(b.shop_landmark)}</p> : null}
                 <a className="text-sm font-medium text-ink underline underline-offset-2" target="_blank" rel="noreferrer"
                   href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`}>Directions</a>
               </div>

@@ -75,6 +75,8 @@ describe(".env.example", () => {
     const read = new Set(envVarsReadByCode().keys());
     // TEST_DATABASE_URL is read by the test files this scan deliberately skips.
     read.add("TEST_DATABASE_URL");
+    // DB_PORT is read by docker-compose.yml (the local Postgres port), not by code.
+    read.add("DB_PORT");
 
     const stale = [...documentedKeys()].filter((key) => !read.has(key));
     expect(stale).toEqual([]);

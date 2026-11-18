@@ -1,14 +1,16 @@
+import { Link } from "wouter";
 import { useState } from "react";
-import { CheckCircle2, ShieldAlert, ShieldCheck, ThumbsUp, TriangleAlert } from "lucide-react";
+import { CheckCircle2, ShieldAlert, ShieldCheck, ThumbsUp, TriangleAlert, Video } from "lucide-react";
 import { portalFetch, type Row } from "../../lib/portal";
 import { istDay, rupees } from "../../lib/format";
 import { combine, splitIso } from "../../components/DateTimeField";
 import { DateRangeField } from "../../components/DateRangeField";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { useT } from "../../i18n";
 import { useMerchantShop } from "./Layout";
 import { errorText, useInvalidateMerchant, useMerchantQuery } from "./query";
-import { Button, ErrorNote, Field, INPUT, LoadingRows, Sheet } from "./ui/ui";
+import { Button, ErrorNote, Field, INPUT, LoadingRows, PHONE, Select, Sheet } from "./ui/ui";
+import { E164Input } from "../../components/PhoneInput";
+import { validPhone } from "../../lib/countries";
 
 /**
  * The three things that happen at the counter: hand a vehicle over, take it
@@ -97,6 +99,7 @@ interface Identity {
   licenceExpiresOn: string | null;
   photoUrl: string | null;
   alreadyChecked: boolean;
+  pickupLicenceRequired?: boolean;
 }
 
 /**
@@ -106,7 +109,7 @@ interface Identity {
  */
 function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void }) {
   const { t, lang, date } = useT();
-  const { token } = useMerchantShop();
+  const { token, shopId } = useMerchantShop();
   const invalidate = useInvalidateMerchant();
   const q = useMerchantQuery<Identity>(`/bookings/${booking.id}/identity`, token);
   const [photo, setPhoto] = useState<boolean | null>(null);
@@ -121,6 +124,10 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
   if (q.isPending) return <LoadingRows />;
   if (q.isError) return <ErrorNote text={errorText(lang, q.error)} onRetry={() => q.refetch()} />;
   const id = q.data;
+  if (id.pickupLicenceRequired && !id.alreadyChecked) {
+    return <PickupLicence booking={booking} shopId={shopId} token={token} riderName={id.riderName}
+      onDone={() => { void invalidate(); onClose(); }} />;
+  }
 
   if (outcome === "failed") {
     return (
@@ -135,11 +142,25 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
     );
   }
 
-  if (outcome === "ok" || id.alreadyChecked) {
+  if (outcome !== "ok" && id.alreadyChecked) {
+    // Not a success screen: the shop is waiting, the customer has to act.
+    return (
+      <div className="rounded-2xl bg-info-soft p-5 text-info">
+        <Video className="h-8 w-8 mb-2" aria-hidden />
+        <p className="text-lg font-semibold">{t("actions.waitingVideoTitle")}</p>
+        <p className="mt-1 text-base">{t("actions.waitingVideoBody")}</p>
+        <Button variant="secondary" className="mt-5 w-full" onClick={onClose}>
+          {t("common.close")}
+        </Button>
+      </div>
+    );
+  }
+
+  if (outcome === "ok") {
     return (
       <div className="rounded-2xl bg-verified-soft p-5 text-verified">
         <ShieldCheck className="h-8 w-8 mb-2" aria-hidden />
-        <p className="text-base font-medium">{outcome === "ok" ? t("actions.idDone") : t("actions.idAlreadyChecked")}</p>
+        <p className="text-base font-medium">{t("actions.idDone")}</p>
         <Button variant="secondary" className="mt-5 w-full" onClick={onClose}>
           {t("common.done")}
         </Button>
@@ -306,6 +327,8 @@ function ReturnFlow({ booking, onClose }: { booking: Row; onClose: () => void })
       });
       setReleased(r.depositReleased ?? 0);
       setStep(next);
+      // Now, not on "Done": closing the receipt with ✕ left "Mark returned" showing.
+      void invalidate();
     } catch (err) {
       setError(errorText(lang, err));
     } finally {
@@ -461,7 +484,7 @@ function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => vo
   const vehiclesQ = useMerchantQuery<{ vehicles: Row[] }>(`/shops/${shopId}/vehicles`, token);
   const [vehicleId, setVehicleId] = useState(initialVehicleId ?? "");
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("+91");
+  const [phone, setPhone] = useState("");
   const [dl, setDl] = useState("");
   // The customer is at the counter: start now, not at the customer site's
   // "tomorrow 10am" default. Eight hours is a starting point to adjust.
@@ -478,7 +501,7 @@ function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => vo
   const returnAt = combine(returnDate, returnTime);
   const windowError = returnAt <= pickupAt;
   const vehicles = vehiclesQ.data?.vehicles ?? [];
-  const valid = vehicleId && name.trim() && phone.length >= 13 && dl.trim() && !windowError;
+  const valid = vehicleId && name.trim() && validPhone(phone) && dl.trim() && !windowError;
 
   if (saved) {
     const deposit = saved.totals.securityDepositAmount;
@@ -530,30 +553,24 @@ function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => vo
     <div>
       <p className="mb-5 text-base text-ink-2">{t("actions.walkinIntro")}</p>
       <Field label={t("actions.walkinVehicle")}>
-        <Select value={vehicleId} onValueChange={setVehicleId}>
-          <SelectTrigger className="w-full min-h-12 rounded-2xl">
-            <SelectValue placeholder={t("actions.walkinChooseVehicle")} />
-          </SelectTrigger>
-          <SelectContent>
-            {vehicles.map((v) => {
-              // No price row means the server can't total it; say so here
-              // instead of letting the save fail.
-              const priced = v.amount != null;
-              return (
-                <SelectItem key={String(v.id)} value={String(v.id)} disabled={!priced}>
-                  {vehicleLabel(v)}
-                  {!priced && <span className="text-ink-3"> — {t("actions.walkinNoPrice")}</span>}
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
+        <Select
+          value={vehicleId}
+          onChange={setVehicleId}
+          placeholder={t("actions.walkinChooseVehicle")}
+          // No price row means the server can't total it; say so here
+          // instead of letting the save fail.
+          options={vehicles.map((v) => ({
+            value: String(v.id),
+            label: v.amount != null ? vehicleLabel(v) : `${vehicleLabel(v)} — ${t("actions.walkinNoPrice")}`,
+            disabled: v.amount == null,
+          }))}
+        />
       </Field>
       <Field label={t("actions.walkinName")}>
         <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" className={INPUT} />
       </Field>
       <Field label={t("actions.walkinPhone")}>
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={`${INPUT} tnum`} />
+        <E164Input value={phone} onChange={setPhone} className={PHONE} placeholder="" />
       </Field>
       <Field label={t("actions.licenceNumber")}>
         <input value={dl} onChange={(e) => setDl(e.target.value.toUpperCase())} autoComplete="off" className={`${INPUT} tnum`} />
@@ -580,4 +597,82 @@ function WalkinForm({ onClose, initialVehicleId, startDay }: { onClose: () => vo
       </Button>
     </div>
   );
+}
+
+function PickupLicence({ booking, shopId, token, riderName, onDone }: {
+  booking: Row; shopId: string | null; token: string; riderName: string | null; onDone: () => void;
+}) {
+  const { lang, t, date, time } = useT();
+  const hi = lang === "hi";
+  const labels = hi ? ["मूल लाइसेंस देखा", "नाम और फोटो राइडर से मेल खाते हैं", "लाइसेंस वाहन और किराये की अवधि के लिए मान्य है"]
+    : ["Original licence seen", "Name and photo match the rider", "Licence covers the vehicle and rental period"];
+  const [checks, setChecks] = useState([false, false, false]);
+  const [code, setCode] = useState("");
+  const [resent, setResent] = useState(false);
+  const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function decide(refuse: boolean) {
+    if (!shopId || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await portalFetch("merchant", `/shops/${shopId}/bookings/${booking.id}/pickup-licence`, {
+        method: "POST", token, body: refuse ? { decision: "refuse", reason }
+          : { decision: "approve", originalSeen: true, photoMatched: true, validForVehicleAndDates: true, handoverCode: code },
+      });
+      onDone();
+    } catch (err) {
+      setError(errorText(lang, err));
+    } finally { setBusy(false); }
+  }
+  async function resendCode() {
+    setError(null);
+    setResent(false);
+    try {
+      await portalFetch("merchant", `/bookings/${booking.id}/handover-code/send`, { method: "POST", token });
+      setResent(true);
+    } catch (err) {
+      setError(errorText(lang, err));
+    }
+  }
+  return <div className="space-y-4">
+    <p className="font-semibold">{hi ? "पिकअप पर मूल लाइसेंस जाँचें" : "Check the original licence at pickup"}</p>
+    <p>{riderName}</p>
+    <p className="text-sm text-ink-2">{vehicleLabel(booking)}<br />
+      {t("actions.return")} · {date(String(booking.scheduled_return_at))} · {time(String(booking.scheduled_return_at))}</p>
+    {confirming ? <>
+      <p>{hi ? "वाहन न दें। राइडर पर सामान्य रद्दीकरण नियम लागू होंगे।" : "Do not hand over the vehicle. The usual cancellation charges apply to the rider."}</p>
+      <Button variant="danger" disabled={busy} onClick={() => void decide(true)}>{hi ? "बुकिंग रद्द करें" : "Refuse and cancel booking"}</Button>
+      <Button variant="secondary" disabled={busy} onClick={() => setConfirming(false)}>{hi ? "वापस" : "Go back"}</Button>
+    </> : <>
+      {labels.map((label, i) => <label key={label} className="flex items-center gap-2">
+        <input type="checkbox" checked={checks[i]} onChange={(event) => setChecks(checks.map((value, j) => j === i ? event.target.checked : value))} />{label}
+      </label>)}
+      <div>
+        <p className="mb-1 text-base font-semibold text-ink">{t("actions.idStepCode")}</p>
+        <p className="mb-2 text-sm text-ink-3">{t("actions.idCodeHint")}</p>
+        <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          inputMode="numeric" autoComplete="one-time-code" aria-label={t("actions.idStepCode")}
+          className={`${INPUT} w-48 tnum text-xl tracking-[0.4em]`} />
+        <button type="button" onClick={() => void resendCode()} className="mt-2 block text-sm font-medium text-ink underline underline-offset-2">
+          {t("actions.idResendCode")}
+        </button>
+        {resent && <p role="status" className="mt-1 text-sm text-verified">{t("actions.idCodeResent")}</p>}
+      </div>
+      <Button variant="primary" disabled={!checks.every(Boolean) || code.length !== 6 || busy} onClick={() => void decide(false)}>{hi ? "लाइसेंस जाँच पूरी करें" : "Approve licence check"}</Button>
+      <Select ariaLabel={hi ? "बुकिंग रद्द करने का कारण" : "Reason for refusal"} value={reason} onChange={setReason}
+        options={[
+          { value: "", label: hi ? "कारण चुनें" : "Choose reason for refusal" },
+          { value: "MISSING", label: hi ? "मूल लाइसेंस नहीं है" : "Original licence missing" },
+          { value: "INVALID", label: hi ? "लाइसेंस मान्य नहीं" : "Licence does not cover this rental" },
+          { value: "MISMATCH", label: hi ? "लाइसेंस मेल नहीं खाता" : "Licence does not match the rider" },
+        ]} />
+      <Button variant="secondary" disabled={!reason || busy} onClick={() => setConfirming(true)}>{hi ? "रद्द करने की समीक्षा करें" : "Review refusal"}</Button>
+      <div><Link href={`/merchant/support?booking=${booking.id}`} className="underline">{hi ? "विवाद या दुकान की समस्या के लिए सहायता" : "Get help with a dispute or shop issue"}</Link></div>
+    </>}
+    {error && <ErrorNote text={error} />}
+  </div>;
 }

@@ -131,3 +131,13 @@ export function dateLabel(value: unknown): string {
     year: "numeric",
   });
 }
+
+/**
+ * "+917039408159" -> "+91 70394 08159", the way Indian numbers are read out,
+ * with non-breaking spaces so a number never wraps in half. Anything else is
+ * left alone.
+ */
+export function phoneLabel(phone: string): string {
+  const m = /^\+91(\d{5})(\d{5})$/.exec(phone);
+  return m ? `+91\u00a0${m[1]}\u00a0${m[2]}` : phone;
+}

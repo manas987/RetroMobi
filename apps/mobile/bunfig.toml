@@ -1,0 +1,5 @@
+# One flat node_modules for the three mobile packages. Expo's native build must
+# find exactly ONE copy of each native module; bun's default "isolated" layout
+# makes several, and `expo-doctor` fails on it.
+[install]
+linker = "hoisted"

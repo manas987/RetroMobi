@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import type { KycClient } from "../../../providers/kyc.ts";
+import { isPickupLicenceOutage, pickupLicenceRejections } from "../../../lib/pickupLicence.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import { maskDl } from "../../../lib/maskSecrets.ts";
 import { hashLicenceNumber, normaliseLicenceNumber } from "../../../lib/verificationHash.ts";
@@ -33,18 +34,30 @@ export async function listRiders(pool: Pool, userId: string) {
     // left as a `date` and so displayed a day early in IST, exactly like dob did.
     `select r.id, r.name, to_char(r.dob, 'YYYY-MM-DD') as dob,
             dlv.status as licence_status,
-            to_char(dlv.expires_on, 'YYYY-MM-DD') as licence_expires_on
+            to_char(dlv.expires_on, 'YYYY-MM-DD') as licence_expires_on,
+            s.state, s.rejection_code, s.expires_at > now() as current,
+            exists (select 1 from rider_verification_sessions past
+              where past.rider_id = r.id and past.rejection_code = any($2::text[])) as known_ineligible
        from riders r
        left join lateral (
          select status, expires_on from driving_licence_verifications
           where rider_id = r.id and status = 'VERIFIED'
           order by verified_at desc nulls last, created_at desc, id desc limit 1
        ) dlv on true
+       left join lateral (
+         select state, rejection_code, expires_at from rider_verification_sessions
+          where rider_id = r.id and user_id = r.user_id
+          order by created_at desc, id desc limit 1
+       ) s on true
       where r.user_id = $1 and r.deleted_at is null
       order by r.created_at`,
-    [userId],
+    [userId, pickupLicenceRejections],
   );
-  return rows;
+  return rows.map(({ current, state, rejection_code, known_ineligible, ...rider }) => ({
+    ...rider,
+    verification_state: state ?? null,
+    pickup_licence_available: !rider.licence_status && isPickupLicenceOutage({ current, state, rejection_code, known_ineligible }),
+  }));
 }
 
 export async function createRider(
@@ -63,17 +76,17 @@ export async function updateRider(
   pool: Pool,
   userId: string,
   riderId: string,
-  input: { name?: string; dob?: string },
+  input: { name?: string; dob?: string | null },
 ) {
   await requireOwnedRider(pool, userId, riderId);
   const { rows } = await pool.query(
     `update riders
         set name = coalesce($1, name),
-            dob = coalesce($2, dob),
+            dob = case when $4 then $2::date else dob end,
             updated_at = now()
       where id = $3
       returning id, name, dob`,
-    [input.name ?? null, input.dob ?? null, riderId],
+    [input.name ?? null, input.dob ?? null, riderId, input.dob !== undefined],
   );
   return rows[0];
 }
@@ -128,8 +141,8 @@ export async function completeDigilockerVerification(
 
   const live = await kyc.digilockerStatus({ verificationId: requestId });
   if (!live) throw new DigilockerRequestNotFoundError(`digilocker request ${requestId} not found`);
-  if (live.status === "SANDBOX_UNAVAILABLE") {
-    throw new KycUnavailableError("DigiLocker verification is not configured");
+  if (live.status === "SANDBOX_UNAVAILABLE" || live.status === "PROVIDER_OUTAGE") {
+    throw new KycUnavailableError("DigiLocker verification is unavailable");
   }
   // PENDING means the customer has not finished on DigiLocker's side yet, so
   // the row stays PENDING and they can come back. Only CONSENT_DENIED and
@@ -191,8 +204,8 @@ export async function verifyLicenceManually(
     licenceNumber: input.licenceNumber,
     dob: input.dob,
   });
-  if (result?.status === "SANDBOX_UNAVAILABLE") {
-    throw new KycUnavailableError("Licence verification is not configured");
+  if (result?.status === "SANDBOX_UNAVAILABLE" || result?.status === "PROVIDER_OUTAGE") {
+    throw new KycUnavailableError("Licence verification is unavailable");
   }
   // A null result is a licence the RTO has no record of -- a rejection, not an
   // outage. The two are kept apart deliberately: only one of them is our fault.

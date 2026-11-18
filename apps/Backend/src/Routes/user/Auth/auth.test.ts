@@ -9,6 +9,7 @@ import {
   completeSignup,
   requestAccountEmailOtp,
   verifyAccountEmail,
+  getProfile,
   listSessions,
   logout,
   refreshSession,
@@ -232,6 +233,13 @@ describe("sessions", () => {
       emailVerificationTicket,
     });
   }
+
+  test("account profile returns only the active account's contact fields", async () => {
+    const { user } = await signUpAndLogin();
+    expect(await getProfile(pool, user.id)).toEqual({ name: user.name, email: user.email, phone: user.phone });
+    await pool.query("update users set status = 'SUSPENDED' where id = $1", [user.id]);
+    expect(await getProfile(pool, user.id)).toBeNull();
+  });
 
   test("refresh rotates the token and invalidates the old one", async () => {
     const { refreshToken } = await signUpAndLogin();

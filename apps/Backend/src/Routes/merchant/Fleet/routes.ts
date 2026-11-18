@@ -11,6 +11,7 @@ import {
   CreateDocumentSchema,
   CreateVehicleSchema,
   MediaParamsSchema,
+  MoveVehicleSchema,
   PublishMediaSchema,
   RegistrationRecordSchema,
   ReorderMediaSchema,
@@ -40,6 +41,7 @@ router.patch(
 );
 router.delete("/vehicles/:vehicleId", requirePermission("fleet:write"), controller.remove);
 router.post("/vehicles/:vehicleId/verification", requirePermission("fleet:write"), controller.submitVerification);
+router.post("/vehicles/:vehicleId/move", requirePermission("fleet:write"), validate(MoveVehicleSchema), controller.move);
 router.get("/vehicles/:vehicleId/registration", requirePermission("fleet:read"), controller.getRegistration);
 router.put(
   "/vehicles/:vehicleId/registration",

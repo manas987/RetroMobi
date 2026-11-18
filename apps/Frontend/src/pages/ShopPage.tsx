@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams, useSearch as useLocationSearch } from "wouter";
-import { Phone, MapPin, ShieldCheck, Star, Clock, ArrowLeft } from "lucide-react";
+import { MapPin, ShieldCheck, Star, Clock, ArrowLeft, Camera, ChevronLeft, ChevronRight } from "lucide-react";
+import { Modal } from "../components/Modal";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
 import { VehicleCard } from "../components/VehicleCard";
@@ -81,7 +82,7 @@ export function ShopPage() {
         )}
 
         {shopLoading && (
-          <LoadingSkeleton label="Loading shop details" className="mt-4 grid gap-6 lg:grid-cols-[1fr_320px]">
+          <LoadingSkeleton label="Loading shop details" className="mt-4 grid gap-6 md:grid-cols-2 lg:grid-cols-[1fr_440px] xl:grid-cols-[1fr_500px]">
             <div className="space-y-3">
               <SkeletonBlock className="h-8 w-2/5" />
               <SkeletonBlock className="h-4 w-3/5" />
@@ -186,7 +187,17 @@ export function ShopPage() {
           )}
         </section>
 
-        {shop && <ReviewsSection key={shop.shopId} shopId={shop.shopId} shopName={shop.name} reviewBookingId={reviewBookingId} />}
+        {shop && (shop.latitude != null && shop.longitude != null ? (
+          // Reviews scroll inside so they end level with the map beside them.
+          <div className="mt-8 grid grid-cols-1 gap-6 lg:h-[480px] lg:grid-cols-[1fr_380px]">
+            <ReviewsSection key={shop.shopId} shopId={shop.shopId} shopName={shop.name} reviewBookingId={reviewBookingId} fill />
+            <div className="relative lg:h-full">
+              <ShopLocationMap latitude={shop.latitude} longitude={shop.longitude} label={shop.name} fill />
+            </div>
+          </div>
+        ) : (
+          <div className="mt-8"><ReviewsSection key={shop.shopId} shopId={shop.shopId} shopName={shop.name} reviewBookingId={reviewBookingId} /></div>
+        ))}
       </div>
 
       <Footer />
@@ -198,7 +209,7 @@ function ShopHeader({ shop }: { shop: ShopProfile }) {
   const licence = shop.licences[0];
 
   return (
-    <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
+    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_440px] xl:grid-cols-[1fr_500px] gap-6 items-start">
       <div>
         <div className="flex flex-wrap items-center gap-2.5">
           <h1 className="text-2xl font-semibold text-ink">{shop.name}</h1>
@@ -232,15 +243,8 @@ function ShopHeader({ shop }: { shop: ShopProfile }) {
         <div className="mt-5 rounded-panel border border-line divide-y divide-line">
           <InfoRow icon={<MapPin className="h-4 w-4" />} label="Address">
             {shop.addressLine1}, {shop.city}, {shop.state} {shop.pincode}
+            {shop.landmark && <span className="mt-0.5 block text-ink-3">{shop.landmark}</span>}
           </InfoRow>
-
-          {shop.phone && (
-            <InfoRow icon={<Phone className="h-4 w-4" />} label="Phone">
-              <a href={`tel:${shop.phone}`} className="hover:underline">
-                {shop.phone}
-              </a>
-            </InfoRow>
-          )}
 
           {shop.ownerName && (
             <InfoRow icon={<ShieldCheck className="h-4 w-4" />} label="Licence holder">
@@ -286,11 +290,68 @@ function ShopHeader({ shop }: { shop: ShopProfile }) {
         </div>
       </div>
 
-      {shop.latitude != null && shop.longitude != null && (
-        <div className="relative w-full lg:self-stretch">
-          <ShopLocationMap latitude={shop.latitude} longitude={shop.longitude} label={shop.name} fill />
+      <ShopPhotos key={shop.shopId} urls={shop.photoUrls ?? []} name={shop.name} />
+    </div>
+  );
+}
+
+/**
+ * The shop's published photos: one large, up to four thumbnails under it,
+ * each opening a bigger view. A photo that won't load is dropped, so a broken
+ * link never shows as a broken image; none left means the empty state.
+ */
+function ShopPhotos({ urls, name }: { urls: string[]; name: string }) {
+  const [failed, setFailed] = useState<string[]>([]);
+  const [open, setOpen] = useState<number | null>(null);
+  const photos = urls.filter((u) => !failed.includes(u));
+  const drop = (url: string) => setFailed((f) => [...f, url]);
+
+  if (photos.length === 0) {
+    return (
+      <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-panel border border-line bg-surface-2 p-6 text-center md:aspect-auto md:min-h-[320px] md:self-stretch">
+        <Camera className="h-6 w-6 text-ink-4" aria-hidden="true" />
+        <p className="font-semibold text-ink">No shop photos yet</p>
+        <p className="max-w-56 text-sm text-ink-3">The shop hasn't added photos of its storefront.</p>
+      </div>
+    );
+  }
+  const thumbs = photos.slice(1, 5);
+  const more = photos.length - 5;
+  const show = (i: number) => setOpen(i);
+  return (
+    <div className="flex aspect-square w-full flex-col gap-2 md:aspect-auto md:min-h-[320px] md:self-stretch">
+      <button type="button" onClick={() => show(0)} aria-label={`Open photo 1 of ${photos.length}`}
+        className="relative min-h-0 flex-1 overflow-hidden rounded-panel bg-surface-3">
+        <img src={photos[0]} alt={`${name}, photo 1`} onError={() => drop(photos[0]!)} className="absolute inset-0 h-full w-full object-cover" />
+      </button>
+      {thumbs.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {thumbs.map((url, i) => (
+            <button key={url} type="button" onClick={() => show(i + 1)} aria-label={`Open photo ${i + 2} of ${photos.length}`}
+              className="relative aspect-square overflow-hidden rounded-row bg-surface-3">
+              <img src={url} alt="" loading="lazy" onError={() => drop(url)} className="absolute inset-0 h-full w-full object-cover" />
+              {i === thumbs.length - 1 && more > 0 && (
+                <span className="absolute inset-0 grid place-items-center bg-ink/50 text-sm font-semibold text-surface">+{more}</span>
+              )}
+            </button>
+          ))}
         </div>
       )}
+      <Modal open={open != null} onClose={() => setOpen(null)} title={`${name} · photo ${(open ?? 0) + 1} of ${photos.length}`} size="lg">
+        {open != null && photos[open] && (
+          <div className="relative">
+            <img src={photos[open]} alt={`${name}, photo ${open + 1}`} className="max-h-[65vh] w-full rounded-row bg-surface-3 object-contain" />
+            {photos.length > 1 && (
+              <div className="mt-3 flex justify-center gap-2">
+                <button type="button" onClick={() => setOpen((open - 1 + photos.length) % photos.length)} aria-label="Previous photo"
+                  className="grid size-10 place-items-center rounded-full border border-line-strong hover:bg-surface-2"><ChevronLeft className="h-5 w-5" /></button>
+                <button type="button" onClick={() => setOpen((open + 1) % photos.length)} aria-label="Next photo"
+                  className="grid size-10 place-items-center rounded-full border border-line-strong hover:bg-surface-2"><ChevronRight className="h-5 w-5" /></button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

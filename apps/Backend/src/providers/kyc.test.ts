@@ -88,6 +88,15 @@ describe("kyc request and response shape", () => {
     process.env.CASHFREE_SECUREID_BASE_URL = "https://sandbox.example/verification";
   });
 
+  test("a configured provider returning 503 records an outage for each licence lookup", async () => {
+    stubFetch({}, 503);
+    const verificationId = "v1";
+    expect(await kycClient.verifyLicence({ verificationId, licenceNumber: "UK0720190001234", dob: "1995-06-15" }))
+      .toEqual({ status: "PROVIDER_OUTAGE" });
+    expect(await kycClient.digilockerStatus({ verificationId })).toEqual({ status: "PROVIDER_OUTAGE" });
+    expect(await kycClient.digilockerDocument({ verificationId })).toBe("PROVIDER_OUTAGE");
+  });
+
   test("posts dl_number and verification_id, not id_number", async () => {
     const calls = stubFetch({ status: "INVALID" });
     await kycClient.verifyLicence({

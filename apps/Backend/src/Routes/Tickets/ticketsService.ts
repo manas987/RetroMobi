@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { writeAudit } from "../../lib/audit.ts";
 import { notify } from "../../lib/notify.ts";
+import { assertOwnUpload } from "../../lib/storage.ts";
 
 export class TicketNotFoundError extends Error {}
 export class TicketCategoryAlreadySetError extends Error {}
@@ -43,7 +44,7 @@ export async function openTicket(
     /** Set by callers that already know (e.g. a deposit claim is always BOOKING, booking_id already set). Otherwise null until setTicketCategory. */
     category?: "BOOKING" | "APP_HELP" | "OTHER";
   },
-): Promise<{ id: string; assignedTo: string | null; existing?: boolean }> {
+): Promise<{ id: string; assignedTo: string | null; reused?: boolean }> {
   const client = await pool.connect();
   let released = false;
   try {
@@ -56,29 +57,51 @@ export async function openTicket(
         [input.bookingId, input.openedById],
       );
       if (!rowCount) throw new TicketNotAboutBookingError("Choose one of your bookings.");
-
-      // One chat per booking: the customer's own, else one they were added to
-      // (a deposit claim). A new message goes into it, reopening it if resolved.
-      const { rows: existing } = await client.query(
-        `select t.id, t.assigned_to, t.status from tickets t
-           join ticket_participants p on p.ticket_id = t.id and p.party_type = 'CUSTOMER' and p.party_id = $2
-          where t.booking_id = $1
-          order by (t.opened_by_type = 'CUSTOMER') desc, t.created_at desc
-          limit 1
-          for update of t`,
+    }
+    // Same rule for a shop: only a booking at a shop this merchant works at.
+    // Otherwise the chat list would show another shop's plate and support's
+    // "add party" picker would offer that shop's customer.
+    if (input.openedByType === "MERCHANT" && input.bookingId) {
+      const { rowCount } = await client.query(
+        `select 1 from bookings b
+           join vehicles v on v.id = b.vehicle_id
+           join shop_members m on m.shop_id = v.shop_id
+          where b.id = $1 and m.merchant_user_id = $2 and m.status = 'ACTIVE' and m.deleted_at is null`,
         [input.bookingId, input.openedById],
       );
-      if (existing[0]) {
-        const ticketId = existing[0].id as string;
+      if (!rowCount) throw new TicketNotAboutBookingError("Choose one of your shop's bookings.");
+    }
+
+    // One chat per booking per person: asking again (or a deposit claim on a
+    // booking the shop already chats about) lands in the existing chat, and a
+    // closed one reopens. Two creates in the same instant: the customer side is
+    // guarded by ux_tickets_customer_booking (migration 0026, caught below).
+    if (input.bookingId) {
+      const { rows: existing } = await client.query(
+        `select t.id, t.status, t.assigned_to from tickets t
+           join ticket_participants p on p.ticket_id = t.id and p.party_type = $2 and p.party_id = $3
+          where t.booking_id = $1
+          order by t.created_at desc limit 1
+          for update of t`,
+        [input.bookingId, input.openedByType, input.openedById],
+      );
+      const found = existing[0];
+      if (found) {
+        await client.query(`update tickets set subject = coalesce($2, subject), updated_at = now() where id = $1`, [
+          found.id,
+          input.subject ?? null,
+        ]);
         if (input.firstMessage) {
           await client.query(
-            `insert into ticket_messages (ticket_id, sender_type, sender_id, body) values ($1, 'CUSTOMER', $2, $3)`,
-            [ticketId, input.openedById, input.firstMessage],
+            `insert into ticket_messages (ticket_id, sender_type, sender_id, body) values ($1, $2, $3, $4)`,
+            [found.id, input.openedByType, input.openedById, input.firstMessage],
           );
-          if (existing[0].status === "RESOLVED") await reopen(client, ticketId, input.openedById);
+        }
+        if (found.status === "RESOLVED") {
+          await reopen(client, found.id, { type: input.openedByType, id: input.openedById });
         }
         await client.query("COMMIT");
-        return { id: ticketId, assignedTo: existing[0].assigned_to, existing: true };
+        return { id: found.id, assignedTo: found.assigned_to, reused: true };
       }
     }
 
@@ -400,7 +423,7 @@ export async function postMessage(
   // A customer writing into a resolved chat means it isn't sorted: reopen it.
   if (sender.partyType === "CUSTOMER") {
     const { rows: state } = await pool.query(`select status from tickets where id = $1`, [ticketId]);
-    if (state[0]?.status === "RESOLVED") await reopen(pool, ticketId, sender.partyId);
+    if (state[0]?.status === "RESOLVED") await reopen(pool, ticketId, { type: "CUSTOMER", id: sender.partyId });
   }
 
   const { rows: participants } = await pool.query(
@@ -435,6 +458,7 @@ export async function addAttachment(
   if (!message) throw new TicketNotFoundError(`message ${messageId} not found`);
 
   await requireParticipant(pool, message.ticket_id, sender.partyType, sender.partyId);
+  assertOwnUpload(input.storageKey, `tickets/${message.ticket_id}/${messageId}/`);
 
   const { rows } = await pool.query(
     `insert into ticket_attachments (message_id, storage_key, file_name, size_bytes, duration_seconds)
@@ -557,7 +581,7 @@ export async function resolveTicket(pool: Pool, ticketId: string, resolution: st
 }
 
 /** Puts a RESOLVED ticket back in the queue, with a note in the chat. */
-async function reopen(client: Pool | PoolClient, ticketId: string, userId: string) {
+async function reopen(client: Pool | PoolClient, ticketId: string, by: { type: "CUSTOMER" | "MERCHANT"; id: string }) {
   await client.query(
     `update tickets set status = 'OPEN', resolution = null, resolved_at = null, updated_at = now()
       where id = $1 and status = 'RESOLVED'`,
@@ -565,11 +589,11 @@ async function reopen(client: Pool | PoolClient, ticketId: string, userId: strin
   );
   await client.query(
     `insert into ticket_messages (ticket_id, sender_type, sender_id, body) values ($1, 'SYSTEM', $2, $3)`,
-    [ticketId, SYSTEM_SENDER_ID, "The customer reopened this conversation."],
+    [ticketId, SYSTEM_SENDER_ID, by.type === "CUSTOMER" ? "The customer reopened this conversation." : "The shop reopened this conversation."],
   );
   await writeAudit(client, {
-    actorType: "CUSTOMER",
-    actorId: userId,
+    actorType: by.type,
+    actorId: by.id,
     action: "ticket.reopened",
     entityType: "ticket",
     entityId: ticketId,
@@ -586,7 +610,7 @@ export async function reopenTicket(pool: Pool, ticketId: string, userId: string)
     await client.query("BEGIN");
     const { rows } = await client.query(`select status, assigned_to from tickets where id = $1 for update`, [ticketId]);
     if (rows[0]?.status !== "RESOLVED") throw new TicketNotResolvedError("This conversation is already open.");
-    await reopen(client, ticketId, userId);
+    await reopen(client, ticketId, { type: "CUSTOMER", id: userId });
     if (rows[0].assigned_to) {
       await notify(client, {
         recipientType: "ADMIN",
