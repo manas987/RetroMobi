@@ -20,6 +20,7 @@ router.get("/:id", controller.get);
 router.get("/:id/messages", validate(MessagesQuerySchema, "query"), controller.messages);
 router.post("/:id/messages", validate(PostMessageSchema), controller.postMessage);
 router.post("/:id/category", validate(SetTicketCategorySchema), controller.setCategory);
+router.post("/:id/reopen", controller.reopen);
 router.post(
   "/:id/messages/:messageId/attachments/upload",
   validate(UploadRequestSchema),

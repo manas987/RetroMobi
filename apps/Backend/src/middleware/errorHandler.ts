@@ -67,6 +67,7 @@ import {
   TicketCategoryAlreadySetError,
   TicketNotAboutBookingError,
   TicketNotFoundError,
+  TicketNotResolvedError,
 } from "../Routes/Tickets/ticketsService.ts";
 import {
   DepositAlreadySettledError,
@@ -362,6 +363,10 @@ export function errorHandler(
   }
   if (err instanceof TicketCategoryAlreadySetError) {
     res.status(409).json({ error: "ticket_category_already_set", message: err.message });
+    return;
+  }
+  if (err instanceof TicketNotResolvedError) {
+    res.status(409).json({ error: "ticket_not_resolved", message: err.message });
     return;
   }
   if (err instanceof TicketNotAboutBookingError) {

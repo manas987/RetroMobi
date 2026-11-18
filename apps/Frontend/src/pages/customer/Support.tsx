@@ -319,6 +319,20 @@ function TicketChat({ ticket, token, accountId, onChanged }: {
     if (area && followLatest.current) area.scrollTop = area.scrollHeight;
   }, [lastMessageId]);
 
+  async function reopen() {
+    setSending(true);
+    setError("");
+    try {
+      await portalFetch("user", `/tickets/${id}/reopen`, { method: "POST", token });
+      await queryClient.invalidateQueries({ queryKey: messagesKey });
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn’t reopen the chat.");
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function send() {
     if (sending || (!body.trim() && !file)) return;
     setSending(true);
@@ -377,7 +391,7 @@ function TicketChat({ ticket, token, accountId, onChanged }: {
               <p className="font-medium text-ink">{[ticket.booking_make, ticket.booking_model, ticket.booking_shop].filter(Boolean).join(" · ")}</p>
               {ticket.booking_pickup_at && <p className="mt-1">Pickup {dateLabel(ticket.booking_pickup_at)}</p>}
               <p className="mt-1">Booking ID <code className="break-all">{ticket.booking_id}</code></p>
-              <Link href="/account/bookings" className="mt-1 inline-block font-medium text-ink underline underline-offset-2">My bookings</Link>
+              <Link href={`/account/bookings/${ticket.booking_id}`} className="mt-1 inline-block font-medium text-ink underline underline-offset-2">View booking</Link>
             </div>
           </details>
         )}
@@ -413,8 +427,15 @@ function TicketChat({ ticket, token, accountId, onChanged }: {
             </div>
           );
         })}
-        {ticket.status === "RESOLVED" && ticket.resolution && (
-          <p className="rounded-row border border-line bg-surface p-3 text-sm text-ink-2"><strong className="text-ink">Resolution</strong> · {ticket.resolution}</p>
+        {ticket.status === "RESOLVED" && (
+          <div className="rounded-row border border-line bg-surface p-3 text-sm text-ink-2">
+            {ticket.resolution && <p><strong className="text-ink">Resolution</strong> · {ticket.resolution}</p>}
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <span>Still need help? Reopen this chat or just send a message.</span>
+              <button type="button" disabled={sending} className="min-h-9 rounded-row border border-line-strong px-3 text-sm font-medium text-ink hover:bg-surface-2"
+                onClick={() => void reopen()}>Reopen chat</button>
+            </div>
+          </div>
         )}
       </div>
 

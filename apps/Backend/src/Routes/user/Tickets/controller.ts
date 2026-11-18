@@ -77,3 +77,8 @@ export async function downloadAttachment(req: Request, res: Response) {
   const downloadUrl = await presignDownload(storageKey);
   res.status(200).json({ downloadUrl });
 }
+
+export async function reopen(req: Request, res: Response) {
+  await ticketsService.reopenTicket(pool, pathParam(req, "id"), req.userId!);
+  res.status(200).json({ reopened: true });
+}

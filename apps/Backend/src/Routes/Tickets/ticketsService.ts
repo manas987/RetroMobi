@@ -43,8 +43,9 @@ export async function openTicket(
     /** Set by callers that already know (e.g. a deposit claim is always BOOKING, booking_id already set). Otherwise null until setTicketCategory. */
     category?: "BOOKING" | "APP_HELP" | "OTHER";
   },
-): Promise<{ id: string; assignedTo: string | null }> {
+): Promise<{ id: string; assignedTo: string | null; existing?: boolean }> {
   const client = await pool.connect();
+  let released = false;
   try {
     await client.query("BEGIN");
 
@@ -55,6 +56,30 @@ export async function openTicket(
         [input.bookingId, input.openedById],
       );
       if (!rowCount) throw new TicketNotAboutBookingError("Choose one of your bookings.");
+
+      // One chat per booking: the customer's own, else one they were added to
+      // (a deposit claim). A new message goes into it, reopening it if resolved.
+      const { rows: existing } = await client.query(
+        `select t.id, t.assigned_to, t.status from tickets t
+           join ticket_participants p on p.ticket_id = t.id and p.party_type = 'CUSTOMER' and p.party_id = $2
+          where t.booking_id = $1
+          order by (t.opened_by_type = 'CUSTOMER') desc, t.created_at desc
+          limit 1
+          for update of t`,
+        [input.bookingId, input.openedById],
+      );
+      if (existing[0]) {
+        const ticketId = existing[0].id as string;
+        if (input.firstMessage) {
+          await client.query(
+            `insert into ticket_messages (ticket_id, sender_type, sender_id, body) values ($1, 'CUSTOMER', $2, $3)`,
+            [ticketId, input.openedById, input.firstMessage],
+          );
+          if (existing[0].status === "RESOLVED") await reopen(client, ticketId, input.openedById);
+        }
+        await client.query("COMMIT");
+        return { id: ticketId, assignedTo: existing[0].assigned_to, existing: true };
+      }
     }
 
     const assignedTo = await pickAssignee(client);
@@ -125,9 +150,16 @@ export async function openTicket(
     return { id: ticketId, assignedTo };
   } catch (err) {
     await client.query("ROLLBACK");
+    // Two "Get help" taps raced past the lookup: the index let one through,
+    // so this one lands in that chat.
+    if ((err as { constraint?: string }).constraint === "ux_tickets_customer_booking") {
+      client.release();
+      released = true;
+      return openTicket(pool, input);
+    }
     throw err;
   } finally {
-    client.release();
+    if (!released) client.release();
   }
 }
 
@@ -365,6 +397,11 @@ export async function postMessage(
   await pool.query(`update tickets set status = 'IN_PROGRESS', updated_at = now() where id = $1 and status = 'OPEN'`, [
     ticketId,
   ]);
+  // A customer writing into a resolved chat means it isn't sorted: reopen it.
+  if (sender.partyType === "CUSTOMER") {
+    const { rows: state } = await pool.query(`select status from tickets where id = $1`, [ticketId]);
+    if (state[0]?.status === "RESOLVED") await reopen(pool, ticketId, sender.partyId);
+  }
 
   const { rows: participants } = await pool.query(
     `select party_type, party_id from ticket_participants
@@ -510,6 +547,55 @@ export async function resolveTicket(pool: Pool, ticketId: string, resolution: st
       entityId: ticketId,
       after: { resolution },
     });
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Puts a RESOLVED ticket back in the queue, with a note in the chat. */
+async function reopen(client: Pool | PoolClient, ticketId: string, userId: string) {
+  await client.query(
+    `update tickets set status = 'OPEN', resolution = null, resolved_at = null, updated_at = now()
+      where id = $1 and status = 'RESOLVED'`,
+    [ticketId],
+  );
+  await client.query(
+    `insert into ticket_messages (ticket_id, sender_type, sender_id, body) values ($1, 'SYSTEM', $2, $3)`,
+    [ticketId, SYSTEM_SENDER_ID, "The customer reopened this conversation."],
+  );
+  await writeAudit(client, {
+    actorType: "CUSTOMER",
+    actorId: userId,
+    action: "ticket.reopened",
+    entityType: "ticket",
+    entityId: ticketId,
+  });
+}
+
+export class TicketNotResolvedError extends Error {}
+
+/** The customer reopens their resolved chat ("this isn't sorted yet"). */
+export async function reopenTicket(pool: Pool, ticketId: string, userId: string) {
+  await requireParticipant(pool, ticketId, "CUSTOMER", userId);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(`select status, assigned_to from tickets where id = $1 for update`, [ticketId]);
+    if (rows[0]?.status !== "RESOLVED") throw new TicketNotResolvedError("This conversation is already open.");
+    await reopen(client, ticketId, userId);
+    if (rows[0].assigned_to) {
+      await notify(client, {
+        recipientType: "ADMIN",
+        recipientId: rows[0].assigned_to,
+        channel: "WHATSAPP",
+        template: "ticket_reply",
+        payload: { ticketId },
+      });
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");

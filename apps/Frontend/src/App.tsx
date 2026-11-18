@@ -11,7 +11,7 @@ import { CustomerLogin } from "./pages/customer/Login";
 import { CustomerProfile } from "./pages/customer/Profile";
 import { CustomerRiders } from "./pages/customer/Riders";
 import { CustomerSupport } from "./pages/customer/Support";
-import { MyBookings } from "./pages/customer/MyBookings";
+import { MyBooking, MyBookings } from "./pages/customer/MyBookings";
 
 import { MerchantLogin } from "./pages/merchant/Login";
 import { MerchantOverview } from "./pages/merchant/Overview";
@@ -75,6 +75,7 @@ export function App() {
       <Route path="/account/riders" component={CustomerRiders} />
       <Route path="/account/support" component={CustomerSupport} />
       <Route path="/account/bookings" component={MyBookings} />
+      <Route path="/account/bookings/:id" component={MyBooking} />
       <Route path="/account/coupons" component={MyCoupons} />
 
       <Route path="/merchant/login" component={MerchantLogin} />

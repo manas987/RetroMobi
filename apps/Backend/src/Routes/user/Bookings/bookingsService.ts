@@ -618,7 +618,9 @@ export async function listMyBookings(pool: Pool, userId: string) {
               where r.booking_id = b.id and r.reason in ('DEPOSIT_RELEASE', 'DEPOSIT_SETTLEMENT')
               order by r.created_at desc limit 1) as deposit_refund_status,
             c.refund_amount as cancellation_refund_amount, c.penalty_amount as cancellation_penalty_amount,
-            c.cancelled_by, c.reason as cancellation_reason
+            c.cancelled_by, c.reason as cancellation_reason,
+            -- The booking's support chat, if any (one per booking).
+            support.id as support_ticket_id, support.status as support_ticket_status
        from bookings b
        join booking_groups g on g.id = b.group_id
        join vehicles v on v.id = b.vehicle_id
@@ -627,6 +629,13 @@ export async function listMyBookings(pool: Pool, userId: string) {
        left join riders r on r.id = b.rider_id
        left join security_deposits sd on sd.booking_id = b.id
        left join booking_cancellations c on c.booking_id = b.id
+       left join lateral (
+         select t.id, t.status from tickets t
+           join ticket_participants p on p.ticket_id = t.id and p.party_type = 'CUSTOMER' and p.party_id = $1
+          where t.booking_id = b.id
+          order by (t.opened_by_type = 'CUSTOMER') desc, t.created_at desc
+          limit 1
+       ) support on true
       where g.user_id = $1
       order by b.scheduled_pickup_at desc`,
     [userId],
