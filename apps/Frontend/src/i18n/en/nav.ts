@@ -9,6 +9,7 @@ export default {
   support: "Help & chats",
   earnings: "Earnings",
   reports: "Reports",
+  coupons: "Coupons",
   branches: "Shop details",
   documents: "Licence & papers",
   shopAndPapers: "Shop & papers",

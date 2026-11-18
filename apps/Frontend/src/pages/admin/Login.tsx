@@ -4,14 +4,16 @@ import { AuthLayout } from "../../components/AuthLayout";
 import { PhoneInput, DEFAULT_COUNTRY } from "../../components/PhoneInput";
 import type { Country } from "../../lib/countries";
 import { OtpInput } from "../../components/OtpInput";
-import { BackRow, ErrorBox, ResendRow, SubmitButton } from "../../components/AuthFormBits";
+import { BackRow, ErrorBox, ResendRow, SmsInsteadRow, SubmitButton } from "../../components/AuthFormBits";
 import { useCountdown } from "../../lib/useCountdown";
-import { usePortalSession, portalFetch, PortalApiError } from "../../lib/portal";
+import { usePortalSession, PortalApiError } from "../../lib/portal";
+import { usePhoneOtp } from "../../lib/phoneOtp";
 
 export function AdminLogin() {
   const { setTokens, deviceId } = usePortalSession("admin");
   const [, navigate] = useLocation();
   const resend = useCountdown(30);
+  const otp = usePhoneOtp("admin");
 
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
@@ -35,17 +37,21 @@ export function AdminLogin() {
 
   const sendOtp = () =>
     run(async () => {
-      await portalFetch("admin", "/auth/otp/send", { method: "POST", body: { phone } });
+      await otp.send(phone);
       resend.start();
       setStep("otp");
     });
 
+  const sendBySms = () =>
+    run(async () => {
+      await otp.sendBySms(phone);
+      setCode("");
+      resend.start();
+    });
+
   const verifyOtp = () =>
     run(async () => {
-      const result = await portalFetch<any>("admin", "/auth/otp/verify", {
-        method: "POST",
-        body: { phone, code, deviceId },
-      });
+      const result = await otp.verify<any>(phone, code, deviceId);
       setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken, role: result.admin?.role });
       navigate("/admin");
     });
@@ -74,14 +80,16 @@ export function AdminLogin() {
           <BackRow onBack={() => setStep("phone")} />
           <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Verify your number</h1>
           <p className="text-sm text-ink-3 mb-6">
-            We sent a 6-digit code to <span className="text-ink font-medium">{phone}</span>.
+            We sent a 6-digit code {otp.via === "sms" ? "by SMS" : "on WhatsApp"} to{" "}
+            <span className="text-ink font-medium">{phone}</span>.
           </p>
           {error && <ErrorBox text={error} />}
           <OtpInput value={code} onChange={setCode} />
           <SubmitButton busy={busy} onClick={verifyOtp} disabled={code.length < 6}>
             Verify
           </SubmitButton>
-          <ResendRow resend={resend} onResend={sendOtp} />
+          <ResendRow resend={resend} onResend={otp.via === "sms" ? sendBySms : sendOtp} />
+          {otp.via === "whatsapp" && <SmsInsteadRow onClick={sendBySms} />}
         </div>
       )}
     </AuthLayout>

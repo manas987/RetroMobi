@@ -11,6 +11,7 @@ export default {
   support: "मदद और चैट",
   earnings: "कमाई",
   reports: "रिपोर्ट",
+  coupons: "कूपन",
   branches: "दुकान की जानकारी",
   documents: "लाइसेंस और कागज़ात",
   shopAndPapers: "दुकान और कागज़",

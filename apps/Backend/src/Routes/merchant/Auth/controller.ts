@@ -1,17 +1,33 @@
 import type { Request, Response } from "express";
 import { pool } from "../../../DB/client.ts";
-import { sendOtpSms } from "../../../providers/smsSender.ts";
+import { verifyFirebasePhoneToken } from "../../../providers/firebase.ts";
+import { isWhatsAppConfigured, sendOtpWhatsApp } from "../../../providers/whatsapp.ts";
 import * as merchantAuthService from "./merchantAuthService.ts";
 
 export async function sendOtp(req: Request, res: Response) {
   const { phone } = req.body as { phone: string };
-  const result = await merchantAuthService.requestMerchantOtp(pool, phone, sendOtpSms);
-  res.status(200).json({ message: "OTP sent", expiresInSeconds: result.expiresInSeconds });
+  const result = await merchantAuthService.requestMerchantOtp(pool, phone, sendOtpWhatsApp);
+  // See the user portal's sendOtp for what `fallback` means.
+  res.status(200).json({
+    message: "OTP sent",
+    expiresInSeconds: result.expiresInSeconds,
+    ...(isWhatsAppConfigured() ? {} : { fallback: "firebase" }),
+  });
 }
 
 export async function verifyOtp(req: Request, res: Response) {
   const { phone, code, deviceId } = req.body as { phone: string; code: string; deviceId: string };
   const result = await merchantAuthService.verifyMerchantOtp(pool, { phone, code, deviceId });
+  res.status(200).json(result);
+}
+
+export async function verifyFirebaseOtp(req: Request, res: Response) {
+  const { phone, idToken, deviceId } = req.body as { phone: string; idToken: string; deviceId: string };
+  const result = await merchantAuthService.verifyMerchantFirebaseOtp(
+    pool,
+    { phone, idToken, deviceId },
+    verifyFirebasePhoneToken,
+  );
   res.status(200).json(result);
 }
 

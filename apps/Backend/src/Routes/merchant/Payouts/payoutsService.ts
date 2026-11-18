@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
+import { settleTransfer } from "../../../lib/wallet.ts";
 import {
   mapBeneficiaryStatus,
   type CashfreePayoutClient,
@@ -192,29 +193,10 @@ export async function handlePayoutWebhook(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // Matched on OUR transfer_id (`payout_<payout id>`), not on anything the
-    // webhook names a row by -- a forged body cannot point at a payout of its
-    // choosing, and an unknown id simply matches nothing.
-    const { rows } = await client.query(
-      `update payouts
-          set status = $2,
-              paid_at = case when $2 = 'PAID' then now() else paid_at end,
-              last_error = case when $2 = 'FAILED' then 'provider reported TRANSFER_FAILED' else null end,
-              updated_at = now()
-        where provider_payout_id = $1 and status = 'PENDING'
-        returning id, amount`,
-      [event.transferId, status],
-    );
-    if (rows[0]) {
-      await writeAudit(client, {
-        actorType: "SYSTEM",
-        actorId: null,
-        action: status === "PAID" ? "payout.paid" : "payout.failed",
-        entityType: "payout",
-        entityId: rows[0].id,
-        after: { transferId: event.transferId, source: "webhook" },
-      });
-    }
+    // Matched on OUR transfer_id (`wd_<withdrawal id>`), not on anything the
+    // webhook names a row by -- a forged body cannot point at a withdrawal of
+    // its choosing, and an unknown id simply matches nothing.
+    await settleTransfer(client, event.transferId, status, event.type, "webhook");
     await client.query(`update webhook_events set processed_at = now() where id = $1`, [
       inserted.rows[0].id,
     ]);

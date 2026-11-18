@@ -7,6 +7,8 @@ import modelsRoutes from "./Models/routes.ts";
 import oversightRoutes from "./Oversight/routes.ts";
 import ticketsRoutes from "./Tickets/routes.ts";
 import verificationRoutes from "./Verification/routes.ts";
+import withdrawalsRoutes from "./Withdrawals/routes.ts";
+import walletsRoutes from "./Wallets/routes.ts";
 
 const router = Router();
 
@@ -16,6 +18,8 @@ router.use("/verification", verificationRoutes);
 router.use(licenceVehiclesRoutes);
 router.use("/models", modelsRoutes);
 router.use("/coupons", couponsRoutes);
+router.use("/withdrawals", withdrawalsRoutes);
+router.use("/wallets", walletsRoutes);
 router.use("/tickets", ticketsRoutes);
 router.use(oversightRoutes);
 

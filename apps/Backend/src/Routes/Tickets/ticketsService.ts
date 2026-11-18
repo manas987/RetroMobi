@@ -375,7 +375,7 @@ export async function postMessage(
     await notify(pool, {
       recipientType: p.party_type,
       recipientId: p.party_id,
-      channel: "SMS",
+      channel: "WHATSAPP",
       template: "ticket_reply",
       payload: { ticketId },
     });

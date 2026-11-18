@@ -10,6 +10,7 @@ import {
 } from "../../../lib/licenceGate.ts";
 import { appBaseUrl, cashfreeMode, type CashfreeClient } from "../../../providers/cashfree.ts";
 import { handleExtensionPaymentSuccess } from "../Payments/paymentsService.ts";
+import { evaluateCoupon, loadLiveCoupon, type CartItem } from "../../../lib/coupons.ts";
 
 export class VehicleUnavailableError extends Error {}
 export class TooManyVehiclesError extends Error {}
@@ -71,20 +72,49 @@ async function loadPricingAndSpecials(client: PoolClient, vehicleId: string) {
   };
 }
 
-async function loadCoupon(client: PoolClient, code: string) {
-  const { rows } = await client.query(
-    `select id, type, value, max_uses, used_count
-       from coupons
-      where code = $1 and status = 'ACTIVE' and deleted_at is null
-        and valid_from <= now() and valid_until >= now()`,
-    [code],
-  );
-  if (rows.length === 0) throw new CouponInvalidError(`coupon ${code} is not valid`);
-  const coupon = rows[0];
-  if (coupon.max_uses != null && coupon.used_count >= coupon.max_uses) {
-    throw new CouponInvalidError(`coupon ${code} has reached its usage limit`);
+/**
+ * Checks every vehicle is bookable for the window and prices it. Shared by the
+ * hold and the coupon preview, so the preview's discount is computed on exactly
+ * the prices the hold will charge.
+ */
+export async function priceCart(
+  client: PoolClient,
+  input: { items: Array<{ vehicleId: string; riderId: string }>; pickupAt: Date; returnAt: Date },
+): Promise<Array<CartItem & { securityDepositAmount: number }>> {
+  const priced: Array<CartItem & { securityDepositAmount: number }> = [];
+  for (const item of input.items) {
+    // `notBlocked` is not decoration: the exclusion constraint arbitrates
+    // booking-vs-booking only, so without it a shop could take a scooter off the
+    // road for servicing and still have it booked and paid for -- the customer
+    // finding out at the counter. Search has always filtered on it; this path
+    // never did, and a cart in localStorage is the ordinary way a stale
+    // vehicleId arrives here.
+    const vehicleCheck = await client.query(
+      `select v.id, v.shop_id, v.model_id from vehicles v join shops s on s.id = v.shop_id
+        ${VEHICLE_LICENCE_JOIN} where v.id = $1 and ${PUBLIC_LISTING_ELIGIBLE}
+        and ${notBlocked("v.id")}`,
+      [item.vehicleId, input.pickupAt, input.returnAt],
+    );
+    if (vehicleCheck.rows.length === 0) {
+      throw new VehicleUnavailableError(`vehicle ${item.vehicleId} is not available`);
+    }
+    const { pricing, specials } = await loadPricingAndSpecials(client, item.vehicleId);
+    const { rentalAmount } = priceRental({
+      pickupAt: input.pickupAt,
+      returnAt: input.returnAt,
+      pricing,
+      specialPricings: specials,
+    });
+    priced.push({
+      vehicleId: item.vehicleId,
+      riderId: item.riderId,
+      shopId: String(vehicleCheck.rows[0].shop_id),
+      modelId: String(vehicleCheck.rows[0].model_id),
+      rentalAmount,
+      securityDepositAmount: pricing.securityDepositAmount,
+    });
   }
-  return { id: coupon.id, type: coupon.type as "PERCENT" | "FLAT", value: Number(coupon.value) };
+  return priced;
 }
 
 export async function createHold(
@@ -166,14 +196,28 @@ export async function createHold(
       }
     }
 
-    let coupon: { id: string; type: "PERCENT" | "FLAT"; value: number } | null = null;
-    if (couponCode) coupon = await loadCoupon(client, couponCode);
+    // Priced before any coupon, because a coupon decides per CART: a FLAT ₹100
+    // coupon on three scooters is ₹100, split across them, not ₹300.
+    const priced = await priceCart(client, { items, pickupAt, returnAt });
+
+    let couponId: string | null = null;
+    let discounts = priced.map(() => 0);
+    let shopFunded = false;
+    if (couponCode) {
+      const coupon = await loadLiveCoupon(client, couponCode);
+      if (!coupon) throw new CouponInvalidError(`coupon ${couponCode} is not valid`);
+      const result = await evaluateCoupon(client, coupon, { userId, pickupAt, returnAt, items: priced });
+      if (!result.ok) throw new CouponInvalidError(result.reason);
+      couponId = coupon.id;
+      discounts = result.perItem;
+      shopFunded = result.fundedBy === "SHOP";
+    }
 
     const groupResult = await client.query(
       `insert into booking_groups (user_id, coupon_id, hold_expires_at)
        values ($1, $2, now() + interval '15 minutes')
        returning id, hold_expires_at`,
-      [userId, coupon?.id ?? null],
+      [userId, couponId],
     );
     const groupId = groupResult.rows[0].id;
     const holdExpiresAt = groupResult.rows[0].hold_expires_at as Date;
@@ -186,35 +230,11 @@ export async function createHold(
     let groupDepositAmount = 0;
     let groupTotalAmount = 0;
 
-    for (const item of items) {
-      // `notBlocked` is not decoration: the exclusion constraint below arbitrates
-      // booking-vs-booking only, so without it a shop could take a scooter off the
-      // road for servicing and still have it booked and paid for -- the customer
-      // finding out at the counter. Search has always filtered on it; this path
-      // never did, and a cart in localStorage is the ordinary way a stale
-      // vehicleId arrives here.
-      const vehicleCheck = await client.query(
-        `select v.id from vehicles v join shops s on s.id = v.shop_id
-          ${VEHICLE_LICENCE_JOIN} where v.id = $1 and ${PUBLIC_LISTING_ELIGIBLE}
-          and ${notBlocked("v.id")}`,
-        [item.vehicleId, pickupAt, returnAt],
-      );
-      if (vehicleCheck.rows.length === 0) {
-        throw new VehicleUnavailableError(`vehicle ${item.vehicleId} is not available`);
-      }
-
-      const { pricing, specials } = await loadPricingAndSpecials(client, item.vehicleId);
-      const { rentalAmount } = priceRental({ pickupAt, returnAt, pricing, specialPricings: specials });
-
-      const discountAmount = !coupon
-        ? 0
-        : coupon.type === "PERCENT"
-          ? Math.round((rentalAmount * coupon.value) / 100)
-          : coupon.value;
-
+    for (const [index, item] of priced.entries()) {
+      const discountAmount = discounts[index]!;
       const totals = composeTotal({
-        rentalAmount,
-        securityDepositAmount: pricing.securityDepositAmount,
+        rentalAmount: item.rentalAmount,
+        securityDepositAmount: item.securityDepositAmount,
         platformFeePct,
         gstRate,
         discountAmount,
@@ -225,8 +245,8 @@ export async function createHold(
           `insert into bookings
              (group_id, rider_id, vehicle_id, source, scheduled_pickup_at, scheduled_return_at,
               status, rental_amount, security_deposit_amount, platform_fee, tax_amount,
-              discount_amount, total_amount)
-           values ($1, $2, $3, 'ONLINE', $4, $5, 'HOLD', $6, $7, $8, $9, $10, $11)
+              discount_amount, total_amount, merchant_discount_amount)
+           values ($1, $2, $3, 'ONLINE', $4, $5, 'HOLD', $6, $7, $8, $9, $10, $11, $12)
            returning id`,
           [
             groupId,
@@ -240,6 +260,7 @@ export async function createHold(
             totals.taxAmount,
             totals.discountAmount,
             totals.totalAmount,
+            shopFunded ? totals.discountAmount : 0,
           ],
         );
         bookings.push({ id: insertResult.rows[0].id, vehicleId: item.vehicleId });
@@ -315,7 +336,7 @@ export async function cancelBooking(
 
     const { rows } = await client.query(
       `select b.id, b.group_id, b.status, b.actual_pickup_at, b.scheduled_pickup_at,
-              b.rental_amount, b.platform_fee, b.tax_amount, b.security_deposit_amount
+              b.rental_amount, b.discount_amount, b.platform_fee, b.tax_amount, b.security_deposit_amount
          from bookings b
          join booking_groups g on g.id = b.group_id
         where b.id = $1 and g.user_id = $2 and b.deleted_at is null`,
@@ -335,7 +356,9 @@ export async function cancelBooking(
       new Date(booking.scheduled_pickup_at),
       now,
       {
-        rentalAmount: Number(booking.rental_amount),
+        // What the customer actually paid for the rental. On the listed price, a
+        // discounted booking would be refunded money it never paid.
+        rentalAmount: Number(booking.rental_amount) - Number(booking.discount_amount),
         platformFee: Number(booking.platform_fee),
         taxAmount: Number(booking.tax_amount),
         securityDepositAmount: Number(booking.security_deposit_amount),
@@ -380,7 +403,7 @@ export async function cancelBooking(
       await notify(client, {
         recipientType: "CUSTOMER",
         recipientId: input.userId,
-        channel: "SMS",
+        channel: "WHATSAPP",
         template: "refund_processed",
         payload: { bookingId: input.bookingId, refundAmount },
       });
@@ -414,7 +437,7 @@ export async function cancelBooking(
         if (topUp > 0) {
           await client.query(
             `insert into payouts (merchant_user_id, booking_id, stage, amount, status)
-             values ($1, $2, 'CANCELLATION', $3, 'PENDING')
+             values ($1, $2, 'CANCELLATION', $3, 'CREDITED')
              on conflict (booking_id, stage) do nothing`,
             [upfront.merchant_user_id, input.bookingId, topUp],
           );

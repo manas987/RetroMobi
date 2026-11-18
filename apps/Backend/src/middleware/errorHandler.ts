@@ -1,3 +1,10 @@
+import {
+  InsufficientWalletBalanceError,
+  PayoutAccountNotReadyError,
+  WithdrawalBelowMinimumError,
+  WithdrawalNotFoundError,
+  WithdrawalStateError,
+} from "../lib/wallet.ts";
 import type { NextFunction, Request, Response } from "express";
 import {
   EmailNotVerifiedError,
@@ -8,7 +15,7 @@ import {
   PhoneTakenError,
   RateLimitedError,
 } from "../Routes/user/Auth/authService.ts";
-import { SmsDeliveryError } from "../providers/smsSender.ts";
+import { WhatsAppDeliveryError } from "../providers/whatsapp.ts";
 import { PaymentsUnavailableError } from "../providers/cashfree.ts";
 import { PaymentGroupNotFoundError } from "../Routes/user/Payments/paymentsService.ts";
 import {
@@ -170,8 +177,11 @@ export function errorHandler(
     res.status(409).json({ error: "email_taken", message: err.message });
     return;
   }
-  if (err instanceof SmsDeliveryError) {
-    res.status(502).json({ error: "sms_delivery_failed", message: err.message });
+  // The client keys off `fallback` to retry the sign-in over Firebase SMS. Meta's
+  // error body stays in the log, not the response.
+  if (err instanceof WhatsAppDeliveryError) {
+    console.error(err.message);
+    res.status(502).json({ error: "otp_delivery_failed", fallback: "firebase", message: "We couldn't send the code on WhatsApp." });
     return;
   }
   if (err instanceof VehicleUnavailableError) {
@@ -203,6 +213,24 @@ export function errorHandler(
   // is a review rather than a corrected field.
   if (err instanceof LicenceReviewRequiredError) {
     res.status(409).json({ error: "licence_review_required", message: err.message });
+    return;
+  }
+  if (err instanceof WithdrawalBelowMinimumError || err instanceof InsufficientWalletBalanceError) {
+    res.status(400).json({
+      error: err instanceof WithdrawalBelowMinimumError ? "withdrawal_below_minimum" : "insufficient_wallet_balance",
+      message: err.message,
+    });
+    return;
+  }
+  if (err instanceof WithdrawalNotFoundError) {
+    res.status(404).json({ error: "withdrawal_not_found", message: err.message });
+    return;
+  }
+  if (err instanceof WithdrawalStateError || err instanceof PayoutAccountNotReadyError) {
+    res.status(409).json({
+      error: err instanceof PayoutAccountNotReadyError ? "payout_account_not_ready" : "withdrawal_state",
+      message: err.message,
+    });
     return;
   }
   if (err instanceof CouponInvalidError) {

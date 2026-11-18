@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { createHmac } from "node:crypto";
 import pg from "pg";
 import { applyMigrations } from "../../../DB/migrate.ts";
-import { createBookableVehicle, createMerchant, futureWindow, insertBooking } from "../../../test/fixtures.ts";
+import { createMerchant, createShop } from "../../../test/fixtures.ts";
 import { verifyPayoutWebhookSignature } from "../../../providers/cashfreePayout.ts";
 import { handlePayoutWebhook } from "./payoutsService.ts";
 
@@ -20,29 +20,24 @@ afterAll(async () => {
   await pool.end();
 });
 
-/** A payout with a transfer already in flight, which is the only state a
- *  TRANSFER_SUCCESS can legitimately arrive for. */
+/** A wallet withdrawal with a Cashfree transfer already in flight, which is
+ *  the only state a TRANSFER_SUCCESS can legitimately arrive for. (Field names
+ *  kept as payoutId/statusOf: the webhook is still "the payouts webhook".) */
 async function inFlightPayout() {
   const merchant = await createMerchant(pool);
-  const vehicle = await createBookableVehicle(pool);
-  const { pickupAt, returnAt } = futureWindow(700);
-  const booking = await insertBooking(pool, {
-    vehicleId: vehicle.id,
-    pickupAt: pickupAt.toISOString(),
-    returnAt: returnAt.toISOString(),
-  });
+  const shop = await createShop(pool, merchant.id);
   const { rows } = await pool.query(
-    `insert into payouts (merchant_user_id, booking_id, stage, amount, status, provider_payout_id)
-     values ($1, $2, 'UPFRONT', 25000, 'PENDING', 'payout_' || replace(gen_random_uuid()::text, '-', ''))
-     returning id, provider_payout_id`,
-    [merchant.id, booking.id],
+    `insert into wallet_withdrawals (shop_id, merchant_user_id, amount, status, method, transfer_id)
+     values ($1, $2, 25000, 'PROCESSING', 'CASHFREE_PAYOUT', 'wd_' || replace(gen_random_uuid()::text, '-', ''))
+     returning id, transfer_id`,
+    [shop.id, merchant.id],
   );
-  return { payoutId: String(rows[0].id), transferId: String(rows[0].provider_payout_id) };
+  return { payoutId: String(rows[0].id), transferId: String(rows[0].transfer_id) };
 }
 
 async function statusOf(payoutId: string) {
   const { rows } = await pool.query(
-    `select status, paid_at, last_error from payouts where id = $1`,
+    `select status, processed_at as paid_at, last_error from wallet_withdrawals where id = $1`,
     [payoutId],
   );
   return rows[0];
@@ -173,9 +168,9 @@ describe("handlePayoutWebhook", () => {
       payload: {},
     });
 
-    // Acknowledged -- there is nothing for Cashfree to retry -- but no payout moved.
+    // Acknowledged -- there is nothing for Cashfree to retry -- but nothing moved.
     expect(result.processed).toBe(true);
-    expect((await statusOf(p.payoutId)).status).toBe("PENDING");
+    expect((await statusOf(p.payoutId)).status).toBe("PROCESSING");
   });
 
   test("a payout already PAID is not re-stamped by a later TRANSFER_FAILED", async () => {

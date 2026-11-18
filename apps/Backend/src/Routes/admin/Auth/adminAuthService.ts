@@ -168,6 +168,27 @@ export async function verifyAdminOtp(
   input: { phone: string; code: string; deviceId: string },
 ): Promise<AdminLoginResult> {
   await consumeOtpChallenge(pool, input.phone, input.code);
+  return signInVerifiedPhone(pool, input);
+}
+
+// The SMS fallback: Firebase sent and checked the code, so its ID token stands
+// in for a consumed OTP challenge. Everything after is the same path, active
+// admin check included.
+export async function verifyAdminFirebaseOtp(
+  pool: Pool,
+  input: { phone: string; idToken: string; deviceId: string },
+  verifyPhoneToken: (idToken: string, phone: string) => Promise<boolean>,
+): Promise<AdminLoginResult> {
+  if (!(await verifyPhoneToken(input.idToken, input.phone))) {
+    throw new AdminInvalidOtpError("the SMS sign-in could not be verified for this phone");
+  }
+  return signInVerifiedPhone(pool, input);
+}
+
+async function signInVerifiedPhone(
+  pool: Pool,
+  input: { phone: string; deviceId: string },
+): Promise<AdminLoginResult> {
   const admin = await requireActiveAdmin(pool, input.phone);
 
   const tokens = await createAdminSession(pool, admin.id, admin.role as AdminRole, input.deviceId);

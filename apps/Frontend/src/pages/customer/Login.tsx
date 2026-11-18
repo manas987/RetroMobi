@@ -5,9 +5,10 @@ import loginForest from "../../assets/login-forest.png";
 import { PhoneInput, DEFAULT_COUNTRY } from "../../components/PhoneInput";
 import type { Country } from "../../lib/countries";
 import { OtpInput } from "../../components/OtpInput";
-import { BackRow, ErrorBox, ResendRow, SubmitButton, TextField } from "../../components/AuthFormBits";
+import { BackRow, ErrorBox, ResendRow, SmsInsteadRow, SubmitButton, TextField } from "../../components/AuthFormBits";
 import { useCountdown } from "../../lib/useCountdown";
 import { usePortalSession, portalFetch, PortalApiError } from "../../lib/portal";
+import { usePhoneOtp } from "../../lib/phoneOtp";
 import { GOOGLE_CLIENT_ID, renderGoogleButton } from "../../lib/google";
 import { useEffect, useRef } from "react";
 
@@ -36,6 +37,7 @@ export function CustomerLogin() {
   const [, navigate] = useLocation();
   const next = new URLSearchParams(useLocationSearch()).get("next") || "/";
   const resend = useCountdown(30);
+  const otp = usePhoneOtp("user");
 
   const [step, setStep] = useState<Step>("phone");
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
@@ -69,17 +71,21 @@ export function CustomerLogin() {
 
   const sendOtp = () =>
     run(async () => {
-      await portalFetch("user", "/auth/otp/send", { method: "POST", body: { phone } });
+      await otp.send(phone);
       resend.start();
       setStep("otp");
     });
 
+  const sendBySms = () =>
+    run(async () => {
+      await otp.sendBySms(phone);
+      setCode("");
+      resend.start();
+    });
+
   const verifyOtp = () =>
     run(async () => {
-      const result = await portalFetch<any>("user", "/auth/otp/verify", {
-        method: "POST",
-        body: { phone, code, deviceId },
-      });
+      const result = await otp.verify<any>(phone, code, deviceId);
       if (result.status === "SIGNUP_REQUIRED") {
         setSignupTicket(result.signupTicket);
         setStep("email");
@@ -173,14 +179,16 @@ export function CustomerLogin() {
           <BackRow onBack={() => setStep("phone")} />
           <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Verify your number</h1>
           <p className="text-sm text-ink-3 mb-6">
-            We sent a 6-digit code to <span className="text-ink font-medium">{phone}</span>.
+            We sent a 6-digit code {otp.via === "sms" ? "by SMS" : "on WhatsApp"} to{" "}
+            <span className="text-ink font-medium">{phone}</span>.
           </p>
           {error && <ErrorBox text={error} />}
           <OtpInput value={code} onChange={setCode} />
           <SubmitButton busy={busy} onClick={verifyOtp} disabled={code.length < 6}>
             Verify
           </SubmitButton>
-          <ResendRow resend={resend} onResend={sendOtp} />
+          <ResendRow resend={resend} onResend={otp.via === "sms" ? sendBySms : sendOtp} />
+          {otp.via === "whatsapp" && <SmsInsteadRow onClick={sendBySms} />}
         </div>
       )}
 

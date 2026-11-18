@@ -12,7 +12,14 @@ export const UpsertPayoutAccountSchema = z.object({
 });
 
 export const ListPayoutsQuerySchema = z.object({
-  status: z.enum(["PENDING", "PAID", "FAILED"]).optional(),
+  status: z.enum(["CREDITED", "PENDING", "PAID", "FAILED"]).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+});
+
+export const RequestWithdrawalSchema = z.object({
+  /** Paise. The minimum (MIN_WITHDRAWAL_PAISE) and the balance are checked in lib/wallet.ts. */
+  amount: z.number().int().positive(),
+  /** Where to send it when paid offline: a UPI id or bank details. Cleared once settled. */
+  payTo: z.string().trim().min(3).max(200).optional(),
 });

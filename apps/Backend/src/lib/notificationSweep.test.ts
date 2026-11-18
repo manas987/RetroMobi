@@ -18,29 +18,30 @@ afterAll(async () => {
 });
 
 describe("sendPendingNotifications", () => {
-  test("a PENDING notification is sent and marked SENT", async () => {
+  test("a PENDING notification is sent as its WhatsApp template and marked SENT", async () => {
     const user = await createUser(pool);
     await pool.query(
       `insert into notifications (recipient_type, recipient_id, channel, template, payload)
-       values ('CUSTOMER', $1, 'SMS', 'refund_processed', $2)`,
-      [user.id, JSON.stringify({ bookingId: "x", refundAmount: 100 })],
+       values ('CUSTOMER', $1, 'WHATSAPP', 'refund_processed', $2)`,
+      [user.id, JSON.stringify({ bookingId: "x", refundAmount: 150000 })],
     );
 
     // The sweep claims up to 50 PENDING rows oldest-first, and a persistent test
     // DB can carry a backlog from earlier runs -- so drain repeatedly rather than
     // assuming this row lands in the very first batch.
-    const calls: string[] = [];
+    const calls: Array<{ to: string; template: string; params: string[] }> = [];
     for (let i = 0; i < 20; i++) {
       const sent = await sendPendingNotifications(pool, {
-        sms: async (to) => {
-          calls.push(to);
+        whatsapp: async (to, template, params) => {
+          calls.push({ to, template, params });
         },
         email: async () => {},
       });
       if (sent === 0) break;
     }
 
-    expect(calls).toContain(user.phone);
+    // Paise become rupees, in the {{1}}, {{2}} order the approved template expects.
+    expect(calls).toContainEqual({ to: user.phone, template: "refund_processed", params: ["1,500", "x"] });
 
     const { rows } = await pool.query(
       `select status from notifications where recipient_id = $1 and template = 'refund_processed'`,
@@ -49,6 +50,7 @@ describe("sendPendingNotifications", () => {
     expect(rows[0].status).toBe("SENT");
   });
 
+  // Legacy SMS rows (call sites not yet switched) go out over WhatsApp too.
   test("a sender that throws marks the row FAILED, not retried in-process", async () => {
     const user = await createUser(pool);
     await pool.query(
@@ -67,11 +69,11 @@ describe("sendPendingNotifications", () => {
       );
       if (stillPending.length === 0) break;
       await sendPendingNotifications(pool, {
-        sms: async () => {
-          throw new Error("Twilio is down");
+        whatsapp: async () => {
+          throw new Error("WhatsApp is down");
         },
         email: async () => {
-          throw new Error("Twilio is down");
+          throw new Error("WhatsApp is down");
         },
       });
     }
@@ -81,7 +83,7 @@ describe("sendPendingNotifications", () => {
       [user.id],
     );
     expect(rows[0].status).toBe("FAILED");
-    expect(rows[0].error).toContain("Twilio is down");
+    expect(rows[0].error).toContain("WhatsApp is down");
   });
 });
 

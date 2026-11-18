@@ -12,7 +12,7 @@ function istDateString(d: Date): string {
 export async function sendPendingNotifications(
   pool: Pool,
   senders: {
-    sms: (to: string, body: string) => Promise<void>;
+    whatsapp: (to: string, template: string, params: string[]) => Promise<void>;
     email: (to: string, subject: string, body: string) => Promise<void>;
   },
 ): Promise<number> {
@@ -42,11 +42,15 @@ export async function sendPendingNotifications(
       const contact = await resolveContact(pool, row.recipient_type, row.recipient_id, row.channel);
       if (!contact) throw new Error(`no ${row.channel} contact for ${row.recipient_type} ${row.recipient_id}`);
 
-      const { subject, body } = renderTemplate(row.template, row.payload ?? {});
-      if (row.channel === "SMS") {
-        await senders.sms(contact, body);
-      } else {
+      if (row.channel === "EMAIL") {
+        const { subject, body } = renderTemplate(row.template, row.payload ?? {});
         await senders.email(contact, subject, body);
+      } else {
+        // Legacy 'SMS' rows go out over WhatsApp too: Twilio is gone, and a
+        // call site still enqueueing SMS should still reach the customer.
+        const params = WHATSAPP_TEMPLATE_PARAMS[row.template];
+        if (!params) throw new Error(`no WhatsApp template for `);
+        await senders.whatsapp(contact, row.template, params(row.payload ?? {}));
       }
       sent += 1;
     } catch (err) {
@@ -66,13 +70,31 @@ async function resolveContact(
   pool: Pool,
   recipientType: "CUSTOMER" | "MERCHANT" | "ADMIN",
   recipientId: string,
-  channel: "SMS" | "EMAIL",
+  channel: "SMS" | "WHATSAPP" | "EMAIL",
 ): Promise<string | null> {
   const table = recipientType === "CUSTOMER" ? "users" : recipientType === "MERCHANT" ? "merchant_users" : "admins";
-  const column = channel === "SMS" ? "phone" : "email";
+  const column = channel === "EMAIL" ? "email" : "phone";
   const { rows } = await pool.query(`select ${column} as contact from ${table} where id = $1`, [recipientId]);
   return rows[0]?.contact ?? null;
 }
+
+const text = (v: unknown) => (v === undefined || v === null || v === "" ? "-" : String(v));
+const rupees = (paise: unknown) => (Number(paise ?? 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+// The one map of WhatsApp notification templates. Each key is the template's
+// name in Meta Business Manager, and it is notifications.template verbatim
+// (already lowercase snake_case, which is all Meta allows). The array order is
+// the template body's {{1}}, {{2}}, ... order. Meta approves a template's exact
+// wording, so changing an entry here means re-submitting that template first;
+// docs/deployment.md lists the approved bodies.
+export const WHATSAPP_TEMPLATE_PARAMS: Record<string, (p: Record<string, unknown>) => string[]> = {
+  booking_confirmed: (p) => [text(p.merchantInvoiceNumber), text(p.platformInvoiceNumber)],
+  refund_processed: (p) => [rupees(p.refundAmount), text(p.bookingId)],
+  deposit_claim_raised: (p) => [text(p.bookingId)],
+  ticket_reply: (p) => [text(p.ticketId)],
+  pickup_tomorrow: (p) => [text(p.bookingId)],
+  return_due_today: (p) => [text(p.bookingId)],
+};
 
 function renderTemplate(template: string, payload: Record<string, unknown>): { subject: string; body: string } {
   const TEMPLATES: Record<string, (p: Record<string, unknown>) => { subject: string; body: string }> = {
@@ -141,7 +163,7 @@ export async function sweepBookingReminders(pool: Pool): Promise<number> {
     if (await alreadyQueued(pool, "pickup_tomorrow", row.user_id, row.id)) continue;
     await pool.query(
       `insert into notifications (recipient_type, recipient_id, channel, template, payload)
-       values ('CUSTOMER', $1, 'SMS', 'pickup_tomorrow', $2)`,
+       values ('CUSTOMER', $1, 'WHATSAPP', 'pickup_tomorrow', $2)`,
       [row.user_id, JSON.stringify({ bookingId: row.id })],
     );
     inserted += 1;
@@ -159,7 +181,7 @@ export async function sweepBookingReminders(pool: Pool): Promise<number> {
     if (await alreadyQueued(pool, "return_due_today", row.user_id, row.id)) continue;
     await pool.query(
       `insert into notifications (recipient_type, recipient_id, channel, template, payload)
-       values ('CUSTOMER', $1, 'SMS', 'return_due_today', $2)`,
+       values ('CUSTOMER', $1, 'WHATSAPP', 'return_due_today', $2)`,
       [row.user_id, JSON.stringify({ bookingId: row.id })],
     );
     inserted += 1;

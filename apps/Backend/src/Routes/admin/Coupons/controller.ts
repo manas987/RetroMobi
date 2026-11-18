@@ -10,7 +10,7 @@ export async function list(req: Request, res: Response) {
 }
 
 export async function create(req: Request, res: Response) {
-  const coupon = await couponsService.createCoupon(pool, req.adminId!, req.body);
+  const coupon = await couponsService.createCoupon(pool, { type: "ADMIN", id: req.adminId! }, req.body);
   res.status(201).json(coupon);
 }
 

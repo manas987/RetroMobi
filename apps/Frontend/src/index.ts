@@ -4,8 +4,8 @@ import { requirePublicMapboxToken } from "./lib/mapboxConfig";
 
 requirePublicMapboxToken(process.env.BUN_PUBLIC_MAPBOX_TOKEN);
 
-const PORT = Number(process.env.PORT ?? 5173);
-const BACKEND = process.env.BACKEND_URL ?? "http://localhost:3000";
+const PORT = Number(process.env.PORT ?? 5180);
+const BACKEND = process.env.BACKEND_URL ?? "http://localhost:3201";
 
 // Bun's CSS bundler base64-inlines any font reached through url(), which put
 // ~225KB of Airbnb Cereal into the render-blocking stylesheet and downloaded

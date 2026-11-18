@@ -6,6 +6,7 @@ import {
   type CashfreeOrderStatus,
 } from "../../../providers/cashfree.ts";
 import { writeAudit } from "../../../lib/audit.ts";
+import { recordRedemptions } from "../../../lib/coupons.ts";
 import { notify } from "../../../lib/notify.ts";
 import { composeTotal, extractTax } from "../../../lib/pricing.ts";
 import { extensionWindowAvailable } from "../../../lib/vehicleBookingRules.ts";
@@ -276,7 +277,7 @@ export async function handleExtensionPaymentSuccess(
       await notify(client, {
         recipientType: "CUSTOMER",
         recipientId: userRows[0].user_id,
-        channel: "SMS",
+        channel: "WHATSAPP",
         template: "refund_processed",
         payload: { bookingId: ext.booking_id, refundAmount: Number(payment.amount) },
       });
@@ -450,7 +451,7 @@ export async function confirmPaidOrder(
 
     const { rows: bookings } = await client.query(
       `select b.id, b.rental_amount, b.security_deposit_amount, b.platform_fee, b.tax_amount,
-              b.discount_amount, v.shop_id, s.merchant_user_id, s.gstin
+              b.discount_amount, b.merchant_discount_amount, v.shop_id, s.merchant_user_id, s.gstin
          from bookings b
          join vehicles v on v.id = b.vehicle_id
          join shops s on s.id = v.shop_id
@@ -467,26 +468,29 @@ export async function confirmPaidOrder(
         [booking.id, booking.security_deposit_amount],
       );
 
-      const upfront = Math.round((Number(booking.rental_amount) * payoutUpfrontPct) / 100);
+      // What the shop earns: its listed price, less a discount the SHOP funded.
+      // A platform-funded discount is not subtracted -- RetroMobi pays it.
+      const merchantBase = Number(booking.rental_amount) - Number(booking.merchant_discount_amount);
+      const upfront = Math.round((merchantBase * payoutUpfrontPct) / 100);
       await client.query(
         `insert into payouts (merchant_user_id, booking_id, stage, amount, status)
-         values ($1, $2, 'UPFRONT', $3, 'PENDING')`,
+         values ($1, $2, 'UPFRONT', $3, 'CREDITED')`,
         [booking.merchant_user_id, booking.id, upfront],
       );
     }
 
-    // The merchant is invoiced for their FULL listed price: they receive it in full,
-    // and a coupon discount is a platform marketing cost, not a price reduction the
-    // shop granted. So the discount comes off the platform's own invoice instead.
+    // The merchant invoices what they receive: the listed price for a platform
+    // coupon (a platform marketing cost, so it comes off the platform's own
+    // invoice instead), the discounted price for a coupon the shop funded.
     const byShop = new Map<string, { gstin: string | null; rentalAmount: number }>();
     let platformFeeTotal = 0;
     let discountTotal = 0;
     for (const booking of bookings) {
       const entry = byShop.get(booking.shop_id) ?? { gstin: booking.gstin, rentalAmount: 0 };
-      entry.rentalAmount += Number(booking.rental_amount);
+      entry.rentalAmount += Number(booking.rental_amount) - Number(booking.merchant_discount_amount);
       byShop.set(booking.shop_id, entry);
       platformFeeTotal += Number(booking.platform_fee);
-      discountTotal += Number(booking.discount_amount);
+      discountTotal += Number(booking.discount_amount) - Number(booking.merchant_discount_amount);
     }
 
     let merchantInvoiceNumber: string | null = null;
@@ -527,7 +531,7 @@ export async function confirmPaidOrder(
     await notify(client, {
       recipientType: "CUSTOMER",
       recipientId: payment.user_id,
-      channel: "SMS",
+      channel: "WHATSAPP",
       template: "booking_confirmed",
       payload: { bookingGroupId: payment.booking_group_id, merchantInvoiceNumber, platformInvoiceNumber },
     });
@@ -539,15 +543,7 @@ export async function confirmPaidOrder(
       payload: { bookingGroupId: payment.booking_group_id, merchantInvoiceNumber, platformInvoiceNumber },
     });
 
-    const { rows: groupRows } = await client.query(
-      `select coupon_id from booking_groups where id = $1`,
-      [payment.booking_group_id],
-    );
-    if (groupRows[0]?.coupon_id) {
-      await client.query(`update coupons set used_count = used_count + 1 where id = $1`, [
-        groupRows[0].coupon_id,
-      ]);
-    }
+    await recordRedemptions(client, payment.booking_group_id);
 
     await writeAudit(client, {
       actorType: "SYSTEM",

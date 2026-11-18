@@ -1,4 +1,5 @@
 import express from "express";
+import { pool } from "./DB/client.ts";
 import { errorHandler } from "./middleware/errorHandler.ts";
 import adminRoutes from "./Routes/admin/index.ts";
 import merchantRoutes from "./Routes/merchant/index.ts";
@@ -10,6 +11,12 @@ import userRoutes from "./Routes/user/index.ts";
 // also means importing it (from a route-level test, say) starts no timers.
 export const app = express();
 
+// req.ip feeds the per-ip rate limiter. Without this it is the proxy's address,
+// so every user shared one bucket. Only a proxy on loopback or a private network
+// (the Bun dev proxy, nginx reaching the container through Docker) is trusted to
+// set X-Forwarded-For; a client hitting the port directly cannot spoof it.
+app.set("trust proxy", "loopback, uniquelocal");
+
 // Mounted ahead of the JSON parser so the Cashfree signature check in
 // Payments/controller.ts runs against the exact bytes Cashfree signed.
 app.use("/api/user/payments/webhook", express.raw({ type: "*/*" }));
@@ -17,6 +24,15 @@ app.use("/api/user/payments/webhook", express.raw({ type: "*/*" }));
 // exact bytes, so this route cannot go through the JSON parser either.
 app.use("/api/merchant/payouts/webhook", express.raw({ type: "*/*" }));
 app.use(express.json());
+// For deploy.sh and uptime checks: up AND able to reach the database.
+app.get("/api/health", async (_req, res) => {
+  try {
+    await pool.query("select 1");
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ ok: false });
+  }
+});
 app.use("/api/user", userRoutes);
 app.use("/api/merchant", merchantRoutes);
 app.use("/api/admin", adminRoutes);

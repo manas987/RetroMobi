@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: retromobi
       POSTGRES_DB: retromobi
     ports:
-      - "5433:5432"
+      # DB_PORT from .env in this folder (compose reads it): 5434 by default so it
+      # never clashes with another project's Postgres on 5432/5433.
+      - "${DB_PORT:-5434}:5432"
     volumes:
       - retromobi_pgdata:/var/lib/postgresql/data
       - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
@@ -20,6 +22,6 @@ services:
 
 volumes:
   retromobi_pgdata:
-    # pinned: data predates the `name: retromobi` rename, which would otherwise
-    # re-prefix this to retromobi_retromobi_pgdata and start from an empty volume
-    name: backend_retromobi_pgdata
+    # The seeded dev database (src/DB/seedTestAccounts.ts). The older dev data
+    # is still in the backend_retromobi_pgdata volume if you ever need it.
+    name: retromobi_pgtest

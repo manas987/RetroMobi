@@ -23,11 +23,27 @@ export async function listCoupons(pool: Pool, filters: { status?: string }) {
   return rows;
 }
 
-export async function createCoupon(
-  pool: Pool,
-  adminId: string,
-  input: { code: string; type: "PERCENT" | "FLAT"; value: number; validFrom: Date; validUntil: Date; maxUses?: number },
-) {
+export type CouponActor = { type: "ADMIN" | "MERCHANT"; id: string };
+
+export type CouponInput = {
+  code: string;
+  description?: string;
+  type: "PERCENT" | "FLAT";
+  value: number;
+  validFrom: Date;
+  validUntil: Date;
+  maxUses?: number;
+  fundedBy?: "PLATFORM" | "SHOP";
+  shopIds?: string[];
+  maxDiscount?: number;
+  minOrderAmount?: number;
+  perUserLimit?: number;
+  perShopLimit?: number;
+  conditions?: Record<string, unknown>;
+};
+
+/** Shared by the admin and merchant portals; the caller has already decided funding and scope. */
+export async function createCoupon(pool: Pool, actor: CouponActor, input: CouponInput) {
   const code = input.code.toUpperCase();
   const client = await pool.connect();
   try {
@@ -35,21 +51,43 @@ export async function createCoupon(
     let rows;
     try {
       ({ rows } = await client.query(
-        `insert into coupons (code, type, value, valid_from, valid_until, max_uses)
-         values ($1, $2, $3, $4, $5, $6) returning *`,
-        [code, input.type, input.value, input.validFrom, input.validUntil, input.maxUses ?? null],
+        `insert into coupons
+           (code, description, type, value, valid_from, valid_until, max_uses, funded_by, shop_ids,
+            max_discount, min_order_amount, per_user_limit, per_shop_limit, conditions,
+            created_by_admin, created_by_merchant)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         returning *`,
+        [
+          code,
+          input.description ?? null,
+          input.type,
+          input.value,
+          input.validFrom,
+          input.validUntil,
+          input.maxUses ?? null,
+          input.fundedBy ?? "PLATFORM",
+          input.shopIds ?? null,
+          input.maxDiscount ?? null,
+          input.minOrderAmount ?? 0,
+          input.perUserLimit ?? null,
+          input.perShopLimit ?? null,
+          JSON.stringify(input.conditions ?? {}),
+          actor.type === "ADMIN" ? actor.id : null,
+          actor.type === "MERCHANT" ? actor.id : null,
+        ],
       ));
     } catch (err) {
       if (isUniqueViolation(err)) throw new CouponCodeTakenError(`coupon code ${code} already exists`);
       throw err;
     }
     await writeAudit(client, {
-      actorType: "ADMIN",
-      actorId: adminId,
+      actorType: actor.type,
+      actorId: actor.id,
       action: "coupon.created",
       entityType: "coupon",
       entityId: rows[0].id,
-      after: { code, type: input.type, value: input.value },
+      shopId: input.fundedBy === "SHOP" && input.shopIds?.length === 1 ? input.shopIds[0] : null,
+      after: { code, type: input.type, value: input.value, fundedBy: input.fundedBy ?? "PLATFORM" },
     });
     await client.query("COMMIT");
     return rows[0];

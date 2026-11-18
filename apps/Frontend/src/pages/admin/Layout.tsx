@@ -12,6 +12,8 @@ const NAV = [
   { href: "/admin/licensed-vehicles", label: "Licensed vehicles", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/booking-ops", label: "Booking ops", roles: ["ADMIN", "SUPER_ADMIN"] },
   { href: "/admin/payments", label: "Payments", roles: ["SUPER_ADMIN"] },
+  { href: "/admin/withdrawals", label: "Withdrawals", roles: ["SUPER_ADMIN"] },
+  { href: "/admin/wallets", label: "Shop wallets", roles: ["SUPER_ADMIN"] },
   { href: "/admin/audit", label: "Audit", roles: ["SUPER_ADMIN"] },
   { href: "/admin/admins", label: "Admins", roles: ["SUPER_ADMIN"] },
   { href: "/admin/models", label: "Vehicle models", roles: ["ADMIN", "SUPER_ADMIN"] },

@@ -3,7 +3,7 @@ import { requireMerchantAuth } from "../../../middleware/requireMerchantAuth.ts"
 import { requirePermission } from "../../../middleware/requirePermission.ts";
 import { validate } from "../../../middleware/validate.ts";
 import * as controller from "./controller.ts";
-import { ListPayoutsQuerySchema, UpsertPayoutAccountSchema } from "./schema.ts";
+import { ListPayoutsQuerySchema, RequestWithdrawalSchema, UpsertPayoutAccountSchema } from "./schema.ts";
 
 const router = Router();
 
@@ -24,6 +24,16 @@ router.get(
   requirePermission("payouts:read"),
   validate(ListPayoutsQuerySchema, "query"),
   controller.listShop,
+);
+
+// The shop wallet (lib/wallet.ts): every booking credits it, the merchant
+// withdraws from it. Reading needs payouts:read; asking for money, payouts:write.
+router.get("/shops/:shopId/wallet", requirePermission("payouts:read"), controller.getWallet);
+router.post(
+  "/shops/:shopId/wallet/withdrawals",
+  requirePermission("payouts:write"),
+  validate(RequestWithdrawalSchema),
+  controller.requestWithdrawal,
 );
 
 export default router;

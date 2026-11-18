@@ -25,7 +25,7 @@ export async function confirmInspection(
   input: { userId: string; bookingId: string; storageKey: string },
 ) {
   const { rows } = await pool.query(
-    `select b.id, b.rental_amount, b.actual_pickup_at
+    `select b.id, b.rental_amount, b.merchant_discount_amount, b.actual_pickup_at
        from bookings b
        join booking_groups g on g.id = b.group_id
       where b.id = $1 and g.user_id = $2 and b.status = 'CONFIRMED' and b.deleted_at is null`,
@@ -36,7 +36,9 @@ export async function confirmInspection(
   if (booking.actual_pickup_at) throw new AlreadyInspectedError("pickup already confirmed");
 
   const payoutUpfrontPct = Number(process.env.PAYOUT_UPFRONT_PCT ?? 10);
-  const balanceAmount = Number(booking.rental_amount) - Math.round((Number(booking.rental_amount) * payoutUpfrontPct) / 100);
+  // The same base as UPFRONT (paymentsService): listed price less a SHOP-funded discount.
+  const merchantBase = Number(booking.rental_amount) - Number(booking.merchant_discount_amount);
+  const balanceAmount = merchantBase - Math.round((merchantBase * payoutUpfrontPct) / 100);
 
   const client = await pool.connect();
   try {
@@ -72,7 +74,7 @@ export async function confirmInspection(
     if (payoutRows.length > 0) {
       await client.query(
         `insert into payouts (merchant_user_id, booking_id, stage, amount, status)
-         values ($1, $2, 'BALANCE', $3, 'PENDING')`,
+         values ($1, $2, 'BALANCE', $3, 'CREDITED')`,
         [payoutRows[0].merchant_user_id, input.bookingId, balanceAmount],
       );
     }
@@ -247,7 +249,7 @@ export async function merchantReturn(
           await notify(client, {
             recipientType: "CUSTOMER",
             recipientId: booking.user_id,
-            channel: "SMS",
+            channel: "WHATSAPP",
             template: "refund_processed",
             payload: { bookingId: input.bookingId, refundAmount: Number(deposit.amount) },
           });
@@ -290,7 +292,7 @@ export async function merchantReturn(
     await notify(client, {
       recipientType: "CUSTOMER",
       recipientId: booking.user_id,
-      channel: "SMS",
+      channel: "WHATSAPP",
       template: "deposit_claim_raised",
       payload: { bookingId: input.bookingId },
     });
