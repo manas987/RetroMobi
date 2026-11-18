@@ -11,6 +11,13 @@ export const VerifyOtpSchema = z.object({
   deviceId: z.string().min(1),
 });
 
+// The Firebase SMS fallback: the ID token Firebase issued after it checked the code.
+export const VerifyFirebaseOtpSchema = z.object({
+  phone: phoneSchema,
+  idToken: z.string().min(1),
+  deviceId: z.string().min(1),
+});
+
 export const SignupCompleteSchema = z.object({
   signupTicket: z.string().min(1),
   deviceId: z.string().min(1),

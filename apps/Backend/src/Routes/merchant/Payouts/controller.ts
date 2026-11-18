@@ -6,6 +6,21 @@ import {
   verifyPayoutWebhookSignature,
 } from "../../../providers/cashfreePayout.ts";
 import * as payoutsService from "./payoutsService.ts";
+import * as wallet from "../../../lib/wallet.ts";
+
+export async function getWallet(req: Request, res: Response) {
+  res.status(200).json(await wallet.getWallet(pool, pathParam(req, "shopId")));
+}
+
+export async function requestWithdrawal(req: Request, res: Response) {
+  const withdrawal = await wallet.requestWithdrawal(pool, {
+    shopId: pathParam(req, "shopId"),
+    requestedBy: req.merchantUserId!,
+    amount: req.body.amount,
+    payTo: req.body.payTo,
+  });
+  res.status(201).json(withdrawal);
+}
 
 export async function getAccount(req: Request, res: Response) {
   const account = await payoutsService.getPayoutAccount(pool, req.merchantUserId!);

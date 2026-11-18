@@ -4,7 +4,8 @@ import { pool } from "../../../DB/client.ts";
 import * as authService from "./authService.ts";
 import { sendOtpEmail } from "../../../providers/emailSender.ts";
 import { verifyGoogleIdToken } from "../../../providers/google.ts";
-import { sendOtpSms } from "../../../providers/smsSender.ts";
+import { verifyFirebasePhoneToken } from "../../../providers/firebase.ts";
+import { isWhatsAppConfigured, sendOtpWhatsApp } from "../../../providers/whatsapp.ts";
 
 function sessionDetails(req: Request) {
   const ua = req.get("user-agent") ?? "";
@@ -29,10 +30,14 @@ function sessionDetails(req: Request) {
 
 export async function sendOtp(req: Request, res: Response) {
   const { phone } = req.body as { phone: string };
-  const result = await authService.requestOtp(pool, phone, sendOtpSms);
+  const result = await authService.requestOtp(pool, phone, sendOtpWhatsApp);
   res.status(200).json({
     message: "OTP sent",
     expiresInSeconds: result.expiresInSeconds,
+    // Unconfigured WhatsApp is the dev-fallback: the code only reached the
+    // server log. Say so, so the client can switch to Firebase SMS. (A failed
+    // send throws instead -- a 502 otp_delivery_failed, see errorHandler.)
+    ...(isWhatsAppConfigured() ? {} : { fallback: "firebase" }),
   });
 }
 
@@ -43,6 +48,16 @@ export async function verifyOtp(req: Request, res: Response) {
     deviceId: string;
   };
   const result = await authService.verifyOtp(pool, { phone, code, deviceId, sessionDetails: sessionDetails(req) });
+  res.status(200).json(result);
+}
+
+export async function verifyFirebaseOtp(req: Request, res: Response) {
+  const { phone, idToken, deviceId } = req.body as { phone: string; idToken: string; deviceId: string };
+  const result = await authService.verifyFirebaseOtp(
+    pool,
+    { phone, idToken, deviceId, sessionDetails: sessionDetails(req) },
+    verifyFirebasePhoneToken,
+  );
   res.status(200).json(result);
 }
 

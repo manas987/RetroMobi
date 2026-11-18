@@ -37,7 +37,19 @@ export function hashOtp(code: string): Promise<string> {
   });
 }
 
+// Local-only master code (DEV_OTP_CODE): accepted alongside the real one so
+// testers can log in without the WhatsApp/email round-trip. Ignored in
+// production here, and config.ts refuses to start production with it set.
+export function devOtpEnabled(): boolean {
+  return !!process.env.DEV_OTP_CODE?.trim() && process.env.NODE_ENV !== "production";
+}
+
+function isDevOtp(code: string): boolean {
+  return devOtpEnabled() && code === process.env.DEV_OTP_CODE!.trim();
+}
+
 export function verifyOtpHash(code: string, stored: string): Promise<boolean> {
+  if (isDevOtp(code)) return Promise.resolve(true);
   const [salt, hashHex] = stored.split(":");
   if (!salt || !hashHex) return Promise.resolve(false);
   return new Promise((resolve, reject) => {

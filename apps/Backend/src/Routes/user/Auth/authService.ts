@@ -169,9 +169,28 @@ interface SignupTicketPayload {
 // signup form (name + a separately-verified email) before any `users`/
 // `sessions` row exists for it.
 export async function verifyOtp(pool: Pool, input: VerifyOtpInput): Promise<VerifyOtpResult> {
-  const { phone, code, deviceId } = input;
+  await consumeOtpChallenge(pool, input.phone, input.code);
+  return signInVerifiedPhone(pool, input);
+}
 
-  await consumeOtpChallenge(pool, phone, code);
+// The SMS fallback: Firebase sent and checked the code, so its ID token stands
+// in for a consumed OTP challenge. Everything after is the same path.
+export async function verifyFirebaseOtp(
+  pool: Pool,
+  input: { phone: string; idToken: string; deviceId: string; sessionDetails?: SessionDetails },
+  verifyPhoneToken: (idToken: string, phone: string) => Promise<boolean>,
+): Promise<VerifyOtpResult> {
+  if (!(await verifyPhoneToken(input.idToken, input.phone))) {
+    throw new InvalidOtpError("the SMS sign-in could not be verified for this phone");
+  }
+  return signInVerifiedPhone(pool, input);
+}
+
+async function signInVerifiedPhone(
+  pool: Pool,
+  input: { phone: string; deviceId: string; sessionDetails?: SessionDetails },
+): Promise<VerifyOtpResult> {
+  const { phone, deviceId } = input;
 
   const { rows: existingUsers } = await pool.query(
     `select id, name, email from users where phone = $1`,

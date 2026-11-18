@@ -1,0 +1,73 @@
+# RetroMobi on one small Linux VM (GCP, asia-south1), run by rootless Docker as an
+# ordinary user. nginx on the host terminates TLS and proxies to the two ports
+# below, which are bound to 127.0.0.1 only. PostgreSQL is managed (Supabase).
+#
+#   cd infra/server
+#   cp ../../apps/Backend/.env.example backend.env      # fill in for production, chmod 600
+#   cp ../../apps/Frontend/.env.example frontend.env    # fill in, chmod 600
+#   docker compose build
+#   docker compose --profile tools run --rm migrate
+#   docker compose up -d
+#
+# Host ports come from BACKEND_PORT / FRONTEND_PORT in infra/server/.env
+# (defaults 3201 / 5180); nginx/retromobi.conf must point at the same ports.
+#
+# Releases: ./deploy.sh <commit>. Runbook: docs/deployment.md
+
+name: retromobi
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/app.Dockerfile
+      target: backend
+    image: retromobi-backend:latest
+    restart: unless-stopped
+    init: true # PID 1 that forwards SIGTERM
+    env_file: ./backend.env
+    environment:
+      NODE_ENV: production
+      PORT: "${BACKEND_PORT:-3201}"
+    volumes:
+      - ./certs:/certs:ro # database CA certificate (docs/deployment.md §4)
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-3201}:${BACKEND_PORT:-3201}"
+    stop_grace_period: 20s
+    logging: *logging
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/app.Dockerfile
+      target: frontend
+    image: retromobi-frontend:latest
+    restart: unless-stopped
+    init: true
+    env_file: ./frontend.env
+    environment:
+      NODE_ENV: production
+      PORT: "${FRONTEND_PORT:-5180}"
+      # Only used if a request reaches the frontend's own /api proxy; nginx
+      # normally sends /api straight to the backend.
+      BACKEND_URL: http://backend:${BACKEND_PORT:-3201}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5180}:${FRONTEND_PORT:-5180}"
+    depends_on:
+      - backend
+    logging: *logging
+
+  # One-off: docker compose --profile tools run --rm migrate
+  migrate:
+    image: retromobi-backend:latest
+    env_file: ./backend.env
+    volumes:
+      - ./certs:/certs:ro
+    command: ["bun", "run", "src/DB/migrate.ts"]
+    profiles: ["tools"]

@@ -6,6 +6,7 @@ import { combine, splitIso } from "../components/DateTimeField";
 import { DateRangeField } from "../components/DateRangeField";
 import { ErrorBox, SubmitButton, TextField } from "../components/AuthFormBits";
 import { RiderVerification } from "../components/RiderVerification";
+import { CouponField } from "../components/CouponField";
 import { Modal } from "../components/Modal";
 import { EmptyState, feedbackActionClass, SkeletonRows } from "../components/ContentFeedback";
 import { useCart } from "../lib/cart";
@@ -95,6 +96,17 @@ export function Checkout() {
 
   const allAssignedAndVerified = vehicles.every((v) => riderVerified(riderByVehicle[v.vehicleId] ?? null));
 
+  // What the hold will be asked for, once every scooter has a verified rider.
+  // The coupon step prices exactly this.
+  const cart = allAssignedAndVerified
+    ? {
+        items: vehicles.map((v) => ({ vehicleId: v.vehicleId, riderId: riderByVehicle[v.vehicleId]! })),
+        pickupAt: toIsoWithOffset(combine(pickupDate, pickupTime)),
+        returnAt: toIsoWithOffset(combine(returnDate, returnTime)),
+      }
+    : null;
+  const [coupon, setCoupon] = useState<{ code: string; description: string | null; discountAmount: number } | null>(null);
+
   async function run(fn: () => Promise<void>) {
     setError(null);
     setBusy(true);
@@ -128,6 +140,7 @@ export function Checkout() {
           items: vehicles.map((v) => ({ vehicleId: v.vehicleId, riderId: riderByVehicle[v.vehicleId] })),
           pickupAt: toIsoWithOffset(combine(pickupDate, pickupTime)),
           returnAt: toIsoWithOffset(combine(returnDate, returnTime)),
+          ...(coupon ? { couponCode: coupon.code } : {}),
         },
       });
       // The payment step lives at its own URL, loaded from the server, so a
@@ -276,6 +289,8 @@ export function Checkout() {
                 </SubmitButton>
               </Modal>
             </section>
+
+            <CouponField token={session.accessToken} cart={cart} applied={coupon} onApplied={setCoupon} />
 
             <button
               type="button"

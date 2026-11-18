@@ -1,5 +1,6 @@
+import { publicEnv } from "./publicEnv";
 // Public browser configuration, supplied through the ignored frontend .env.
-const MAPBOX_TOKEN = process.env.BUN_PUBLIC_MAPBOX_TOKEN ?? "";
+const MAPBOX_TOKEN = publicEnv(() => process.env.BUN_PUBLIC_MAPBOX_TOKEN);
 
 // Stock Mapbox Streets raster style via Leaflet — confirmed working end to
 // end. The custom "Faded" Studio style doesn't work here: the legacy raster

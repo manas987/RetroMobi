@@ -8,7 +8,8 @@ import { enumLabel, rupees } from "../../lib/format";
 const LIMIT = 25;
 
 const PAYMENT_STATUSES = ["", "PENDING", "AUTHORIZED", "SUCCEEDED", "FAILED", "CANCELLED"];
-const PAYOUT_STATUSES = ["", "PENDING", "PAID", "FAILED"];
+// CREDITED = in the shop's wallet (0021); money leaves through Withdrawals.
+const PAYOUT_STATUSES = ["", "CREDITED", "PENDING", "PAID", "FAILED"];
 const PAYOUT_STAGES = ["", "UPFRONT", "BALANCE", "CANCELLATION", "DEPOSIT_CLAIM"];
 
 function PaymentsBody() {

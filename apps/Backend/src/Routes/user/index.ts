@@ -8,6 +8,7 @@ import reviewsRoutes from "./Reviews/routes.ts";
 import searchRoutes from "./Search/routes.ts";
 import ticketsRoutes from "./Tickets/routes.ts";
 import shopsRoutes from "./Shops/routes.ts";
+import couponsRoutes from "./Coupons/routes.ts";
 
 const router = Router();
 
@@ -19,6 +20,7 @@ router.use("/payments", paymentsRoutes);
 router.use("/riders", ridersRoutes);
 router.use("/tickets", ticketsRoutes);
 router.use("/shops", shopsRoutes);
+router.use("/coupons", couponsRoutes);
 router.use(reviewsRoutes);
 
 export default router;

@@ -10,6 +10,7 @@ import {
   RefreshSchema,
   SendOtpSchema,
   SignupCompleteSchema,
+  VerifyFirebaseOtpSchema,
   VerifyOtpSchema,
 } from "./schema.ts";
 
@@ -17,6 +18,7 @@ const router = Router();
 
 router.post("/otp/send", validate(SendOtpSchema), controller.sendOtp);
 router.post("/otp/verify", validate(VerifyOtpSchema), controller.verifyOtp);
+router.post("/otp/verify-firebase", validate(VerifyFirebaseOtpSchema), controller.verifyFirebaseOtp);
 router.post("/email-otp/send", validate(EmailOtpSendSchema), controller.sendEmailOtp);
 router.post("/email-otp/verify", validate(EmailOtpVerifySchema), controller.verifyEmailOtp);
 router.post("/google", validate(GoogleAuthSchema), controller.googleAuth);

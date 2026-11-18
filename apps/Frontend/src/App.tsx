@@ -23,6 +23,7 @@ import { MerchantStaff } from "./pages/merchant/Staff";
 import { MerchantActivity } from "./pages/merchant/Activity";
 import { MerchantSupport } from "./pages/merchant/Support";
 import { MerchantEarnings } from "./pages/merchant/Earnings";
+import { MerchantCoupons } from "./pages/merchant/Coupons";
 import { MerchantReports } from "./pages/merchant/Reports";
 
 import { AdminLogin } from "./pages/admin/Login";
@@ -32,6 +33,9 @@ import { AdminVehicleReview } from "./pages/admin/VehicleReview";
 import { AdminRiderReview } from "./pages/admin/RiderReview";
 import { AdminBookingOps } from "./pages/admin/BookingOps";
 import { AdminPayments } from "./pages/admin/Payments";
+import { AdminWithdrawals } from "./pages/admin/Withdrawals";
+import { AdminWallets } from "./pages/admin/Wallets";
+import { MyCoupons } from "./pages/customer/MyCoupons";
 import { AdminAudit } from "./pages/admin/Audit";
 import { AdminTickets } from "./pages/admin/Tickets";
 import { AdminAdmins } from "./pages/admin/Admins";
@@ -69,6 +73,7 @@ export function App() {
       <Route path="/account/profile" component={CustomerProfile} />
       <Route path="/account/support" component={CustomerSupport} />
       <Route path="/account/bookings" component={MyBookings} />
+      <Route path="/account/coupons" component={MyCoupons} />
 
       <Route path="/merchant/login" component={MerchantLogin} />
       <Route path="/merchant" component={MerchantOverview} />
@@ -81,6 +86,7 @@ export function App() {
       <Route path="/merchant/activity" component={MerchantActivity} />
       <Route path="/merchant/support" component={MerchantSupport} />
       <Route path="/merchant/earnings" component={MerchantEarnings} />
+      <Route path="/merchant/coupons" component={MerchantCoupons} />
       <Route path="/merchant/reports" component={MerchantReports} />
       {/* Old URLs, kept so bookmarks and links in old messages still land. */}
       <Route path="/merchant/branches"><Redirect to="/merchant/shop" replace /></Route>
@@ -98,6 +104,8 @@ export function App() {
       <Route path="/admin/merchants" component={AdminMerchants} />
       <Route path="/admin/booking-ops" component={AdminBookingOps} />
       <Route path="/admin/payments" component={AdminPayments} />
+      <Route path="/admin/withdrawals" component={AdminWithdrawals} />
+      <Route path="/admin/wallets" component={AdminWallets} />
       <Route path="/admin/audit" component={AdminAudit} />
       <Route path="/admin/admins" component={AdminAdmins} />
       <Route path="/admin/models" component={AdminModels} />

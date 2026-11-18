@@ -4,9 +4,10 @@ import { AuthLayout } from "../../components/AuthLayout";
 import { PhoneInput, DEFAULT_COUNTRY } from "../../components/PhoneInput";
 import type { Country } from "../../lib/countries";
 import { OtpInput } from "../../components/OtpInput";
-import { BackRow, ErrorBox, ResendRow, SubmitButton, TextField } from "../../components/AuthFormBits";
+import { BackRow, ErrorBox, ResendRow, SmsInsteadRow, SubmitButton, TextField } from "../../components/AuthFormBits";
 import { useCountdown } from "../../lib/useCountdown";
 import { usePortalSession, portalFetch, PortalApiError } from "../../lib/portal";
+import { usePhoneOtp } from "../../lib/phoneOtp";
 
 type Step = "phone" | "otp" | "signup";
 
@@ -25,6 +26,7 @@ export function MerchantLogin() {
   const { session, setTokens, deviceId } = usePortalSession("merchant");
   const [, navigate] = useLocation();
   const resend = useCountdown(30);
+  const otp = usePhoneOtp("merchant");
 
   // Signing in while already signed in otherwise re-renders the form over a
   // live session.
@@ -56,17 +58,21 @@ export function MerchantLogin() {
 
   const sendOtp = () =>
     run(async () => {
-      await portalFetch("merchant", "/auth/otp/send", { method: "POST", body: { phone } });
+      await otp.send(phone);
       resend.start();
       setStep("otp");
     });
 
+  const sendBySms = () =>
+    run(async () => {
+      await otp.sendBySms(phone);
+      setCode("");
+      resend.start();
+    });
+
   const verifyOtp = () =>
     run(async () => {
-      const result = await portalFetch<VerifyResult>("merchant", "/auth/otp/verify", {
-        method: "POST",
-        body: { phone, code, deviceId },
-      });
+      const result = await otp.verify<VerifyResult>(phone, code, deviceId);
       if (result.status === "SIGNUP_REQUIRED") {
         setSignupTicket(result.signupTicket);
         setStep("signup");
@@ -109,14 +115,16 @@ export function MerchantLogin() {
           <BackRow onBack={() => setStep("phone")} />
           <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Verify your number</h1>
           <p className="text-sm text-ink-3 mb-6">
-            We sent a 6-digit code to <span className="text-ink font-medium">{phone}</span>.
+            We sent a 6-digit code {otp.via === "sms" ? "by SMS" : "on WhatsApp"} to{" "}
+            <span className="text-ink font-medium">{phone}</span>.
           </p>
           {error && <ErrorBox text={error} />}
           <OtpInput value={code} onChange={setCode} />
           <SubmitButton busy={busy} onClick={verifyOtp} disabled={code.length < 6}>
             Verify
           </SubmitButton>
-          <ResendRow resend={resend} onResend={sendOtp} />
+          <ResendRow resend={resend} onResend={otp.via === "sms" ? sendBySms : sendOtp} />
+          {otp.via === "whatsapp" && <SmsInsteadRow onClick={sendBySms} />}
         </div>
       )}
 

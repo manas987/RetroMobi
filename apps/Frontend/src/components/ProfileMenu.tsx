@@ -6,6 +6,7 @@ const ITEMS = [
   { section: "Rent a scooter", links: [
     { href: "/browse", label: "Discover" },
     { href: "/account/bookings", label: "My bookings" },
+    { href: "/account/coupons", label: "Coupons" },
   ] },
   { section: "Account", links: [
     { href: "/account/support", label: "Support" },

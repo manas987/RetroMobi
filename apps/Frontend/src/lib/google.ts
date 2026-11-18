@@ -1,3 +1,4 @@
+import { publicEnv } from "./publicEnv";
 /**
  * Google Identity Services, loaded only when it is actually needed.
  *
@@ -13,7 +14,7 @@
 // by inspecting the served bundle. The old `typeof process !== "undefined"`
 // guard around it was wrong: browsers never define `process`, so that check
 // always evaluated false and silently zeroed this out regardless of env.
-export const GOOGLE_CLIENT_ID = process.env.BUN_PUBLIC_GOOGLE_CLIENT_ID ?? "";
+export const GOOGLE_CLIENT_ID = publicEnv(() => process.env.BUN_PUBLIC_GOOGLE_CLIENT_ID);
 
 const SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 

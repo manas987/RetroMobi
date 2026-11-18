@@ -78,7 +78,9 @@ export async function shopSummary(
   if (withMoney) {
     const { rows } = await pool.query(
       `${RENTALS}
-       select coalesce(sum(p.amount) filter (where p.status = 'PAID'), 0)::bigint as paid,
+       -- paid = earned: credited to the shop wallet (0021), or paid by the old
+       -- per-booking transfers that came before it.
+       select coalesce(sum(p.amount) filter (where p.status in ('PAID', 'CREDITED')), 0)::bigint as paid,
               coalesce(sum(p.amount) filter (where p.status = 'PENDING'), 0)::bigint as pending,
               (select coalesce(sum(rental_amount), 0) from rentals
                 where source = 'OFFLINE' and start_day between $2::date and $3::date)::bigint as walkin_cash

@@ -17,6 +17,7 @@ import {
   Store,
   Users,
   type LucideIcon,
+  TicketPercent,
 } from "lucide-react";
 import { usePortalSession, portalFetch, PortalApiError, type Row } from "../../lib/portal";
 import { ErrorBox, SubmitButton, TextField } from "../../components/AuthFormBits";
@@ -76,6 +77,7 @@ const NAV: { group: TKey; items: NavItem[] }[] = [
     items: [
       { href: "/merchant/earnings", label: "nav.earnings", icon: IndianRupee, needs: "payouts:read" },
       { href: "/merchant/reports", label: "nav.reports", icon: BarChart3, needs: "payouts:read" },
+      { href: "/merchant/coupons", label: "nav.coupons", icon: TicketPercent, needs: "pricing:read" },
     ],
   },
   {

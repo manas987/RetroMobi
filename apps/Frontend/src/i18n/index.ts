@@ -12,6 +12,7 @@ import enShop from "./en/shop";
 import enStaff from "./en/staff";
 import enMoney from "./en/money";
 import enSupport from "./en/support";
+import enWallet from "./en/wallet";
 import hiCommon from "./hi/common";
 import hiNav from "./hi/nav";
 import hiStatus from "./hi/status";
@@ -25,6 +26,7 @@ import hiShop from "./hi/shop";
 import hiStaff from "./hi/staff";
 import hiMoney from "./hi/money";
 import hiSupport from "./hi/support";
+import hiWallet from "./hi/wallet";
 
 /**
  * Merchant-console strings. English is the source; every Hindi file is typed
@@ -49,6 +51,7 @@ const en = {
   staff: enStaff,
   money: enMoney,
   support: enSupport,
+  wallet: enWallet,
 };
 
 type Dict = typeof en;
@@ -66,6 +69,7 @@ const hi: { [N in keyof Dict]: Record<keyof Dict[N], string> } = {
   staff: hiStaff,
   money: hiMoney,
   support: hiSupport,
+  wallet: hiWallet,
 };
 
 export type Lang = "en" | "hi";

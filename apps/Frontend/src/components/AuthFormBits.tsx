@@ -1,4 +1,19 @@
 import type { useCountdown } from "../lib/useCountdown";
+import { SMS_FALLBACK_ENABLED } from "../lib/phoneOtp";
+
+/** Offered even when WhatsApp delivered: not every rider uses WhatsApp. Absent
+ *  entirely when this deployment has no Firebase config. */
+export function SmsInsteadRow({ onClick }: { onClick: () => void }) {
+  if (!SMS_FALLBACK_ENABLED) return null;
+  return (
+    <p className="mt-2 text-sm text-ink-3">
+      No WhatsApp?{" "}
+      <button type="button" onClick={onClick} className="text-ink font-medium hover:underline">
+        Send by SMS instead
+      </button>
+    </p>
+  );
+}
 
 export function BackRow({ onBack }: { onBack: () => void }) {
   return (

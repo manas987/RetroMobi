@@ -20,7 +20,12 @@ afterAll(async () => {
 describe("admin coupons", () => {
   test("coupon codes are uppercased, and a used coupon cannot be hard-deleted", async () => {
     const code = `summer${uniquePhone().slice(-6)}`;
-    const coupon = await createCoupon(pool, "00000000-0000-0000-0000-000000000000", {
+    // created_by_admin is a real foreign key, so the creator has to exist.
+    const { rows: admins } = await pool.query(
+      `insert into admins (phone, name, role, status) values ($1, 'Coupon Admin', 'SUPER_ADMIN', 'ACTIVE') returning id`,
+      [uniquePhone()],
+    );
+    const coupon = await createCoupon(pool, { type: "ADMIN", id: admins[0].id }, {
       code,
       type: "PERCENT",
       value: 10,

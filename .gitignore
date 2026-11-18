@@ -41,3 +41,7 @@ yarn-error.log*
 CLAUDE.md
 
 AGENTS.md
+
+# Server env files and the DB CA certificate (infra/server)
+infra/server/*.env
+infra/server/certs/

@@ -103,7 +103,7 @@ export async function settleDeposit(
     if (input.toMerchant > 0) {
       const { rows: payoutRows } = await client.query(
         `insert into payouts (merchant_user_id, booking_id, stage, amount, status)
-         values ($1, $2, 'DEPOSIT_CLAIM', $3, 'PENDING') returning id`,
+         values ($1, $2, 'DEPOSIT_CLAIM', $3, 'CREDITED') returning id`,
         [deposit.merchant_user_id, deposit.booking_id, input.toMerchant],
       );
       payoutId = payoutRows[0].id;
@@ -139,7 +139,7 @@ export async function settleDeposit(
     await notify(client, {
       recipientType: "CUSTOMER",
       recipientId: deposit.user_id,
-      channel: "SMS",
+      channel: "WHATSAPP",
       template: "refund_processed",
       payload: { bookingId: deposit.booking_id, refundAmount: input.refundToCustomer },
     });

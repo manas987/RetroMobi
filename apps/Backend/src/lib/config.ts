@@ -1,17 +1,17 @@
 // Fail fast on config whose ABSENCE PRODUCES SILENTLY WRONG MONEY OR DOCUMENTS.
 //
-// Vendor credentials are deliberately not checked here: smsSender, cashfree, kyc,
+// Vendor credentials are deliberately not checked here: cashfree, kyc,
 // tracker and storage each throw a clear error at the point of use, so a missing
-// Twilio token is a loud 502 and you can still run search locally without one.
+// Cashfree key is a loud 502 and you can still run search locally without one.
 // These six are different -- every one of them has a fallback that looks like it
 // worked. `GST_RATE ?? 18` prices a booking at a rate nobody chose, and
 // `PLATFORM_GSTIN ?? null` issues a GST invoice with no GSTIN on it, which is how
 // that one shipped. A boot failure is cheaper than either.
 //
-// Twilio and Cashfree Secure ID are the exceptions, and only in production.
+// WhatsApp and Cashfree Secure ID are the exceptions, and only in production.
 //
-// Twilio: a missing SMS credential doesn't throw loudly at point of use --
-// smsSender.ts's dev-fallback logs
+// WhatsApp: a missing sender credential doesn't throw loudly at point of use --
+// whatsapp.ts's dev-fallback logs
 // "[dev-fallback]" and returns successfully, because that's what lets `bun test`
 // and local dev run with no vendor creds at all. The same silent success in
 // production means phone OTP -- the only way into the app -- never sends, and
@@ -66,10 +66,12 @@ const REQUIRED: Requirement[] = [
 
 // Required only outside dev/test -- see the note at the top of the file.
 const REQUIRED_IN_PRODUCTION: Requirement[] = [
-  { key: "TWILIO_ACCOUNT_SID", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
-  { key: "TWILIO_AUTH_TOKEN", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
-  { key: "TWILIO_FROM_NUMBER", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
-  // Same failure shape as Twilio above, with a worse consequence: without
+  // Firebase SMS is only the fallback, so it stays optional: WhatsApp alone must
+  // be able to deliver every code.
+  { key: "WHATSAPP_TOKEN", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
+  { key: "WHATSAPP_PHONE_NUMBER_ID", why: "phone OTP silently never sends without it -- the dev-fallback logs and returns success" },
+  { key: "WHATSAPP_OTP_TEMPLATE", why: "phone OTP cannot be sent without the approved Authentication template's name" },
+  // Same failure shape as WhatsApp above, with a worse consequence: without
   // these, providers/kyc.ts used to return a faked VERIFIED, so every driving
   // licence was approved without being checked and a scooter went out to
   // whoever asked. It now reports SANDBOX_UNAVAILABLE instead, but in
@@ -106,6 +108,11 @@ const FORBIDDEN_IN_PRODUCTION: Requirement[] = [
     key: "PAYMENTS_DEV_AUTO_SUCCEED",
     why: "it fakes a paid Cashfree order, so a booking confirms with no money -- a local-only escape hatch",
     validate: (v) => (v === "true" ? "must not be true in production" : null),
+  },
+  {
+    key: "DEV_OTP_CODE",
+    why: "it is a master login code for every account -- a local-only escape hatch",
+    validate: () => "must not be set in production",
   },
 ];
 

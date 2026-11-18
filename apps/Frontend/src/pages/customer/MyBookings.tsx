@@ -202,6 +202,13 @@ function BookingCard({ booking: b, token, due, onChanged }: { booking: Row; toke
         {canReview(b) && <Link href={reviewLink(b)} className={secondaryAction}>Leave a review</Link>}
       </div>
       {unpaidHold && <p className="pb-3 text-xs text-warning">Held until {fmt(b.hold_expires_at)}.</p>}
+      {!!b.handover_code && (
+        <div className="mb-3 rounded-row border border-line bg-surface-2 px-3 py-2.5">
+          <p className="text-xs text-ink-2">Handover code</p>
+          <p className="text-2xl font-semibold tracking-[0.3em] text-ink tnum">{String(b.handover_code)}</p>
+          <p className="text-xs text-ink-2">Tell this to the shop when you collect the scooter. We also sent it on WhatsApp.</p>
+        </div>
+      )}
       {!cancelled && depositIssue && <DepositStatus booking={b} />}
       {canExtend && extension && <ExtensionStatus extension={extension} />}
 

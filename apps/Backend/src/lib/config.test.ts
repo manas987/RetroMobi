@@ -13,9 +13,9 @@ const valid = {
 const productionValid = {
   ...valid,
   NODE_ENV: "production",
-  TWILIO_ACCOUNT_SID: "ACxxxx",
-  TWILIO_AUTH_TOKEN: "token",
-  TWILIO_FROM_NUMBER: "+15551234567",
+  WHATSAPP_TOKEN: "token",
+  WHATSAPP_PHONE_NUMBER_ID: "1234567890",
+  WHATSAPP_OTP_TEMPLATE: "retromobi_otp",
   CASHFREE_CLIENT_ID: "cf-id",
   CASHFREE_CLIENT_SECRET: "cf-secret",
   DL_HASH_PEPPER: "pepper",
@@ -63,15 +63,22 @@ describe("assertConfig", () => {
     }
   });
 
-  test("in production, a missing Twilio credential refuses to boot", () => {
-    expect(() => assertConfig({ ...valid, NODE_ENV: "production" })).toThrow(/TWILIO_ACCOUNT_SID/);
+  test("in production, a missing WhatsApp credential refuses to boot", () => {
+    for (const key of ["WHATSAPP_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_OTP_TEMPLATE"]) {
+      expect(() => assertConfig({ ...productionValid, [key]: undefined })).toThrow(new RegExp(key));
+    }
+  });
+
+  // Firebase is only the SMS fallback -- WhatsApp alone delivers every code.
+  test("in production, Firebase is optional", () => {
+    expect(() => assertConfig({ ...productionValid, FIREBASE_PROJECT_ID: undefined })).not.toThrow();
   });
 
   test("in production, a complete config including every vendor passes", () => {
     expect(() => assertConfig(productionValid)).not.toThrow();
   });
 
-  test("outside production, a missing Twilio credential is fine -- that's the dev fallback", () => {
+  test("outside production, a missing WhatsApp credential is fine -- that's the dev fallback", () => {
     expect(() => assertConfig(valid)).not.toThrow();
   });
 
@@ -118,6 +125,10 @@ describe("assertConfig", () => {
     expect(() =>
       assertConfig({ ...productionValid, PAYMENTS_DEV_AUTO_SUCCEED: "true" }),
     ).toThrow(/PAYMENTS_DEV_AUTO_SUCCEED/);
+  });
+
+  test("in production, a master OTP code refuses to boot", () => {
+    expect(() => assertConfig({ ...productionValid, DEV_OTP_CODE: "123456" })).toThrow(/DEV_OTP_CODE/);
   });
 
   test("outside production, the fake-payment hatch is allowed", () => {

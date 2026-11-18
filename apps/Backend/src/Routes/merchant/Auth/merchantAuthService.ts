@@ -169,9 +169,28 @@ export async function verifyMerchantOtp(
   pool: Pool,
   input: { phone: string; code: string; deviceId: string },
 ): Promise<MerchantLoginResult | MerchantSignupRequiredResult> {
-  const { phone, code, deviceId } = input;
+  await consumeOtpChallenge(pool, input.phone, input.code);
+  return signInVerifiedPhone(pool, input);
+}
 
-  await consumeOtpChallenge(pool, phone, code);
+// The SMS fallback: Firebase sent and checked the code, so its ID token stands
+// in for a consumed OTP challenge. Everything after is the same path.
+export async function verifyMerchantFirebaseOtp(
+  pool: Pool,
+  input: { phone: string; idToken: string; deviceId: string },
+  verifyPhoneToken: (idToken: string, phone: string) => Promise<boolean>,
+): Promise<MerchantLoginResult | MerchantSignupRequiredResult> {
+  if (!(await verifyPhoneToken(input.idToken, input.phone))) {
+    throw new MerchantInvalidOtpError("the SMS sign-in could not be verified for this phone");
+  }
+  return signInVerifiedPhone(pool, input);
+}
+
+async function signInVerifiedPhone(
+  pool: Pool,
+  input: { phone: string; deviceId: string },
+): Promise<MerchantLoginResult | MerchantSignupRequiredResult> {
+  const { phone, deviceId } = input;
 
   const { rows: existingRows } = await pool.query(
     `select id, name, email, status from merchant_users where phone = $1`,

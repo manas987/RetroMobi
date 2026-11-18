@@ -44,7 +44,7 @@ function uniqueEmail(): string {
   return `rider${Date.now()}${seq}@example.com`;
 }
 
-// Real sendOtpSms/sendOtpEmail hit Twilio and need live credentials;
+// Real sendOtpWhatsApp/sendOtpEmail hit Meta/Resend and need live credentials;
 // authService takes the delivery function as a parameter precisely so tests
 // can pass a no-op here instead of mocking a whole module.
 const noopDeliver = async () => {};
