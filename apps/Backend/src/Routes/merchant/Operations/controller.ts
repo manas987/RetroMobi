@@ -66,6 +66,11 @@ export async function identity(req: Request, res: Response) {
   res.status(200).json(result);
 }
 
+export async function sendHandoverCode(req: Request, res: Response) {
+  await identityService.sendHandoverCode(pool, req.merchantUserId!, pathParam(req, "bookingId"));
+  res.status(202).json({ sent: true });
+}
+
 export async function identityCheck(req: Request, res: Response) {
   const result = await identityService.recordIdentityCheck(
     pool,

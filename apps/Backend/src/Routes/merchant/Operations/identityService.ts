@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { writeAudit } from "../../../lib/audit.ts";
 import { evaluateRiderForVehicle, istDate } from "../../../lib/licenceGate.ts";
 import { presignDownload } from "../../../lib/storage.ts";
+import { resendHandoverCode } from "../../../lib/handoverCode.ts";
 
 /**
  * The identity check at handover.
@@ -17,6 +18,13 @@ export class VerificationRequiredError extends Error {}
 export class IdentityCheckMissingError extends Error {}
 export class IdentityCheckFailedError extends Error {}
 export class AlreadyCheckedError extends Error {}
+export class HandoverCodeInvalidError extends Error {}
+export class HandoverCodeLockedError extends Error {}
+
+// Wrong handover codes allowed per booking in the window before staff are
+// stopped: 5 guesses at a 6-digit code is a 1-in-200,000 chance.
+const HANDOVER_CODE_MAX_MISSES = 5;
+const HANDOVER_CODE_WINDOW = "15 minutes";
 
 /**
  * What the staff member needs to compare the person in front of them against,
@@ -161,11 +169,12 @@ export async function recordIdentityCheck(
   pool: Pool,
   merchantUserId: string,
   bookingId: string,
-  input: { photoMatched: boolean; physicalDlSeen: boolean; dlNumberLast4: string; notes?: string },
+  input: { photoMatched: boolean; physicalDlSeen: boolean; dlNumberLast4: string; handoverCode: string; notes?: string },
 ) {
   const { rows } = await pool.query(
-    `select b.id, b.rider_id, dlv.licence_number as licence_number_masked
+    `select b.id, b.rider_id, dlv.licence_number as licence_number_masked, g.handover_code
        from bookings b
+       join booking_groups g on g.id = b.group_id
        join vehicles v on v.id = b.vehicle_id
        join shops sh on sh.id = v.shop_id
        left join driving_licence_verifications dlv
@@ -187,6 +196,29 @@ export async function recordIdentityCheck(
   try {
     await client.query("BEGIN");
     await assertHandoverAllowed(client, { bookingId, requireIdentityCheck: false });
+
+    // The customer's handover code: proves the person at the counter is the
+    // one who booked, not just someone holding a matching licence.
+    const misses = await client.query(
+      `select count(*)::int as n from audit_logs
+        where action = 'booking.handover_code_mismatch' and entity_id = $1
+          and created_at > now() - interval '${HANDOVER_CODE_WINDOW}'`,
+      [bookingId],
+    );
+    if (misses.rows[0].n >= HANDOVER_CODE_MAX_MISSES) {
+      throw new HandoverCodeLockedError("too many wrong codes, try again in 15 minutes");
+    }
+    if (!booking.handover_code || input.handoverCode.trim() !== booking.handover_code) {
+      await writeAudit(client, {
+        actorType: "MERCHANT",
+        actorId: merchantUserId,
+        action: "booking.handover_code_mismatch",
+        entityType: "booking",
+        entityId: bookingId,
+      });
+      await client.query("COMMIT");
+      throw new HandoverCodeInvalidError("the handover code is not the one sent to the customer");
+    }
 
     if (!input.photoMatched || !input.physicalDlSeen) {
       // Audited before throwing: a refused handover is exactly the event
@@ -250,6 +282,7 @@ export async function recordIdentityCheck(
   } catch (err) {
     if (
       err instanceof IdentityCheckFailedError ||
+      err instanceof HandoverCodeInvalidError ||
       err instanceof VerificationRequiredError ||
       err instanceof IdentityCheckMissingError
     ) {
@@ -260,4 +293,24 @@ export async function recordIdentityCheck(
   } finally {
     client.release();
   }
+}
+
+/**
+ * Staff tap "send the code again" when the customer cannot find it. Online
+ * bookings only, before pickup; the code itself does not change.
+ */
+export async function sendHandoverCode(pool: Pool, merchantUserId: string, bookingId: string): Promise<void> {
+  const { rows } = await pool.query(
+    `select b.group_id, g.user_id
+       from bookings b
+       join booking_groups g on g.id = b.group_id
+       join vehicles v on v.id = b.vehicle_id
+      where b.id = $1 and b.rider_id is not null and b.status = 'CONFIRMED'
+        and b.actual_pickup_at is null and b.deleted_at is null
+        and exists (select 1 from shop_members sm where sm.shop_id = v.shop_id and sm.merchant_user_id = $2
+                      and sm.status = 'ACTIVE' and sm.deleted_at is null)`,
+    [bookingId, merchantUserId],
+  );
+  if (rows.length === 0) throw new BookingNotFoundError(`booking ${bookingId} is not waiting for an online handover`);
+  await resendHandoverCode(pool, rows[0].group_id, rows[0].user_id);
 }

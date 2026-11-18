@@ -132,6 +132,23 @@ describe("handlePaymentWebhook", () => {
     expect(rows.every((r) => r.status === "CONFIRMED")).toBe(true);
   });
 
+  test("a paid order gets a 6-digit handover code, queued to the customer on WhatsApp", async () => {
+    const p = await pendingPayment(325);
+    await handlePaymentWebhook(
+      pool,
+      { providerEventId: `evt_${Date.now()}_code`, type: "PAYMENT_SUCCESS", orderId: p.orderId, payload: {} },
+      fakeCashfree,
+    );
+    const { rows } = await pool.query(`select handover_code from booking_groups where id = $1`, [p.groupId]);
+    expect(rows[0].handover_code).toMatch(/^\d{6}$/);
+    const sent = await pool.query(
+      `select recipient_id, channel, payload->>'code' as code from notifications
+        where template = 'delivery_code' and payload->>'bookingGroupId' = $1`,
+      [p.groupId],
+    );
+    expect(sent.rows).toEqual([{ recipient_id: p.userId, channel: "WHATSAPP", code: rows[0].handover_code }]);
+  });
+
   // Cashfree can deliver the same event twice. The DB is the referee.
   test("the same event id delivered twice is processed exactly once", async () => {
     const p = await pendingPayment(330);

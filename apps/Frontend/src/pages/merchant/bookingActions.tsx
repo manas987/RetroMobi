@@ -112,6 +112,8 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
   const [photo, setPhoto] = useState<boolean | null>(null);
   const [card, setCard] = useState<boolean | null>(null);
   const [last4, setLast4] = useState("");
+  const [code, setCode] = useState("");
+  const [resent, setResent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<"ok" | "failed" | null>(null);
@@ -152,7 +154,7 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
       await portalFetch("merchant", `/bookings/${booking.id}/identity-check`, {
         method: "POST",
         token,
-        body: { photoMatched: photo, physicalDlSeen: card, dlNumberLast4: last4 },
+        body: { photoMatched: photo, physicalDlSeen: card, dlNumberLast4: last4, handoverCode: code },
       });
       setOutcome("ok");
       void invalidate();
@@ -161,6 +163,17 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
       else setError(errorText(lang, err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function resendCode() {
+    setError(null);
+    setResent(false);
+    try {
+      await portalFetch("merchant", `/bookings/${booking.id}/handover-code/send`, { method: "POST", token });
+      setResent(true);
+    } catch (err) {
+      setError(errorText(lang, err));
     }
   }
 
@@ -206,6 +219,22 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
             className={`${INPUT} w-40 tnum text-xl tracking-[0.4em]`}
           />
         </li>
+        <li>
+          <p className="mb-1 text-base font-semibold text-ink">4. {t("actions.idStepCode")}</p>
+          <p className="mb-2 text-sm text-ink-3">{t("actions.idCodeHint")}</p>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            aria-label={t("actions.idStepCode")}
+            className={`${INPUT} w-48 tnum text-xl tracking-[0.4em]`}
+          />
+          <button type="button" onClick={resendCode} className="mt-2 block text-sm font-medium text-ink underline underline-offset-2">
+            {t("actions.idResendCode")}
+          </button>
+          {resent && <p role="status" className="mt-1 text-sm text-verified">{t("actions.idCodeResent")}</p>}
+        </li>
       </ol>
 
       {error && <div className="mt-5"><ErrorNote text={error} /></div>}
@@ -214,7 +243,7 @@ function IdentityCheck({ booking, onClose }: { booking: Row; onClose: () => void
         size="lg"
         icon={ShieldCheck}
         className="mt-6 w-full"
-        disabled={busy || photo === null || card === null || last4.length !== 4}
+        disabled={busy || photo === null || card === null || last4.length !== 4 || code.length !== 6}
         onClick={submit}
       >
         {t("actions.idSubmit")}

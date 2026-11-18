@@ -1,3 +1,4 @@
+import { HandoverCodeRecentlySentError } from "../lib/handoverCode.ts";
 import {
   InsufficientWalletBalanceError,
   PayoutAccountNotReadyError,
@@ -49,6 +50,8 @@ import { IllegalTransitionError } from "../lib/verificationStateMachine.ts";
 import { NotReviewableError } from "../Routes/admin/Verification/verificationService.ts";
 import {
   AlreadyCheckedError,
+  HandoverCodeInvalidError,
+  HandoverCodeLockedError,
   BookingNotFoundError as IdentityBookingNotFoundError,
   IdentityCheckFailedError,
   IdentityCheckMissingError,
@@ -269,6 +272,14 @@ export function errorHandler(
   }
   if (err instanceof IdentityCheckFailedError) {
     res.status(422).json({ error: "identity_check_failed", message: err.message });
+    return;
+  }
+  if (err instanceof HandoverCodeInvalidError) {
+    res.status(422).json({ error: "handover_code_invalid", message: err.message });
+    return;
+  }
+  if (err instanceof HandoverCodeLockedError || err instanceof HandoverCodeRecentlySentError) {
+    res.status(429).json({ error: err instanceof HandoverCodeLockedError ? "handover_code_locked" : "handover_code_recently_sent", message: err.message });
     return;
   }
   if (err instanceof AlreadyCheckedError) {

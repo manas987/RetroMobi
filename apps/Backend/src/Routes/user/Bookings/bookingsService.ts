@@ -601,6 +601,10 @@ export async function listMyBookings(pool: Pool, userId: string) {
             -- still running. Without it a customer who closed the tab at the
             -- Cashfree screen has no route back to a hold that is still live.
             g.hold_expires_at,
+            -- Shown on the order page until the scooter is collected; staff
+            -- ask for it at handover (lib/handoverCode.ts).
+            case when b.status = 'CONFIRMED' and b.actual_pickup_at is null and b.deleted_at is null
+                 then g.handover_code end as handover_code,
             (select p.status from payments p
               where p.booking_group_id = g.id and p.type = 'RENTAL'
               order by p.created_at desc limit 1) as payment_status,

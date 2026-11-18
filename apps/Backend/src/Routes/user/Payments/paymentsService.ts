@@ -7,6 +7,7 @@ import {
 } from "../../../providers/cashfree.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import { recordRedemptions } from "../../../lib/coupons.ts";
+import { issueHandoverCode } from "../../../lib/handoverCode.ts";
 import { notify } from "../../../lib/notify.ts";
 import { composeTotal, extractTax } from "../../../lib/pricing.ts";
 import { extensionWindowAvailable } from "../../../lib/vehicleBookingRules.ts";
@@ -544,6 +545,8 @@ export async function confirmPaidOrder(
     });
 
     await recordRedemptions(client, payment.booking_group_id);
+    // The code the customer shows at the shop to collect the scooter.
+    await issueHandoverCode(client, payment.booking_group_id, payment.user_id);
 
     await writeAudit(client, {
       actorType: "SYSTEM",

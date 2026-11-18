@@ -45,6 +45,12 @@ router.post(
   validate(IdentityCheckSchema),
   controller.identityCheck,
 );
+// Re-sends the customer's handover code on WhatsApp.
+router.post(
+  "/bookings/:bookingId/handover-code/send",
+  requirePermission("bookings:write"),
+  controller.sendHandoverCode,
+);
 router.post(
   "/bookings/:bookingId/pickup",
   requirePermission("bookings:write"),

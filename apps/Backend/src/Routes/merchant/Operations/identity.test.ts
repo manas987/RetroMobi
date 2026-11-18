@@ -16,12 +16,16 @@ import { confirmInspection } from "../../user/Pickup/pickupService.ts";
 import {
   AlreadyCheckedError,
   BookingNotFoundError,
+  HandoverCodeInvalidError,
+  HandoverCodeLockedError,
   IdentityCheckFailedError,
   IdentityCheckMissingError,
   VerificationRequiredError,
   getIdentityForPickup,
   recordIdentityCheck,
+  sendHandoverCode,
 } from "./identityService.ts";
+import { HandoverCodeRecentlySentError } from "../../../lib/handoverCode.ts";
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -36,6 +40,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.end();
 });
+
+const CODE = "482915";
 
 /** A CONFIRMED booking with a verified rider, its merchant, and the licence's last four. */
 async function booking(riderOpts: Parameters<typeof createRider>[2] = {}) {
@@ -54,6 +60,7 @@ async function booking(riderOpts: Parameters<typeof createRider>[2] = {}) {
   await pool.query(`update bookings set status = 'CONFIRMED' where id = $1`, [
     held.bookings[0]!.id,
   ]);
+  await pool.query(`update booking_groups set handover_code = $2 where id = $1`, [held.groupId, CODE]);
 
   const { rows } = await pool.query(
     `select sh.merchant_user_id, dlv.licence_number
@@ -103,7 +110,7 @@ describe("recording the check", () => {
     const b = await booking();
     const result = await recordIdentityCheck(pool, b.merchantUserId, b.bookingId, {
       photoMatched: true,
-      physicalDlSeen: true,
+      physicalDlSeen: true, handoverCode: CODE,
       dlNumberLast4: b.last4,
     });
     expect(result.id).toBeTruthy();
@@ -122,7 +129,7 @@ describe("recording the check", () => {
 
   test("a second check is refused rather than overwriting the first", async () => {
     const b = await booking();
-    const ok = { photoMatched: true, physicalDlSeen: true, dlNumberLast4: b.last4 };
+    const ok = { photoMatched: true, physicalDlSeen: true, handoverCode: CODE, dlNumberLast4: b.last4 };
     await recordIdentityCheck(pool, b.merchantUserId, b.bookingId, ok);
     await expect(recordIdentityCheck(pool, b.merchantUserId, b.bookingId, ok)).rejects.toBeInstanceOf(
       AlreadyCheckedError,
@@ -134,7 +141,7 @@ describe("recording the check", () => {
     await expect(
       recordIdentityCheck(pool, b.merchantUserId, b.bookingId, {
         photoMatched: false,
-        physicalDlSeen: true,
+        physicalDlSeen: true, handoverCode: CODE,
         dlNumberLast4: b.last4,
       }),
     ).rejects.toBeInstanceOf(IdentityCheckFailedError);
@@ -158,7 +165,7 @@ describe("recording the check", () => {
     await expect(
       recordIdentityCheck(pool, b.merchantUserId, b.bookingId, {
         photoMatched: true,
-        physicalDlSeen: false,
+        physicalDlSeen: false, handoverCode: CODE,
         dlNumberLast4: b.last4,
       }),
     ).rejects.toBeInstanceOf(IdentityCheckFailedError);
@@ -171,7 +178,7 @@ describe("recording the check", () => {
     await expect(
       recordIdentityCheck(pool, b.merchantUserId, b.bookingId, {
         photoMatched: true,
-        physicalDlSeen: true,
+        physicalDlSeen: true, handoverCode: CODE,
         dlNumberLast4: "0000",
       }),
     ).rejects.toBeInstanceOf(IdentityCheckFailedError);
@@ -200,7 +207,7 @@ describe("the handover gate", () => {
     const b = await booking();
     await recordIdentityCheck(pool, b.merchantUserId, b.bookingId, {
       photoMatched: true,
-      physicalDlSeen: true,
+      physicalDlSeen: true, handoverCode: CODE,
       dlNumberLast4: b.last4,
     });
 
@@ -222,7 +229,7 @@ describe("the handover gate", () => {
     const b = await booking();
     await recordIdentityCheck(pool, b.merchantUserId, b.bookingId, {
       photoMatched: true,
-      physicalDlSeen: true,
+      physicalDlSeen: true, handoverCode: CODE,
       dlNumberLast4: b.last4,
     });
     await pool.query(
@@ -243,7 +250,7 @@ describe("the handover gate", () => {
     const b = await booking();
     await recordIdentityCheck(pool, b.merchantUserId, b.bookingId, {
       photoMatched: true,
-      physicalDlSeen: true,
+      physicalDlSeen: true, handoverCode: CODE,
       dlNumberLast4: b.last4,
     });
     await pool.query(
@@ -271,7 +278,7 @@ describe("the handover gate", () => {
     await expect(
       recordIdentityCheck(pool, b.merchantUserId, b.bookingId, {
         photoMatched: true,
-        physicalDlSeen: true,
+        physicalDlSeen: true, handoverCode: CODE,
         dlNumberLast4: b.last4,
       }),
     ).rejects.toBeInstanceOf(VerificationRequiredError);
@@ -297,5 +304,58 @@ describe("walk-in handover", () => {
     await merchantPickup(pool, { merchantUserId: rows[0].merchant_user_id, bookingId: walkin.id });
     const after = await pool.query(`select actual_pickup_at from bookings where id = $1`, [walkin.id]);
     expect(after.rows[0].actual_pickup_at).not.toBeNull();
+  });
+});
+
+describe("the customer's handover code", () => {
+  const checks = (b: { last4: string }, handoverCode: string) => ({
+    photoMatched: true, physicalDlSeen: true, dlNumberLast4: b.last4, handoverCode,
+  });
+
+  test("a wrong code is refused and audited, and nothing is recorded", async () => {
+    const b = await booking();
+    await expect(recordIdentityCheck(pool, b.merchantUserId, b.bookingId, checks(b, "000000"))).rejects.toBeInstanceOf(
+      HandoverCodeInvalidError,
+    );
+    const audit = await pool.query(
+      `select 1 from audit_logs where action = 'booking.handover_code_mismatch' and entity_id = $1`,
+      [b.bookingId],
+    );
+    expect(audit.rows.length).toBe(1);
+    const recorded = await pool.query(`select 1 from pickup_identity_checks where booking_id = $1`, [b.bookingId]);
+    expect(recorded.rows.length).toBe(0);
+  });
+
+  test("after five wrong codes even the right one is refused for a while", async () => {
+    const b = await booking();
+    for (let i = 0; i < 5; i++) {
+      await expect(recordIdentityCheck(pool, b.merchantUserId, b.bookingId, checks(b, "000000"))).rejects.toBeInstanceOf(
+        HandoverCodeInvalidError,
+      );
+    }
+    await expect(recordIdentityCheck(pool, b.merchantUserId, b.bookingId, checks(b, CODE))).rejects.toBeInstanceOf(
+      HandoverCodeLockedError,
+    );
+  });
+
+  test("staff can re-send the same code on WhatsApp, at most once a minute", async () => {
+    const b = await booking();
+    await sendHandoverCode(pool, b.merchantUserId, b.bookingId);
+    await expect(sendHandoverCode(pool, b.merchantUserId, b.bookingId)).rejects.toBeInstanceOf(
+      HandoverCodeRecentlySentError,
+    );
+    const { rows } = await pool.query(
+      `select n.payload->>'code' as code from notifications n
+         join bookings bk on n.payload->>'bookingGroupId' = bk.group_id::text
+        where bk.id = $1 and n.template = 'delivery_code'`,
+      [b.bookingId],
+    );
+    expect(rows).toEqual([{ code: CODE }]);
+  });
+
+  test("another merchant cannot trigger a send", async () => {
+    const b = await booking();
+    const stranger = await createUser(pool);
+    await expect(sendHandoverCode(pool, stranger.id, b.bookingId)).rejects.toBeInstanceOf(BookingNotFoundError);
   });
 });

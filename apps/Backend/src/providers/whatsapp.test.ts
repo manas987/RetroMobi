@@ -9,6 +9,16 @@ afterEach(() => {
   delete process.env.WHATSAPP_OTP_TEMPLATE;
   delete process.env.WHATSAPP_OTP_LANGUAGE;
   delete process.env.WHATSAPP_ONLY_TO;
+  delete process.env.WHATSAPP_OTP_TEXT;
+});
+
+test("WHATSAPP_OTP_TEXT fills a second body slot, the button still gets the code", () => {
+  process.env.WHATSAPP_OTP_TEMPLATE = "general_usecases_code";
+  process.env.WHATSAPP_OTP_TEXT = "login";
+  expect(otpMessage("+919999999999", "123456").template.components).toEqual([
+    { type: "body", parameters: [{ type: "text", text: "123456" }, { type: "text", text: "login" }] },
+    { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "123456" }] },
+  ]);
 });
 
 test("WHATSAPP_ONLY_TO keeps real sends to the listed numbers", async () => {

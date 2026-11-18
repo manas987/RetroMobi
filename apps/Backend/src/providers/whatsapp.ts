@@ -44,18 +44,27 @@ function templateMessage(to: string, name: string, components: TemplateMessage["
 // Authentication templates with a copy-code button take the code twice: once
 // for the body's {{1}}, once as the button's URL parameter (that is how Meta
 // models the copy-code button, sub_type "url" at index 0).
+// WHATSAPP_OTP_TEXT is for a template with a second body slot ({{code}} is for
+// {{text}}): set it to that word, e.g. "login". The body must carry exactly as
+// many values as the template has slots, or Meta fails the send (132000).
 export function otpMessage(to: string, code: string): TemplateMessage {
+  const text = process.env.WHATSAPP_OTP_TEXT?.trim();
   return templateMessage(to, process.env.WHATSAPP_OTP_TEMPLATE ?? "", [
-    { type: "body", parameters: [{ type: "text", text: code }] },
+    { type: "body", parameters: [{ type: "text", text: code }, ...(text ? [{ type: "text", text }] : [])] },
     { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
   ]);
 }
 
-export function notificationMessage(to: string, template: string, params: string[]): TemplateMessage {
+// copyCode: the template has a "Copy code" button, which Meta models as a url
+// button that takes the code again.
+export function notificationMessage(to: string, template: string, params: string[], copyCode?: string): TemplateMessage {
   return templateMessage(
     to,
     template,
-    params.length ? [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] : [],
+    [
+      ...(params.length ? [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] : []),
+      ...(copyCode ? [{ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: copyCode }] }] : []),
+    ],
   );
 }
 
@@ -96,6 +105,6 @@ export async function sendOtpWhatsApp(phone: string, code: string): Promise<void
   }
 }
 
-export function sendWhatsAppTemplate(to: string, template: string, params: string[]): Promise<void> {
-  return send(notificationMessage(to, template, params));
+export function sendWhatsAppTemplate(to: string, template: string, params: string[], copyCode?: string): Promise<void> {
+  return send(notificationMessage(to, template, params, copyCode));
 }

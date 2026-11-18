@@ -43,5 +43,7 @@ export const IdentityCheckSchema = z.object({
   physicalDlSeen: z.boolean(),
   // Read off the physical card and compared with the stored mask.
   dlNumberLast4: z.string().length(4),
+  // The 6-digit code the customer got on WhatsApp / sees on their order page.
+  handoverCode: z.string().regex(/^\d{6}$/),
   notes: z.string().max(500).optional(),
 });

@@ -12,7 +12,7 @@ function istDateString(d: Date): string {
 export async function sendPendingNotifications(
   pool: Pool,
   senders: {
-    whatsapp: (to: string, template: string, params: string[]) => Promise<void>;
+    whatsapp: (to: string, template: string, params: string[], copyCode?: string) => Promise<void>;
     email: (to: string, subject: string, body: string) => Promise<void>;
   },
 ): Promise<number> {
@@ -50,7 +50,8 @@ export async function sendPendingNotifications(
         // call site still enqueueing SMS should still reach the customer.
         const params = WHATSAPP_TEMPLATE_PARAMS[row.template];
         if (!params) throw new Error(`no WhatsApp template for `);
-        await senders.whatsapp(contact, row.template, params(row.payload ?? {}));
+        const values = params(row.payload ?? {});
+        await senders.whatsapp(contact, row.template, values, COPY_CODE_TEMPLATES.has(row.template) ? values[0] : undefined);
       }
       sent += 1;
     } catch (err) {
@@ -94,7 +95,12 @@ export const WHATSAPP_TEMPLATE_PARAMS: Record<string, (p: Record<string, unknown
   ticket_reply: (p) => [text(p.ticketId)],
   pickup_tomorrow: (p) => [text(p.bookingId)],
   return_due_today: (p) => [text(p.bookingId)],
+  // The handover code (lib/handoverCode.ts). An Authentication-style template.
+  delivery_code: (p) => [text(p.code)],
 };
+
+// Templates with a "Copy code" button; the button takes the first body value.
+const COPY_CODE_TEMPLATES = new Set(["delivery_code"]);
 
 function renderTemplate(template: string, payload: Record<string, unknown>): { subject: string; body: string } {
   const TEMPLATES: Record<string, (p: Record<string, unknown>) => { subject: string; body: string }> = {
