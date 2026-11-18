@@ -9,28 +9,9 @@ import { BackRow, ErrorBox, ResendRow, SmsInsteadRow, SubmitButton, TextField } 
 import { useCountdown } from "../../lib/useCountdown";
 import { usePortalSession, portalFetch, PortalApiError } from "../../lib/portal";
 import { usePhoneOtp } from "../../lib/phoneOtp";
-import { GOOGLE_CLIENT_ID, renderGoogleButton } from "../../lib/google";
-import { useEffect, useRef } from "react";
 
-type Step = "phone" | "otp" | "email" | "emailOtp" | "name";
-
-/** Google insists on rendering its own button, so this hands it a mount point. */
-function GoogleButton({
-  onToken,
-  onError,
-}: {
-  onToken: (idToken: string) => void;
-  onError: (message: string) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (ref.current) renderGoogleButton(ref.current, onToken, onError);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return <div ref={ref} className="flex justify-center" />;
-}
+// Email is optional: "skipEmail" is the confirmation shown when someone skips it.
+type Step = "phone" | "otp" | "email" | "emailOtp" | "skipEmail" | "name";
 
 export function CustomerLogin() {
   const { setTokens, deviceId } = usePortalSession("user");
@@ -48,11 +29,6 @@ export function CustomerLogin() {
   const [email, setEmail] = useState("");
   const [emailCode, setEmailCode] = useState("");
   const [emailVerificationTicket, setEmailVerificationTicket] = useState("");
-  // Google's ticket substitutes for the email one — the backend's signup
-  // schema requires exactly one of the two, and takes the verified email from
-  // whichever arrives. So choosing Google skips both email steps rather than
-  // merely pre-filling them.
-  const [googlePrefillTicket, setGooglePrefillTicket] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -120,41 +96,21 @@ export function CustomerLogin() {
           signupTicket,
           deviceId,
           name,
-          ...(googlePrefillTicket ? { googlePrefillTicket } : { emailVerificationTicket }),
+          ...(emailVerificationTicket ? { emailVerificationTicket } : {}),
         },
       });
       setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
       navigate(next);
     });
 
-  /** Exchanges Google's ID token for a prefill ticket. Google already gives us
-   *  a verified email and a name, so there's nothing left to ask — signup
-   *  completes immediately. Falls back to the name step only if Google didn't
-   *  return a name (rare, but possible for some accounts). */
-  const useGoogle = (idToken: string) =>
-    run(async () => {
-      const result = await portalFetch<{ googlePrefillTicket: string; name?: string; email?: string }>(
-        "user",
-        "/auth/google",
-        { method: "POST", body: { idToken } },
-      );
-      if (result.email) setEmail(result.email);
-      if (!result.name) {
-        setGooglePrefillTicket(result.googlePrefillTicket);
-        setStep("name");
-        return;
-      }
-      const signupResult = await portalFetch<any>("user", "/auth/signup/complete", {
-        method: "POST",
-        body: { signupTicket, deviceId, name: result.name, googlePrefillTicket: result.googlePrefillTicket },
-      });
-      setTokens({ accessToken: signupResult.accessToken, refreshToken: signupResult.refreshToken });
-      navigate(next);
-    });
+  const skipEmail = () => {
+    setError(null);
+    setEmailVerificationTicket("");
+    setStep("skipEmail");
+  };
 
   return (
     <AuthLayout
-      eyebrow="RetroMobi"
       title="Ride the road less ordinary."
       tagline="Licensed scooters and motorcycles across Dehradun, Haridwar and Rishikesh."
       backgroundImage={loginForest}
@@ -195,29 +151,41 @@ export function CustomerLogin() {
       {step === "email" && (
         <div>
           <BackRow onBack={() => setStep("otp")} />
-          <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Verify your email</h1>
-          <p className="text-sm text-ink-3 mb-6">New number — we also verify an email before you can book.</p>
+          <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Add your email</h1>
+          <p className="text-sm text-ink-3 mb-6">Optional. We send booking confirmations and invoices here.</p>
           {error && <ErrorBox text={error} />}
           <TextField label="Email address" type="email" value={email} onChange={setEmail} autoFocus />
           <SubmitButton busy={busy} onClick={sendEmailOtp} disabled={!email}>
             Send code
           </SubmitButton>
+          <button
+            type="button"
+            onClick={skipEmail}
+            className="mt-4 w-full text-center text-sm font-medium text-ink-2 underline underline-offset-2 hover:text-ink"
+          >
+            Skip for now
+          </button>
+        </div>
+      )}
 
-          {/* Only when Google is configured for this deployment — otherwise
-              there is no button and the email path is the only path. */}
-          {GOOGLE_CLIENT_ID && (
-            <>
-              <div className="flex items-center gap-3 my-5">
-                <span className="h-px flex-1 bg-line" />
-                <span className="text-xs text-ink-4">or</span>
-                <span className="h-px flex-1 bg-line" />
-              </div>
-              <GoogleButton onToken={useGoogle} onError={setError} />
-              <p className="mt-3 text-xs text-ink-4 text-center">
-                Google confirms your email, so there's no code to enter.
-              </p>
-            </>
-          )}
+      {step === "skipEmail" && (
+        <div>
+          <BackRow onBack={() => setStep("email")} />
+          <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Continue without email?</h1>
+          <div role="alert" className="mt-4 mb-6 rounded-row border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
+            <p>You can still book. Booking updates and your pickup code come on WhatsApp.</p>
+            <p className="mt-2">Without an email you won't get booking confirmations or invoices by email.</p>
+          </div>
+          <SubmitButton busy={false} onClick={() => setStep("name")}>
+            Continue without email
+          </SubmitButton>
+          <button
+            type="button"
+            onClick={() => setStep("email")}
+            className="mt-4 w-full text-center text-sm font-medium text-ink-2 underline underline-offset-2 hover:text-ink"
+          >
+            Add an email instead
+          </button>
         </div>
       )}
 
@@ -237,11 +205,9 @@ export function CustomerLogin() {
 
       {step === "name" && (
         <div>
-          <BackRow onBack={() => setStep(googlePrefillTicket ? "email" : "emailOtp")} />
+          <BackRow onBack={() => setStep(emailVerificationTicket ? "emailOtp" : "skipEmail")} />
           <h1 className="text-2xl font-semibold text-ink mt-3 mb-1">Almost there</h1>
-          <p className="text-sm text-ink-3 mb-6">
-            {googlePrefillTicket && email ? `Signing up with ${email}.` : "What should we call you?"}
-          </p>
+          <p className="text-sm text-ink-3 mb-6">What should we call you?</p>
           {error && <ErrorBox text={error} />}
           <TextField label="Your name" value={name} onChange={setName} autoFocus />
           <SubmitButton busy={busy} onClick={completeSignup} disabled={!name}>

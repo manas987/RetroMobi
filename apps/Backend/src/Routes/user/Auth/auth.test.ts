@@ -7,7 +7,8 @@ import {
   InvalidSessionError,
   InvalidTicketError,
   completeSignup,
-  googlePrefill,
+  requestAccountEmailOtp,
+  verifyAccountEmail,
   listSessions,
   logout,
   refreshSession,
@@ -48,13 +49,6 @@ function uniqueEmail(): string {
 // authService takes the delivery function as a parameter precisely so tests
 // can pass a no-op here instead of mocking a whole module.
 const noopDeliver = async () => {};
-
-async function fakeVerifyGoogle(idToken: string) {
-  if (idToken !== "valid-google-token") return null;
-  // A fresh identity per call (not a fixed fixture email) so repeated test
-  // runs against the same persistent Postgres never collide on uniqueness.
-  return { email: uniqueEmail(), name: "Google User", googleSub: `google-sub-${seq}` };
-}
 
 beforeAll(async () => {
   await applyMigrations(pool);
@@ -160,38 +154,30 @@ describe("signup completion", () => {
     expect(rows[0].email_verified_at).not.toBeNull();
   });
 
-  test("google prefill path creates the user with a verified email, no form-entered email trusted", async () => {
+  test("email is optional: signup with no email creates the user with none", async () => {
     const phone = uniquePhone();
     const signupTicket = await verifyPhoneForSignup(phone);
-    const { googlePrefillTicket, email } = await googlePrefill(
-      "valid-google-token",
-      fakeVerifyGoogle,
-    );
+    const result = await completeSignup(pool, { signupTicket, deviceId: DEVICE, name: "No Email" });
 
-    const result = await completeSignup(pool, {
-      signupTicket,
-      deviceId: DEVICE,
-      googlePrefillTicket,
-    });
-
-    expect(result.user.email).toBe(email);
-    expect(result.user.name).toBe("Google User");
+    expect(result.status).toBe("LOGIN");
+    expect(result.user.email).toBeNull();
+    const { rows } = await pool.query("select email, email_verified_at from users where phone = $1", [phone]);
+    expect(rows[0]).toEqual({ email: null, email_verified_at: null });
   });
 
-  test("invalid google token is rejected", async () => {
-    await expect(googlePrefill("garbage-token", fakeVerifyGoogle)).rejects.toBeInstanceOf(
-      InvalidOtpError,
-    );
-  });
-
-  test("completing signup without any verification ticket fails validation upstream of the service", async () => {
-    // schema.ts's refine() is what actually blocks this at the HTTP boundary;
-    // the service itself still defends in depth.
+  test("a typed email without its verification ticket is not saved", async () => {
     const phone = uniquePhone();
     const signupTicket = await verifyPhoneForSignup(phone);
+    await completeSignup(pool, { signupTicket, deviceId: DEVICE, name: "Unverified", email: uniqueEmail() });
+    const { rows } = await pool.query("select email from users where phone = $1", [phone]);
+    expect(rows[0].email).toBeNull();
+  });
+
+  test("an invalid email verification ticket is rejected", async () => {
+    const signupTicket = await verifyPhoneForSignup(uniquePhone());
     await expect(
-      completeSignup(pool, { signupTicket, deviceId: DEVICE, name: "No Email Proof" }),
-    ).rejects.toThrow();
+      completeSignup(pool, { signupTicket, deviceId: DEVICE, name: "Forged", emailVerificationTicket: "garbage" }),
+    ).rejects.toBeInstanceOf(InvalidTicketError);
   });
 
   test("duplicate email on signup is rejected", async () => {
@@ -312,5 +298,41 @@ describe("sessions", () => {
     await expect(refreshSession(pool, { deviceId: DEVICE, refreshToken })).rejects.toBeInstanceOf(InvalidSessionError);
     await expect(refreshSession(pool, { deviceId: DEVICE, refreshToken: repeat.refreshToken })).rejects.toBeInstanceOf(InvalidSessionError);
     expect(await listSessions(pool, user.id)).toHaveLength(1);
+  });
+});
+
+describe("adding an email after signup", () => {
+  async function userWithoutEmail() {
+    const signupTicket = await verifyPhoneForSignup(uniquePhone());
+    const result = await completeSignup(pool, { signupTicket, deviceId: DEVICE, name: "Later Email" });
+    return result.user.id as string;
+  }
+
+  test("a verified code saves the email as verified", async () => {
+    const userId = await userWithoutEmail();
+    const email = uniqueEmail();
+    const { code } = await requestAccountEmailOtp(pool, email, noopDeliver);
+    const account = await verifyAccountEmail(pool, userId, email, code);
+    expect(account.email).toBe(email);
+    expect(account.email_verified_at).not.toBeNull();
+  });
+
+  test("a wrong code saves nothing", async () => {
+    const userId = await userWithoutEmail();
+    const email = uniqueEmail();
+    await requestAccountEmailOtp(pool, email, noopDeliver);
+    await expect(verifyAccountEmail(pool, userId, email, "000000")).rejects.toBeInstanceOf(InvalidOtpError);
+    const { rows } = await pool.query("select email from users where id = $1", [userId]);
+    expect(rows[0].email).toBeNull();
+  });
+
+  test("an email another account uses is refused", async () => {
+    const taken = uniqueEmail();
+    const first = await userWithoutEmail();
+    const second = await userWithoutEmail();
+    const a = await requestAccountEmailOtp(pool, taken, noopDeliver);
+    await verifyAccountEmail(pool, first, taken, a.code);
+    const b = await requestAccountEmailOtp(pool, taken, noopDeliver);
+    await expect(verifyAccountEmail(pool, second, taken, b.code)).rejects.toBeInstanceOf(EmailTakenError);
   });
 });

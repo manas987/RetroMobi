@@ -54,7 +54,7 @@ function MyCouponsBody() {
   }
 
   return (
-    <main className="max-w-[880px] w-full mx-auto px-5 py-8 sm:py-10 flex-1">
+    <main className="max-w-[880px] w-full mx-auto px-5 py-8 sm:py-10 flex-1 min-h-[calc(100dvh-4rem)]">
       <h1 className="text-2xl font-semibold text-ink mb-1">Coupons</h1>
       <p className="text-sm text-ink-3 mb-6">
         Apply a code at checkout. Checkout also lists the ones that fit your booking.

@@ -1,185 +1,84 @@
-import { useEffect, useState } from "react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Ellipsis, Laptop, MapPin, Plus, ShieldCheck, Smartphone, UserRound } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Laptop, MapPin, Smartphone } from "lucide-react";
 import { useLocation } from "wouter";
 import { Header } from "../../components/Header";
 import { Footer } from "../../components/Footer";
 import { Modal } from "../../components/Modal";
+import { OtpInput } from "../../components/OtpInput";
 import { usePortalSession, usePortalQuery, portalFetch, type Row } from "../../lib/portal";
-import { DateField } from "../../components/DateTimeField";
-import { StatusPill } from "../../components/DataTable";
 import { ErrorBox, TextField } from "../../components/AuthFormBits";
-import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock, SkeletonRows } from "../../components/ContentFeedback";
+import { EmptyState, SkeletonRows } from "../../components/ContentFeedback";
 import { SearchFailure } from "../../components/SearchFeedback";
-import { dateLabel } from "../../lib/format";
-import { RiderVerification } from "../../components/RiderVerification";
 
 const primaryButton = "inline-flex min-h-10 items-center justify-center gap-2 rounded-row bg-amber px-4 text-sm font-semibold text-on-amber hover:brightness-95 disabled:opacity-50";
 const secondaryButton = "inline-flex min-h-10 items-center justify-center rounded-row border border-line-strong px-4 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50";
 const dangerButton = "inline-flex min-h-10 items-center justify-center rounded-row bg-danger px-4 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50";
-const indiaDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
+const smallButton = "inline-flex min-h-9 items-center rounded-row border border-line-strong bg-surface px-3 text-sm font-medium text-ink hover:bg-surface-3";
 const sessionDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 
-function licenceStatus(rider: Row, today: string) {
-  if (rider.licence_status === "VERIFIED" && typeof rider.licence_expires_on === "string" && rider.licence_expires_on < today) return "EXPIRED";
-  return String(rider.licence_status ?? "UNVERIFIED");
-}
-
 function ProfileBody({ token, onSignOut }: { token: string; onSignOut: () => void }) {
-  const [revision, setRevision] = useState(0);
-  const { data, error } = usePortalQuery<{ riders: Row[] }>("user", `/riders?r=${revision}`, token);
-  const [adding, setAdding] = useState(false);
-  const reload = () => setRevision((value) => value + 1);
-  const today = indiaDay.format(new Date());
-  const riders = (data?.riders ?? []).map((rider) => ({ rider, status: licenceStatus(rider, today) }));
-  const needsAttention = riders.filter(({ status }) => status !== "VERIFIED");
-  const verified = riders.filter(({ status }) => status === "VERIFIED");
-
   return (
-    <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-8 sm:px-6 sm:py-10">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3 sm:mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink sm:text-3xl">Riders &amp; profile</h1>
-          <p className="mt-1 text-sm text-ink-2">Manage the riders and devices on your account.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="button" className={primaryButton} onClick={() => setAdding(true)}>
-            <Plus size={17} aria-hidden="true" /> Add rider
-          </button>
-          <a href="#signed-in-devices" className="text-sm font-medium text-ink-2 underline underline-offset-4 hover:text-ink lg:hidden">Signed-in devices</a>
-        </div>
-      </div>
-
+    <main className="mx-auto w-full max-w-[880px] flex-1 min-h-[calc(100dvh-4rem)] px-4 py-8 sm:px-6 sm:py-10">
+      <h1 className="text-2xl font-semibold text-ink sm:text-3xl">Profile</h1>
+      <p className="mt-1 mb-6 text-sm text-ink-2 sm:mb-8">Your account details and where you’re signed in.</p>
       <div className="space-y-8 sm:space-y-10">
-        <section aria-label="Riders" className="min-w-0 space-y-6">
-          {error && <SearchFailure title="Couldn’t load your riders" onRetry={reload} retrying={false} />}
-          {!error && data === null && (
-            <LoadingSkeleton label="Loading riders" className="grid gap-3 sm:grid-cols-2">
-              {[0, 1].map((index) => (
-                <div key={index} className="space-y-3 rounded-panel border border-line p-4">
-                  <div className="flex items-center gap-3">
-                    <SkeletonBlock className="size-10 rounded-full" />
-                    <SkeletonBlock className="h-4 w-2/5" />
-                  </div>
-                  <SkeletonBlock className="h-4 w-1/2" />
-                </div>
-              ))}
-            </LoadingSkeleton>
-          )}
-          {data && !riders.length && (
-            <EmptyState title="No riders added yet" description="Add a rider to verify their driving licence.">
-              <button type="button" className={feedbackActionClass} onClick={() => setAdding(true)}>Add a rider</button>
-            </EmptyState>
-          )}
-          {[
-            { title: "Needs attention", entries: needsAttention, attention: true },
-            { title: "Verified riders", entries: verified, attention: false },
-          ].filter(({ entries }) => entries.length).map(({ title, entries, attention }) => (
-            <section key={title} aria-label={title}>
-              <h2 className="mb-3 text-lg font-semibold text-ink">{title}</h2>
-              <div className={`grid gap-3 ${attention ? "" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
-                {entries.map(({ rider, status }) => (
-                  <RiderCard key={String(rider.id)} rider={rider} status={status} token={token} onChanged={reload} />
-                ))}
-              </div>
-            </section>
-          ))}
-        </section>
-
+        <AccountDetails token={token} />
         <SignedInDevices token={token} onSignOut={onSignOut} />
       </div>
-
-      {adding && <RiderForm token={token} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); reload(); }} />}
     </main>
   );
 }
 
-function RiderCard({ rider, status, token, onChanged }: { rider: Row; status: string; token: string; onChanged: () => void }) {
-  const [action, setAction] = useState<"edit" | "remove" | "verify" | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const name = String(rider.name ?? "");
-  const initials = name.trim().split(/\s+/).slice(0, 2).map((part) => Array.from(part)[0] ?? "").join("").toLocaleUpperCase();
-  const verified = status === "VERIFIED";
-  const menuItem = "flex cursor-pointer items-center rounded-row px-3 py-2 text-sm font-medium outline-none data-[highlighted]:bg-surface-2";
-
-  async function remove() {
-    setBusy(true);
-    setError("");
-    try {
-      await portalFetch("user", `/riders/${rider.id}`, { method: "DELETE", token });
-      setAction(null);
-      onChanged();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn’t remove that rider.");
-    } finally {
-      setBusy(false);
-    }
-  }
+function AccountDetails({ token }: { token: string }) {
+  const [revision, setRevision] = useState(0);
+  const { data, error } = usePortalQuery<{ account: Row }>("user", `/auth/me?r=${revision}`, token);
+  const [editing, setEditing] = useState<"name" | "email" | null>(null);
+  const reload = () => setRevision((value) => value + 1);
+  const account = data?.account;
 
   return (
-    <article className={`min-w-0 rounded-panel border p-4 ${verified ? "border-line bg-surface" : "border-warning/20 bg-warning-soft/40"}`}>
-      <div className="flex items-start gap-3">
-        <span aria-hidden="true" className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold ${verified ? "bg-verified-soft text-verified" : "bg-warning-soft text-warning"}`}>
-          {initials || <UserRound size={17} />}
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="break-words text-base font-semibold leading-snug text-ink">{name}</h3>
-          <p className="mt-0.5 text-xs text-ink-2">{rider.dob ? `Born ${dateLabel(rider.dob)}` : "Date of birth missing"}</p>
-        </div>
-        <DropdownMenu.Root modal={false}>
-          <DropdownMenu.Trigger asChild>
-            <button type="button" aria-label={`Manage ${name}`} className="grid size-9 shrink-0 place-items-center rounded-row text-ink-2 hover:bg-surface-3 focus-visible:outline">
-              <Ellipsis size={19} aria-hidden="true" />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" sideOffset={5} className="z-50 min-w-36 rounded-row border border-line bg-surface p-1 shadow-lg">
-              <DropdownMenu.Item className={`${menuItem} text-ink`} onSelect={() => setAction("edit")}>Edit rider</DropdownMenu.Item>
-              <DropdownMenu.Item className={`${menuItem} text-danger`} onSelect={() => { setError(""); setAction("remove"); }}>Remove rider</DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line pt-3">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <StatusPill value={status} />
-          {rider.licence_expires_on && (verified || status === "EXPIRED") ? (
-            <span className="text-xs text-ink-2">{verified ? "Valid until " : ""}{dateLabel(rider.licence_expires_on)}</span>
-          ) : null}
-        </div>
-        {!verified && (
-          <button type="button" onClick={() => setAction("verify")} className="inline-flex min-h-9 items-center gap-1.5 rounded-row border border-line-strong bg-surface px-3 text-sm font-medium text-ink hover:bg-surface-3">
-            <ShieldCheck size={15} aria-hidden="true" /> {status === "EXPIRED" ? "Verify renewed licence" : "Verify licence"}
-          </button>
-        )}
-      </div>
-
-      {action === "edit" && <RiderForm rider={rider} token={token} onClose={() => setAction(null)} onSaved={() => { setAction(null); onChanged(); }} />}
-      {action === "verify" && (
-        <Modal open title="Verify driving licence" onClose={() => setAction(null)}>
-          <RiderVerification riderId={String(rider.id)} riderName={name} token={token}
-            onDone={() => { setAction(null); onChanged(); }} onCancel={() => setAction(null)} />
-        </Modal>
+    <section aria-label="Account details">
+      <h2 className="mb-3 text-lg font-semibold text-ink">Account</h2>
+      {error && <SearchFailure title="Couldn’t load your account" onRetry={reload} retrying={false} />}
+      {!error && !account && <SkeletonRows label="Loading your account" />}
+      {account && (
+        <dl className="divide-y divide-line rounded-panel border border-line bg-surface">
+          <DetailRow label="Name" value={String(account.name ?? "")}>
+            <button type="button" className={smallButton} onClick={() => setEditing("name")}>Edit</button>
+          </DetailRow>
+          <DetailRow label="Phone" value={String(account.phone)} hint="Used to sign in. To change it, contact support." />
+          <DetailRow
+            label="Email"
+            value={account.email ? String(account.email) : "Not added"}
+            hint={account.email ? "Verified. Booking confirmations and invoices go here." : "Add one to get booking confirmations and invoices by email."}
+          >
+            <button type="button" className={smallButton} onClick={() => setEditing("email")}>{account.email ? "Change" : "Add email"}</button>
+          </DetailRow>
+        </dl>
       )}
-      {action === "remove" && (
-        <Modal open title="Remove this rider?" onClose={() => { if (!busy) setAction(null); }}>
-          <p className="text-sm text-ink-2"><strong className="text-ink">{name}</strong> will be removed from your rider list and won’t be available for future bookings.</p>
-          {error && <div className="mt-3"><ErrorBox text={error} /></div>}
-          <div className="mt-5 flex flex-wrap justify-end gap-2">
-            <button type="button" className={secondaryButton} disabled={busy} onClick={() => setAction(null)}>Keep rider</button>
-            <button type="button" className={dangerButton} disabled={busy} onClick={() => void remove()}>{busy ? "Removing…" : "Remove rider"}</button>
-          </div>
-        </Modal>
+      {editing === "name" && account && (
+        <NameForm token={token} current={String(account.name ?? "")} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />
       )}
-    </article>
+      {editing === "email" && <EmailForm token={token} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
+    </section>
   );
 }
 
-function RiderForm({ rider, token, onClose, onSaved }: { rider?: Row; token: string; onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState(String(rider?.name ?? ""));
-  const [dob, setDob] = useState(String(rider?.dob ?? "").slice(0, 10));
+function DetailRow({ label, value, hint, children }: { label: string; value: string; hint?: string; children?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5">
+      <div className="min-w-0">
+        <dt className="text-xs text-ink-2">{label}</dt>
+        <dd className="mt-0.5 break-words text-sm font-medium text-ink">{value}</dd>
+        {hint && <dd className="mt-0.5 text-xs text-ink-3">{hint}</dd>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function NameForm({ token, current, onClose, onSaved }: { token: string; current: string; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(current);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -187,30 +86,80 @@ function RiderForm({ rider, token, onClose, onSaved }: { rider?: Row; token: str
     setError("");
     setBusy(true);
     try {
-      await portalFetch("user", rider ? `/riders/${rider.id}` : "/riders", {
-        method: rider ? "PATCH" : "POST", token, body: { name: name.trim(), dob: dob || undefined },
-      });
+      await portalFetch("user", "/auth/me", { method: "PATCH", token, body: { name: name.trim() } });
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn’t save the rider.");
+      setError(err instanceof Error ? err.message : "Couldn’t save your name.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal open title={rider ? "Edit rider" : "Add a rider"} onClose={() => { if (!busy) onClose(); }}>
+    <Modal open title="Edit name" onClose={() => { if (!busy) onClose(); }}>
       <form onSubmit={(event) => { event.preventDefault(); if (!busy && name.trim()) void save(); }}>
         {error && <div className="mb-3"><ErrorBox text={error} /></div>}
-        <TextField label="Full name" value={name} onChange={setName} autoFocus />
-        <DateField label="Date of birth (optional)" value={dob} onChange={setDob} fromYear={1920} toDate={new Date()} />
+        <TextField label="Your name" value={name} onChange={setName} autoFocus />
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className={secondaryButton} disabled={busy} onClick={onClose}>Cancel</button>
-          <button type="submit" className={primaryButton} disabled={busy || !name.trim()}>
-            {busy ? "Saving…" : rider ? "Save changes" : "Add rider"}
-          </button>
+          <button type="submit" className={primaryButton} disabled={busy || !name.trim()}>{busy ? "Saving…" : "Save"}</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** The email is saved only once the code sent to it is entered. */
+function EmailForm({ token, onClose, onSaved }: { token: string; onClose: () => void; onSaved: () => void }) {
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function run(fn: () => Promise<void>) {
+    setError("");
+    setBusy(true);
+    try {
+      await fn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const send = () => run(async () => {
+    await portalFetch("user", "/auth/me/email/send", { method: "POST", token, body: { email: email.trim() } });
+    setCode("");
+    setSent(true);
+  });
+  const verify = () => run(async () => {
+    await portalFetch("user", "/auth/me/email/verify", { method: "POST", token, body: { email: email.trim(), code } });
+    onSaved();
+  });
+
+  return (
+    <Modal open title={sent ? "Enter the code" : "Add your email"} onClose={() => { if (!busy) onClose(); }}>
+      {error && <div className="mb-3"><ErrorBox text={error} /></div>}
+      {!sent ? (
+        <form onSubmit={(event) => { event.preventDefault(); if (!busy && email.trim()) void send(); }}>
+          <TextField label="Email address" type="email" value={email} onChange={setEmail} autoFocus />
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className={secondaryButton} disabled={busy} onClick={onClose}>Cancel</button>
+            <button type="submit" className={primaryButton} disabled={busy || !email.trim()}>{busy ? "Sending…" : "Send code"}</button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={(event) => { event.preventDefault(); if (!busy && code.length === 6) void verify(); }}>
+          <p className="mb-4 text-sm text-ink-2">We sent a 6-digit code to <span className="font-medium text-ink">{email.trim()}</span>.</p>
+          <OtpInput value={code} onChange={setCode} />
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+            <button type="button" className="text-sm font-medium text-ink-2 underline underline-offset-2" disabled={busy} onClick={() => setSent(false)}>Use a different email</button>
+            <button type="submit" className={primaryButton} disabled={busy || code.length !== 6}>{busy ? "Verifying…" : "Verify"}</button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }
@@ -313,7 +262,7 @@ export function CustomerProfile() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      {session ? <ProfileBody token={session.accessToken} onSignOut={() => setTokens(null)} /> : <main className="flex-1" />}
+      {session ? <ProfileBody token={session.accessToken} onSignOut={() => setTokens(null)} /> : <main className="flex-1 min-h-[calc(100dvh-4rem)]" />}
       <Footer />
     </div>
   );

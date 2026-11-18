@@ -14,7 +14,7 @@ export function AuthLayout({
   backgroundImage,
   children,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   tagline: string;
   backgroundImage?: string;
@@ -75,7 +75,7 @@ export function AuthLayout({
             <span className="text-lg font-semibold tracking-tight text-ink">retromobi</span>
           </Link>
 
-          <p className="text-xs font-medium text-ink-3 tracking-wide uppercase">{eyebrow}</p>
+          {eyebrow && <p className="text-xs font-medium text-ink-3 tracking-wide uppercase">{eyebrow}</p>}
           {children}
         </div>
       </div>

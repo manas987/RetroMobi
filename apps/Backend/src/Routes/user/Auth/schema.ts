@@ -38,19 +38,25 @@ export const EmailOtpVerifySchema = z.object({
   code: z.string().regex(/^\d{6}$/, "code must be a 6-digit number"),
 });
 
-export const GoogleAuthSchema = z.object({
-  idToken: z.string().min(1),
+// Email is optional: send emailVerificationTicket only if the customer
+// verified one.
+export const SignupCompleteSchema = z.object({
+  signupTicket: z.string().min(1),
+  deviceId: z.string().min(1),
+  name: z.string().trim().min(1).max(100),
+  email: z.string().email().optional(),
+  emailVerificationTicket: z.string().min(1).optional(),
 });
 
-export const SignupCompleteSchema = z
-  .object({
-    signupTicket: z.string().min(1),
-    deviceId: z.string().min(1),
-    name: z.string().min(1).optional(),
-    email: z.string().email().optional(),
-    emailVerificationTicket: z.string().min(1).optional(),
-    googlePrefillTicket: z.string().min(1).optional(),
-  })
-  .refine((body) => Boolean(body.googlePrefillTicket || body.emailVerificationTicket), {
-    message: "either emailVerificationTicket or googlePrefillTicket is required",
-  });
+export const UpdateAccountSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+});
+
+export const AccountEmailSendSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+});
+
+export const AccountEmailVerifySchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  code: z.string().regex(/^\d{6}$/, "code must be a 6-digit number"),
+});

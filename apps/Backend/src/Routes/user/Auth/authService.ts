@@ -1,5 +1,4 @@
 import type { Pool } from "pg";
-import type { GoogleIdentity } from "../../../providers/google.ts";
 import { generateOtpCode, hashOtp, verifyOtpHash } from "../../../lib/authCrypto.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import {
@@ -17,7 +16,6 @@ export class InvalidSessionError extends Error {}
 export class InvalidTicketError extends Error {}
 export class PhoneTakenError extends Error {}
 export class EmailTakenError extends Error {}
-export class EmailNotVerifiedError extends Error {}
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
@@ -292,86 +290,40 @@ export async function verifyEmailOtp(pool: Pool, input: VerifyEmailOtpInput): Pr
   return { emailVerificationTicket, ticketExpiresInSeconds: EMAIL_VERIFIED_TICKET_TTL_SECONDS };
 }
 
-export interface GooglePrefillResult {
-  googlePrefillTicket: string;
-  ticketExpiresInSeconds: number;
-  name: string;
-  email: string;
-}
-
-interface GooglePrefillTicketPayload {
-  email: string;
-  name: string;
-  googleSub: string;
-}
-
-export async function googlePrefill(
-  idToken: string,
-  verifyIdToken: (idToken: string) => Promise<GoogleIdentity | null>,
-): Promise<GooglePrefillResult> {
-  const identity = await verifyIdToken(idToken);
-  if (!identity) throw new InvalidOtpError("Google could not verify that token");
-
-  const googlePrefillTicket = signTicket<GooglePrefillTicketPayload>(
-    "GOOGLE_PREFILL",
-    identity,
-    EMAIL_VERIFIED_TICKET_TTL_SECONDS,
-  );
-  return {
-    googlePrefillTicket,
-    ticketExpiresInSeconds: EMAIL_VERIFIED_TICKET_TTL_SECONDS,
-    name: identity.name,
-    email: identity.email,
-  };
-}
-
 export interface CompleteSignupInput {
   signupTicket: string;
   deviceId: string;
   sessionDetails?: SessionDetails;
-  name?: string;
+  name: string;
   email?: string;
+  // Optional: a customer may sign up with no email at all.
   emailVerificationTicket?: string;
-  googlePrefillTicket?: string;
 }
 
 export async function completeSignup(pool: Pool, input: CompleteSignupInput): Promise<LoginResult> {
   const phone = requireSignupPhone(input.signupTicket);
 
-  let name: string;
-  let email: string;
-
-  if (input.googlePrefillTicket) {
-    const identity = verifyTicket<GooglePrefillTicketPayload>(
-      "GOOGLE_PREFILL",
-      input.googlePrefillTicket,
-    );
-    if (!identity) throw new InvalidTicketError("Google prefill ticket is invalid or expired");
-    name = identity.name;
-    email = identity.email;
-  } else if (input.emailVerificationTicket) {
+  const name = input.name;
+  // An email is only ever stored once its code was verified; a typed-in
+  // address with no ticket is ignored rather than saved unverified.
+  let email: string | null = null;
+  if (input.emailVerificationTicket) {
     const verified = verifyTicket<EmailVerifiedTicketPayload>(
       "EMAIL_VERIFIED",
       input.emailVerificationTicket,
     );
     if (!verified) throw new InvalidTicketError("email verification ticket is invalid or expired");
-    if (!input.name) throw new EmailNotVerifiedError("name is required");
     if (input.email && input.email !== verified.email) {
       throw new InvalidTicketError("email does not match the verified email");
     }
-    name = input.name;
     email = verified.email;
-  } else {
-    throw new EmailNotVerifiedError(
-      "email must be verified via email OTP or Google before completing signup",
-    );
   }
 
   let userId: string;
   try {
     const { rows } = await pool.query(
       `insert into users (phone, name, email, email_verified_at)
-       values ($1, $2, $3, now()) returning id`,
+       values ($1, $2, $3, case when $3::text is null then null else now() end) returning id`,
       [phone, name, email],
     );
     userId = rows[0].id;
@@ -514,4 +466,50 @@ export async function revokeSession(pool: Pool, input: RevokeSessionInput): Prom
     [input.sessionId, input.userId],
   );
   return (rowCount ?? 0) > 0;
+}
+
+// --- The signed-in customer's own account (Profile page) ---------------------
+
+export async function getAccount(pool: Pool, userId: string) {
+  const { rows } = await pool.query(
+    `select id, name, phone, email, email_verified_at, created_at from users where id = $1`,
+    [userId],
+  );
+  if (!rows[0]) throw new InvalidSessionError("account not found");
+  return rows[0];
+}
+
+export async function updateAccountName(pool: Pool, userId: string, name: string) {
+  await pool.query(`update users set name = $2, updated_at = now() where id = $1`, [userId, name]);
+  return getAccount(pool, userId);
+}
+
+/** Adding or changing the email later: same code-by-email proof as at signup. */
+export function requestAccountEmailOtp(
+  pool: Pool,
+  email: string,
+  deliver: (email: string, code: string) => Promise<void>,
+): Promise<OtpChallengeResult> {
+  return createOtpChallenge(pool, email, "EMAIL", "EMAIL_VERIFICATION", deliver);
+}
+
+export async function verifyAccountEmail(pool: Pool, userId: string, email: string, code: string) {
+  await consumeOtpChallenge(pool, email, code);
+  try {
+    await pool.query(
+      `update users set email = $2, email_verified_at = now(), updated_at = now() where id = $1`,
+      [userId, email],
+    );
+  } catch (err) {
+    if (isUniqueViolation(err, "users_email_key")) throw new EmailTakenError("this email is already registered");
+    throw err;
+  }
+  await writeAudit(pool, {
+    actorType: "CUSTOMER",
+    actorId: userId,
+    action: "user.email_verified",
+    entityType: "user",
+    entityId: userId,
+  });
+  return getAccount(pool, userId);
 }

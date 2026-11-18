@@ -1,8 +1,13 @@
 // Known-phone test accounts for every portal and role, with data that
-// exercises every feature: bookings in each state, coupons of every kind
-// (platform- and shop-funded, rule-based, paused, expired), shop wallets with
-// credits, withdrawals in each state, admin payouts and adjustments, a payout
-// account, a deposit claim and support tickets.
+// exercises every feature: full account details (names, emails), shops with
+// contact details and listed fleets, bookings in each state (unpaid, upcoming,
+// in progress with an extension request, completed, cancelled, walk-in),
+// reviews, handover codes, coupons of every kind (platform- and shop-funded,
+// rule-based, paused, expired), shop wallets with credits, withdrawals in each
+// state, admin payouts and adjustments, a payout account, a deposit claim,
+// support chats between customers, shops and RetroMobi, and an admin review
+// queue (a new merchant's shop, vehicle, documents and licence, and a rider
+// licence needing manual review).
 //
 // Money- and status-bearing rows go through the real service functions, so
 // they match what the app itself produces. Two things are not reachable through
@@ -16,7 +21,9 @@
 // Re-running is safe: once the accounts exist it only prints the logins.
 import { pool } from "./client.ts";
 import { cashfreeClient } from "../providers/cashfree.ts";
-import { createHold, cancelBooking } from "../Routes/user/Bookings/bookingsService.ts";
+import { createHold, cancelBooking, requestExtension } from "../Routes/user/Bookings/bookingsService.ts";
+import { createReview } from "../Routes/user/Reviews/reviewsService.ts";
+import { createWalkinRental } from "../Routes/merchant/Operations/operationsService.ts";
 import { createPaymentIntent, handlePaymentWebhook } from "../Routes/user/Payments/paymentsService.ts";
 import { confirmInspection, merchantReturn } from "../Routes/user/Pickup/pickupService.ts";
 import * as ticketsService from "../Routes/Tickets/ticketsService.ts";
@@ -33,6 +40,13 @@ process.env.PAYMENTS_DEV_AUTO_SUCCEED ??= "true";
 // inspection would look for an object that was never uploaded, so storage is
 // forced onto its dev-fallback for this process only.
 process.env.R2_ACCOUNT_ID = "";
+// Every payment here is fabricated. With real Cashfree keys in .env the
+// provider would create real (sandbox or live) orders and payouts, so it is
+// forced onto its dev-fallback for this process too.
+for (const key of ["CASHFREE_CLIENT_ID", "CASHFREE_CLIENT_SECRET", "CASHFREE_PAYOUT_CLIENT_ID", "CASHFREE_PAYOUT_CLIENT_SECRET"]) {
+  process.env[key] = "";
+}
+process.env.PAYMENTS_DEV_AUTO_SUCCEED = "true";
 
 const PHONES = {
   superAdmin: "+919812340000",
@@ -42,10 +56,17 @@ const PHONES = {
   manager: "+919812340005",
   staff: "+919812340006",
   owner2: "+919812340007",
+  pendingMerchant: "+919812340013",
   customer: "+919812340002",
   newCustomer: "+919812340008",
   youngRider: "+919812340009",
+  priya: "+919812340010",
+  rahul: "+919812340011",
+  aisha: "+919812340012",
 } as const;
+
+// example.com is reserved for documentation (RFC 2606): mail to it goes nowhere.
+const email = (who: string) => `${who}@example.com`;
 
 let seq = 0;
 const eventId = () => `seed_${Date.now()}_${(seq += 1)}`;
@@ -80,18 +101,26 @@ async function model(make: string, name: string, cls: "SCOOTER" | "MOTORCYCLE", 
   return created.rows[0].id as string;
 }
 
-async function shop(merchantId: string, opts: { name: string; city: string; address: string; lat: number; lng: number }) {
+async function shop(
+  merchantId: string,
+  opts: { name: string; city: string; address: string; pincode: string; lat: number; lng: number; phone: string; email: string; verified?: boolean },
+) {
   const created = await createShop(pool, merchantId, {
     name: opts.name,
     addressLine1: opts.address,
     city: opts.city,
     state: "Uttarakhand",
-    pincode: "248001",
+    pincode: opts.pincode,
     latitude: opts.lat,
     longitude: opts.lng,
     gstin: "05AAAAA0000A1Z5",
   });
-  await pool.query(`update shops set verification_status = 'VERIFIED' where id = $1`, [created.id]);
+  await pool.query(`update shops set verification_status = $2, phone = $3, email = $4 where id = $1`, [
+    created.id,
+    opts.verified === false ? "PENDING" : "VERIFIED",
+    opts.phone,
+    opts.email,
+  ]);
   return created.id as string;
 }
 
@@ -99,7 +128,7 @@ async function shop(merchantId: string, opts: { name: string; city: string; addr
 async function fleet(
   merchantId: string,
   shopId: string,
-  specs: Array<{ modelId: string; amount: number; weekend: number; deposit: number }>,
+  specs: Array<{ modelId: string; amount: number; weekend: number; deposit: number; color: string; year: number }>,
 ) {
   const { rows: lic } = await pool.query(
     `insert into shop_licenses (merchant_user_id, licence_number, issuing_authority, issued_at, expires_at, status)
@@ -110,9 +139,9 @@ async function fleet(
   for (const spec of specs) {
     const registration = reg("UK07");
     const { rows } = await pool.query(
-      `insert into vehicles (shop_id, model_id, registration_number, status, verification_status)
-       values ($1, $2, $3, 'ACTIVE', 'VERIFIED') returning id`,
-      [shopId, spec.modelId, registration],
+      `insert into vehicles (shop_id, model_id, registration_number, status, verification_status, color, manufacturing_date)
+       values ($1, $2, $3, 'ACTIVE', 'VERIFIED', $4, make_date($5, 4, 1)) returning id`,
+      [shopId, spec.modelId, registration, spec.color, spec.year],
     );
     const vehicleId = rows[0].id as string;
     await pool.query(
@@ -184,6 +213,28 @@ async function pastRental(input: {
   return bookingId;
 }
 
+/** A rental that started `startDaysAgo` and is still out: picked up, not returned. */
+async function rentalInProgress(input: { userId: string; riderId: string; vehicleId: string; startDaysAgo: number; nights: number }) {
+  const futureStart = at(200 + (seq += 3));
+  const held = await createHold(pool, {
+    userId: input.userId,
+    items: [{ vehicleId: input.vehicleId, riderId: input.riderId }],
+    pickupAt: futureStart,
+    returnAt: new Date(futureStart.getTime() + input.nights * DAY),
+  });
+  await pay(held.groupId, input.userId);
+  const bookingId = held.bookings[0]!.id;
+  const pickup = at(-input.startDaysAgo);
+  await pool.query(
+    `update bookings set scheduled_pickup_at = $2, scheduled_return_at = $3, created_at = $2::timestamptz - interval '2 days' where id = $1`,
+    [bookingId, pickup, new Date(pickup.getTime() + input.nights * DAY)],
+  );
+  await passIdentityCheck(pool, bookingId);
+  await confirmInspection(pool, { userId: input.userId, bookingId, storageKey: `seed/inspection-${bookingId}` });
+  await pool.query(`update bookings set actual_pickup_at = $2 where id = $1`, [bookingId, pickup]);
+  return bookingId;
+}
+
 function printLogins() {
   const rows: Array<[string, string, string, string]> = [
     ["Admin", "SUPER_ADMIN", PHONES.superAdmin, "Everything: money, coupons, withdrawals, shop wallets, audit"],
@@ -192,12 +243,16 @@ function printLogins() {
     ["Merchant", "OWNER", PHONES.owner, "Test Rentals: Dehradun + Rishikesh shops, wallet, coupons, payout account"],
     ["Merchant", "MANAGER", PHONES.manager, "Dehradun shop as manager (no money)"],
     ["Merchant", "STAFF", PHONES.staff, "Dehradun shop as counter staff"],
-    ["Merchant", "OWNER", PHONES.owner2, "Hill Riders: Mussoorie, second wallet"],
-    ["Customer", "", PHONES.customer, "6 bookings in every state, coupons used, a ticket"],
-    ["Customer", "", PHONES.newCustomer, "Verified rider, no bookings: WELCOME20 applies"],
+    ["Merchant", "OWNER", PHONES.owner2, "Hill Riders: Mussoorie, second wallet, a support chat"],
+    ["Merchant", "OWNER", PHONES.pendingMerchant, "Valley Wheels: new shop, vehicle, documents and licence awaiting admin review"],
+    ["Customer", "", PHONES.customer, "6 bookings in every state, a review, 2 support chats"],
+    ["Customer", "", PHONES.priya, "Ride in progress with an extension request, a review, a 3-way support chat"],
+    ["Customer", "", PHONES.rahul, "No email; upcoming + cancelled booking, refund chat, a rider awaiting licence review"],
+    ["Customer", "", PHONES.aisha, "Regular: 5 completed rides with reviews, RIDER5 applied to her next booking"],
+    ["Customer", "", PHONES.newCustomer, "Verified rider, no email, no bookings: WELCOME20 applies"],
     ["Customer", "", PHONES.youngRider, "Rider aged 22 with a birthday in 3 days: BDAY25, YOUTH15"],
   ];
-  console.log("\nLogins (phone OTP; with WhatsApp unset the code is printed in the backend log as [dev-fallback]):");
+  console.log("\nLogins (phone OTP; with DEV_OTP_CODE set that code works for every account):");
   for (const [portal, role, phone, what] of rows) {
     console.log(`  ${portal.padEnd(9)} ${role.padEnd(12)} ${phone}  ${what}`);
   }
@@ -218,18 +273,23 @@ async function main() {
   }
 
   // ---- People ----------------------------------------------------------------
-  const superAdminId = await upsert("admins", PHONES.superAdmin, "Test Super Admin", { role: "SUPER_ADMIN", status: "ACTIVE" });
-  await upsert("admins", PHONES.admin, "Test Admin", { role: "ADMIN", status: "ACTIVE" });
-  await upsert("admins", PHONES.support, "Test Support", { role: "SUPPORT", status: "ACTIVE" });
+  const verifiedEmail = (who: string) => ({ email: email(who), email_verified_at: new Date().toISOString() });
+  const superAdminId = await upsert("admins", PHONES.superAdmin, "Anjali Rawat", { role: "SUPER_ADMIN", status: "ACTIVE", email: email("anjali.ops") });
+  const adminId = await upsert("admins", PHONES.admin, "Vikram Negi", { role: "ADMIN", status: "ACTIVE", email: email("vikram.ops") });
+  const supportId = await upsert("admins", PHONES.support, "Neha Bisht", { role: "SUPPORT", status: "ACTIVE", email: email("neha.support") });
 
-  const ownerId = await upsert("merchant_users", PHONES.owner, "Test Merchant");
-  const managerId = await upsert("merchant_users", PHONES.manager, "Test Manager");
-  const staffId = await upsert("merchant_users", PHONES.staff, "Test Staff");
-  const owner2Id = await upsert("merchant_users", PHONES.owner2, "Hill Riders Owner");
+  const ownerId = await upsert("merchant_users", PHONES.owner, "Rohit Thapa", verifiedEmail("rohit.testrentals"));
+  const managerId = await upsert("merchant_users", PHONES.manager, "Deepak Rana", verifiedEmail("deepak.testrentals"));
+  const staffId = await upsert("merchant_users", PHONES.staff, "Sunil Kumar", verifiedEmail("sunil.testrentals"));
+  const owner2Id = await upsert("merchant_users", PHONES.owner2, "Meera Joshi", verifiedEmail("meera.hillriders"));
+  const pendingMerchantId = await upsert("merchant_users", PHONES.pendingMerchant, "Arjun Chauhan", verifiedEmail("arjun.valleywheels"));
 
-  const customerId = await upsert("users", PHONES.customer, "Test Customer");
+  const customerId = await upsert("users", PHONES.customer, "Test Customer", verifiedEmail("test.customer"));
   const newCustomerId = await upsert("users", PHONES.newCustomer, "New Customer");
-  const youngId = await upsert("users", PHONES.youngRider, "Young Rider");
+  const youngId = await upsert("users", PHONES.youngRider, "Young Rider", verifiedEmail("young.rider"));
+  const priyaId = await upsert("users", PHONES.priya, "Priya Sharma", verifiedEmail("priya.sharma"));
+  const rahulId = await upsert("users", PHONES.rahul, "Rahul Verma"); // skipped email at signup
+  const aishaId = await upsert("users", PHONES.aisha, "Aisha Khan", verifiedEmail("aisha.khan"));
 
   // ---- Shops and fleets ------------------------------------------------------------
   const activa = await model("Honda", "Activa 6G", "SCOOTER", "PETROL", 110);
@@ -237,9 +297,11 @@ async function main() {
   const ather = await model("Ather", "450X", "SCOOTER", "ELECTRIC", null);
   const classic = await model("Royal Enfield", "Classic 350", "MOTORCYCLE", "PETROL", 349);
 
-  const dehradun = await shop(ownerId, { name: "Test Rentals — Dehradun", city: "Dehradun", address: "12 Rajpur Road", lat: 30.3165, lng: 78.0322 });
-  const rishikesh = await shop(ownerId, { name: "Test Rentals — Rishikesh", city: "Rishikesh", address: "4 Laxman Jhula Road", lat: 30.1158, lng: 78.3221 });
-  const mussoorie = await shop(owner2Id, { name: "Hill Riders — Mussoorie", city: "Mussoorie", address: "22 Mall Road", lat: 30.4598, lng: 78.0644 });
+  const pulsar = await model("Bajaj", "Pulsar 150", "MOTORCYCLE", "PETROL", 149);
+
+  const dehradun = await shop(ownerId, { name: "Test Rentals — Dehradun", city: "Dehradun", address: "12 Rajpur Road", pincode: "248001", lat: 30.3165, lng: 78.0322, phone: "+911352712345", email: email("dehradun.testrentals") });
+  const rishikesh = await shop(ownerId, { name: "Test Rentals — Rishikesh", city: "Rishikesh", address: "4 Laxman Jhula Road", pincode: "249302", lat: 30.1158, lng: 78.3221, phone: "+911352434567", email: email("rishikesh.testrentals") });
+  const mussoorie = await shop(owner2Id, { name: "Hill Riders — Mussoorie", city: "Mussoorie", address: "22 Mall Road", pincode: "248179", lat: 30.4598, lng: 78.0644, phone: "+911352631234", email: email("hello.hillriders") });
 
   for (const [memberId, role] of [[managerId, "MANAGER"], [staffId, "STAFF"]] as const) {
     await pool.query(
@@ -248,21 +310,49 @@ async function main() {
     );
   }
 
-  const [d1, d2, d3, d4, d5] = await fleet(ownerId, dehradun, [
-    { modelId: activa, amount: 40_000, weekend: 50_000, deposit: 150_000 },
-    { modelId: activa, amount: 40_000, weekend: 50_000, deposit: 150_000 },
-    { modelId: jupiter, amount: 38_000, weekend: 45_000, deposit: 150_000 },
-    { modelId: classic, amount: 110_000, weekend: 130_000, deposit: 400_000 },
-    { modelId: ather, amount: 60_000, weekend: 70_000, deposit: 250_000 },
+  const [d1, d2, d3, d4, d5, d6] = await fleet(ownerId, dehradun, [
+    { modelId: activa, amount: 40_000, weekend: 50_000, deposit: 150_000, color: "Pearl White", year: 2023 },
+    { modelId: activa, amount: 40_000, weekend: 50_000, deposit: 150_000, color: "Matte Grey", year: 2024 },
+    { modelId: jupiter, amount: 38_000, weekend: 45_000, deposit: 150_000, color: "Starlight Blue", year: 2023 },
+    { modelId: classic, amount: 110_000, weekend: 130_000, deposit: 400_000, color: "Stealth Black", year: 2022 },
+    { modelId: ather, amount: 60_000, weekend: 70_000, deposit: 250_000, color: "Space Grey", year: 2024 },
+    { modelId: pulsar, amount: 70_000, weekend: 85_000, deposit: 300_000, color: "Racing Red", year: 2023 },
   ]);
-  const [r1, r2] = await fleet(ownerId, rishikesh, [
-    { modelId: activa, amount: 45_000, weekend: 55_000, deposit: 150_000 },
-    { modelId: classic, amount: 120_000, weekend: 140_000, deposit: 400_000 },
+  const [r1, r2, r3] = await fleet(ownerId, rishikesh, [
+    { modelId: activa, amount: 45_000, weekend: 55_000, deposit: 150_000, color: "Rebel Red", year: 2024 },
+    { modelId: classic, amount: 120_000, weekend: 140_000, deposit: 400_000, color: "Signals Desert Sand", year: 2023 },
+    { modelId: jupiter, amount: 42_000, weekend: 50_000, deposit: 150_000, color: "Mint Green", year: 2024 },
   ]);
-  const [m1, m2] = await fleet(owner2Id, mussoorie, [
-    { modelId: jupiter, amount: 42_000, weekend: 52_000, deposit: 150_000 },
-    { modelId: ather, amount: 65_000, weekend: 75_000, deposit: 250_000 },
+  const [m1, m2, m3] = await fleet(owner2Id, mussoorie, [
+    { modelId: jupiter, amount: 42_000, weekend: 52_000, deposit: 150_000, color: "Titanium Grey", year: 2023 },
+    { modelId: ather, amount: 65_000, weekend: 75_000, deposit: 250_000, color: "Still White", year: 2024 },
+    { modelId: classic, amount: 125_000, weekend: 145_000, deposit: 400_000, color: "Chrome Red", year: 2022 },
   ]);
+
+  // ---- A new merchant waiting on RetroMobi: everything in the admin review queue.
+  const valley = await shop(pendingMerchantId, { name: "Valley Wheels — Haridwar", city: "Haridwar", address: "7 Har Ki Pauri Road", pincode: "249401", lat: 29.9457, lng: 78.1642, phone: "+911334223344", email: email("hello.valleywheels"), verified: false });
+  const { rows: valleyVehicle } = await pool.query(
+    `insert into vehicles (shop_id, model_id, registration_number, status, verification_status, color, manufacturing_date)
+     values ($1, $2, $3, 'INACTIVE', 'PENDING', 'Pearl White', '2024-02-01') returning id`,
+    [valley, activa, reg("UK08")],
+  );
+  await pool.query(
+    `insert into vehicle_documents (vehicle_id, type, document_number, status, storage_key, issued_at, expires_at)
+     values ($1, 'RC', 'RC-UK08-2024-0098', 'PENDING', 'seed/valley-rc.pdf', '2024-02-01', '2039-01-31'),
+            ($1, 'INSURANCE', 'POL-77812349', 'PENDING', 'seed/valley-insurance.pdf', '2025-12-01', '2026-11-30')`,
+    [valleyVehicle[0].id],
+  );
+  await pool.query(
+    `insert into merchant_documents (merchant_user_id, type, document_number, status, storage_key)
+     values ($1, 'PAN', 'ABCPC1234D', 'PENDING', 'seed/valley-pan.pdf'),
+            ($1, 'GST_CERTIFICATE', '05ABCPC1234D1Z9', 'PENDING', 'seed/valley-gst.pdf')`,
+    [pendingMerchantId],
+  );
+  await pool.query(
+    `insert into shop_licenses (merchant_user_id, licence_number, issuing_authority, issued_at, expires_at, status, storage_key)
+     values ($1, 'UK08/RNT/2026/0042', 'ARTO Haridwar', current_date - 30, current_date + interval '5 years', 'PENDING', 'seed/valley-licence.pdf')`,
+    [pendingMerchantId],
+  );
 
   // The Dehradun owner has a verified Cashfree beneficiary, so an admin can pay
   // their withdrawals through Cashfree as well as offline.
@@ -287,6 +377,25 @@ async function main() {
   await pool.query(`update riders set name = 'Third Rider' where id = $1`, [rider3.id]);
   await pool.query(`update riders set name = 'New Customer' where user_id = $1`, [newCustomerId]);
   await pool.query(`update riders set name = 'Young Rider' where id = $1`, [youngRider.id]);
+
+  const named = async (userId: string, name: string, dob: string, verified = true) => {
+    const r = await createRider(pool, userId, { dob, verified });
+    await pool.query(`update riders set name = $2 where id = $1`, [r.id, name]);
+    return r;
+  };
+  const priyaRider = await named(priyaId, "Priya Sharma", "1996-04-12");
+  await named(priyaId, "Karan Sharma", "1994-09-30"); // her husband, also verified
+  const rahulRider = await named(rahulId, "Rahul Verma", "1991-01-25");
+  // His friend's licence check needs a human: the name on the licence doesn't
+  // quite match. Shows in Admin -> Verification -> Rider licences.
+  const reviewRider = await named(rahulId, "Ankit Yadav", "1997-07-07");
+  await pool.query(
+    `update rider_verification_sessions set state = 'MANUAL_REVIEW_REQUIRED', review_required = true, rejection_code = 'NAME_MISMATCH'
+      where rider_id = $1`,
+    [reviewRider.id],
+  );
+  await pool.query(`update driving_licence_verifications set status = 'PENDING', holder_name = 'ANKIT KUMAR YADAV' where rider_id = $1`, [reviewRider.id]);
+  const aishaRider = await named(aishaId, "Aisha Khan", "1992-12-03");
 
   // ---- Coupons ---------------------------------------------------------------------------
   const admin = { type: "ADMIN" as const, id: superAdminId };
@@ -318,7 +427,7 @@ async function main() {
   });
   await pay(heldB.groupId, customerId);
   // C: COMPLETED, shop-funded coupon -- review + deposit released + shop paid the discount.
-  await pastRental({ userId: customerId, riderId: rider1.id, vehicleId: d4!, merchantId: ownerId, startDaysAgo: 6, nights: 2, couponCode: "DEHRADUN50" });
+  const bookingC = await pastRental({ userId: customerId, riderId: rider1.id, vehicleId: d4!, merchantId: ownerId, startDaysAgo: 6, nights: 2, couponCode: "DEHRADUN50" });
   // D: COMPLETED with a deposit claim -- claim banner + its auto-opened ticket.
   await pastRental({
     userId: customerId,
@@ -347,6 +456,51 @@ async function main() {
   await pastRental({ userId: youngId, riderId: youngRider.id, vehicleId: m1!, merchantId: owner2Id, startDaysAgo: 20, nights: 3 });
   const heldY = await createHold(pool, { userId: youngId, items: [{ vehicleId: m2!, riderId: youngRider.id }], pickupAt: at(3), returnAt: at(5), couponCode: "YOUTH15" });
   await pay(heldY.groupId, youngId);
+
+  // ---- Bookings: Priya -- a finished trip and one she is on right now ----------
+  const priyaDone = await pastRental({ userId: priyaId, riderId: priyaRider.id, vehicleId: r3!, merchantId: ownerId, startDaysAgo: 15, nights: 2 });
+  const priyaNow = await rentalInProgress({ userId: priyaId, riderId: priyaRider.id, vehicleId: d6!, startDaysAgo: 1, nights: 3 });
+  // Asked for two more days; the payment for it is still pending.
+  await requestExtension(pool, { userId: priyaId, bookingId: priyaNow, newReturnAt: at(4) }, cashfreeClient);
+
+  // ---- Bookings: Rahul -- one coming up, one cancelled --------------------------
+  const heldR = await createHold(pool, { userId: rahulId, items: [{ vehicleId: m3!, riderId: rahulRider.id }], pickupAt: at(10), returnAt: at(12) });
+  await pay(heldR.groupId, rahulId);
+  const heldRc = await createHold(pool, { userId: rahulId, items: [{ vehicleId: r3!, riderId: rahulRider.id }], pickupAt: at(25), returnAt: at(27) });
+  await pay(heldRc.groupId, rahulId);
+  const rahulCancelled = heldRc.bookings[0]!.id;
+  await cancelBooking(pool, { userId: rahulId, bookingId: rahulCancelled }, cashfreeClient);
+
+  // ---- Bookings: Aisha -- a regular with five finished rides --------------------
+  const aishaTrips: Array<[string, number, number, number, string]> = [
+    [d1!, 60, 2, 5, "Scooter was spotless and the staff explained everything. Will rent again."],
+    [d2!, 50, 2, 4, "Smooth pickup. Helmet was a bit loose but they swapped it."],
+    [r1!, 40, 3, 5, "Perfect for the Rishikesh ghats. Easy return."],
+    [m2!, 30, 2, 3, "Battery range was lower than expected on the hills."],
+    [d4!, 25, 2, 4, "Classic 350 was a joy. Deposit came back the same day."],
+  ];
+  for (const [vehicleId, startDaysAgo, nights, rating, comment] of aishaTrips) {
+    const bookingId = await pastRental({ userId: aishaId, riderId: aishaRider.id, vehicleId, merchantId: vehicleId === m2 ? owner2Id : ownerId, startDaysAgo, nights });
+    await createReview(pool, aishaId, { bookingId, rating, comment });
+  }
+  // Five completed rides unlock RIDER5.
+  const heldA = await createHold(pool, { userId: aishaId, items: [{ vehicleId: d5!, riderId: aishaRider.id }], pickupAt: at(8), returnAt: at(10), couponCode: "RIDER5" });
+  await pay(heldA.groupId, aishaId);
+
+  // ---- Reviews -------------------------------------------------------------------------
+  await createReview(pool, customerId, { bookingId: bookingC, rating: 5, comment: "Great bike, friendly shop, quick handover." });
+  await createReview(pool, priyaId, { bookingId: priyaDone, rating: 4, comment: "Good scooter. Pickup took a while on a busy morning." });
+
+  // ---- A walk-in at the Dehradun counter (no app account) -------------------------
+  await createWalkinRental(pool, {
+    merchantUserId: ownerId,
+    vehicleId: d5!,
+    walkinName: "Mohit Singh",
+    walkinPhone: "+919800011122",
+    walkinDlNumber: "UK0720190012345",
+    pickupAt: at(1),
+    returnAt: at(2),
+  });
 
   // ---- Wallets ---------------------------------------------------------------------------
   // Real credits from the bookings above are small, so an opening balance makes
@@ -381,6 +535,59 @@ async function main() {
     firstMessage: "I requested ₹1,000 yesterday. How long does it usually take?",
   });
 
+  // Customer question about an upcoming booking, answered and resolved.
+  const bookingQ = await ticketsService.openTicket(pool, {
+    openedByType: "CUSTOMER",
+    openedById: customerId,
+    bookingId: heldB.bookings[0]!.id,
+    category: "BOOKING",
+    subject: "Can I pick up an hour early?",
+    firstMessage: "My train gets in at 8. Can I collect the scooters at 8:30 instead of 9?",
+  });
+  await ticketsService.assignTicket(pool, bookingQ.id, supportId);
+  await ticketsService.postMessage(pool, bookingQ.id, { partyType: "ADMIN", partyId: supportId }, "The shop opens at 8, so 8:30 is fine. Show your handover code at the counter.");
+  await ticketsService.postMessage(pool, bookingQ.id, { partyType: "CUSTOMER", partyId: customerId }, "Perfect, thank you!");
+  await ticketsService.resolveTicket(pool, bookingQ.id, "Early pickup confirmed with the shop.", supportId);
+
+  // Priya, RetroMobi support and the shop in one chat about her extension.
+  const extensionChat = await ticketsService.openTicket(pool, {
+    openedByType: "CUSTOMER",
+    openedById: priyaId,
+    bookingId: priyaNow,
+    category: "BOOKING",
+    subject: "Extending my rental by 2 days",
+    firstMessage: "I asked to keep the Pulsar two more days. Is it free, and how do I pay?",
+  });
+  await ticketsService.assignTicket(pool, extensionChat.id, supportId);
+  await ticketsService.addParticipant(pool, supportId, extensionChat.id, { partyType: "MERCHANT", partyId: ownerId });
+  await ticketsService.postMessage(pool, extensionChat.id, { partyType: "ADMIN", partyId: supportId }, "I've added Test Rentals to this chat so they can confirm.");
+  await ticketsService.postMessage(pool, extensionChat.id, { partyType: "MERCHANT", partyId: ownerId }, "Yes, the bike is free until Sunday. Pay from My bookings and you're set.");
+  await ticketsService.postMessage(pool, extensionChat.id, { partyType: "CUSTOMER", partyId: priyaId }, "Great, paying now.");
+
+  // Rahul asking where his refund is.
+  const refundChat = await ticketsService.openTicket(pool, {
+    openedByType: "CUSTOMER",
+    openedById: rahulId,
+    bookingId: rahulCancelled,
+    category: "BOOKING",
+    subject: "Refund for my cancelled booking",
+    firstMessage: "I cancelled my Rishikesh booking. When will the money be back?",
+  });
+  await ticketsService.assignTicket(pool, refundChat.id, adminId);
+  await ticketsService.postMessage(pool, refundChat.id, { partyType: "ADMIN", partyId: adminId }, "The refund was sent the moment you cancelled. Banks take 5–7 working days; it's tracked under My bookings.");
+
+  // A shop updating its bank details, resolved by an admin.
+  const bankChat = await ticketsService.openTicket(pool, {
+    openedByType: "MERCHANT",
+    openedById: owner2Id,
+    category: "OTHER",
+    subject: "New bank account for payouts",
+    firstMessage: "We moved banks. Please pay our pending withdrawal to the new account in the request note.",
+  });
+  await ticketsService.assignTicket(pool, bankChat.id, superAdminId);
+  await ticketsService.postMessage(pool, bankChat.id, { partyType: "ADMIN", partyId: superAdminId }, "Noted. We'll pay it to the new account and you'll see the reference in your wallet.");
+  await ticketsService.resolveTicket(pool, bankChat.id, "Bank details confirmed for the pending withdrawal.", superAdminId);
+
   // The bookings above queued real notifications to these made-up phone numbers
   // and emails. They are someone's numbers, so they must never go out, even
   // when a later run has real WhatsApp/Resend credentials: closed as FAILED
@@ -388,10 +595,10 @@ async function main() {
   await pool.query(
     `update notifications set status = 'FAILED', error = 'seed data: not sent'
       where status = 'PENDING' and recipient_id = any($1::uuid[])`,
-    [[customerId, newCustomerId, youngId, ownerId, managerId, staffId, owner2Id, superAdminId]],
+    [[customerId, newCustomerId, youngId, priyaId, rahulId, aishaId, ownerId, managerId, staffId, owner2Id, pendingMerchantId, superAdminId, adminId, supportId]],
   );
 
-  console.log("Seeded: 3 shops, 9 vehicles, 10 coupons, bookings in every state, 2 wallets with withdrawals.");
+  console.log("Seeded: 4 shops (1 awaiting review), 12 listed vehicles + 1 awaiting review, 10 coupons, bookings in every state, reviews, support chats, 2 wallets with withdrawals.");
   printLogins();
 }
 

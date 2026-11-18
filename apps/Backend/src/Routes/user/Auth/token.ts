@@ -33,7 +33,7 @@ export const ACCESS_TOKEN_EXPIRES_IN = ACCESS_TOKEN_TTL_SECONDS;
 
 // Generic short-lived, purpose-scoped ticket — same HS256 mechanism as the
 // access token, but the `purpose` claim is checked on verify so a signup
-// ticket can't be replayed as a Google-prefill ticket or vice versa.
+// ticket can't be replayed as an email-verified ticket or vice versa.
 export function signTicket<T extends object>(
   purpose: string,
   payload: T,

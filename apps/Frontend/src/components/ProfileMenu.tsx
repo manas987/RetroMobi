@@ -4,13 +4,12 @@ import { usePortalSession } from "../lib/portal";
 
 const ITEMS = [
   { section: "Rent a scooter", links: [
-    { href: "/browse", label: "Discover" },
     { href: "/account/bookings", label: "My bookings" },
-    { href: "/account/coupons", label: "Coupons" },
   ] },
   { section: "Account", links: [
     { href: "/account/support", label: "Support" },
-    { href: "/account/profile", label: "Riders & profile" },
+    { href: "/account/riders", label: "Riders" },
+    { href: "/account/profile", label: "Profile" },
   ] },
 ];
 

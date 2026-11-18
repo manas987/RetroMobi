@@ -8,7 +8,6 @@ import {
 } from "../lib/wallet.ts";
 import type { NextFunction, Request, Response } from "express";
 import {
-  EmailNotVerifiedError,
   EmailTakenError,
   InvalidOtpError,
   InvalidSessionError,
@@ -166,10 +165,6 @@ export function errorHandler(
   }
   if (err instanceof InvalidTicketError) {
     res.status(401).json({ error: "invalid_or_expired_ticket", message: err.message });
-    return;
-  }
-  if (err instanceof EmailNotVerifiedError) {
-    res.status(400).json({ error: "email_not_verified", message: err.message });
     return;
   }
   if (err instanceof PhoneTakenError) {

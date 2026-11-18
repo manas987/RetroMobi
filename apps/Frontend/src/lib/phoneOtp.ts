@@ -9,7 +9,7 @@ import { portalFetch, PortalApiError, type Portal } from "./portal";
  *
  * The Firebase web config is public by design (it identifies the project; the
  * authorized-domains list and SMS region policy are what protect it), hence
- * `BUN_PUBLIC_`. Bun inlines these at build time, see lib/google.ts. Leave them
+ * `BUN_PUBLIC_`. Bun inlines these at build time, see lib/publicEnv.ts. Leave them
  * blank and SMS is never offered: no link, no automatic fallback.
  */
 const FIREBASE_CONFIG = {
@@ -24,7 +24,7 @@ export const SMS_FALLBACK_ENABLED = Object.values(FIREBASE_CONFIG).every(Boolean
 let authPromise: Promise<import("firebase/auth").Auth> | undefined;
 
 // Loaded the moment someone picks SMS, not with the page: most riders never
-// need it, and they are on metered mobile data (see lib/google.ts).
+// need it, and they are on metered mobile data.
 function firebaseAuth() {
   authPromise ??= Promise.all([import("firebase/app"), import("firebase/auth")]).then(([app, auth]) =>
     // In-memory: we only want the one ID token to hand to our backend, not a

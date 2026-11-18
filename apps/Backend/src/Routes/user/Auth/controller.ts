@@ -3,7 +3,6 @@ import { pathParam } from "../../../lib/pathParam.ts";
 import { pool } from "../../../DB/client.ts";
 import * as authService from "./authService.ts";
 import { sendOtpEmail } from "../../../providers/emailSender.ts";
-import { verifyGoogleIdToken } from "../../../providers/google.ts";
 import { verifyFirebasePhoneToken } from "../../../providers/firebase.ts";
 import { isWhatsAppConfigured, sendOtpWhatsApp } from "../../../providers/whatsapp.ts";
 
@@ -80,21 +79,14 @@ export async function verifyEmailOtp(req: Request, res: Response) {
   res.status(200).json(result);
 }
 
-export async function googleAuth(req: Request, res: Response) {
-  const { idToken } = req.body as { idToken: string };
-  const result = await authService.googlePrefill(idToken, verifyGoogleIdToken);
-  res.status(200).json(result);
-}
-
 export async function completeSignup(req: Request, res: Response) {
-  const { signupTicket, deviceId, name, email, emailVerificationTicket, googlePrefillTicket } =
+  const { signupTicket, deviceId, name, email, emailVerificationTicket } =
     req.body as {
       signupTicket: string;
       deviceId: string;
-      name?: string;
+      name: string;
       email?: string;
       emailVerificationTicket?: string;
-      googlePrefillTicket?: string;
     };
   const result = await authService.completeSignup(pool, {
     signupTicket,
@@ -102,7 +94,6 @@ export async function completeSignup(req: Request, res: Response) {
     name,
     email,
     emailVerificationTicket,
-    googlePrefillTicket,
     sessionDetails: sessionDetails(req),
   });
   res.status(200).json(result);
@@ -143,4 +134,24 @@ export async function revokeSession(req: Request, res: Response) {
     return;
   }
   res.status(204).send();
+}
+
+export async function getAccount(req: Request, res: Response) {
+  res.json({ account: await authService.getAccount(pool, req.userId!) });
+}
+
+export async function updateAccount(req: Request, res: Response) {
+  const { name } = req.body as { name: string };
+  res.json({ account: await authService.updateAccountName(pool, req.userId!, name) });
+}
+
+export async function sendAccountEmailOtp(req: Request, res: Response) {
+  const { email } = req.body as { email: string };
+  const result = await authService.requestAccountEmailOtp(pool, email, sendOtpEmail);
+  res.json({ message: "OTP sent", expiresInSeconds: result.expiresInSeconds });
+}
+
+export async function verifyAccountEmail(req: Request, res: Response) {
+  const { email, code } = req.body as { email: string; code: string };
+  res.json({ account: await authService.verifyAccountEmail(pool, req.userId!, email, code) });
 }

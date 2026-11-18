@@ -68,7 +68,7 @@ export function CustomerSupport() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      {session ? <SupportInbox key={decodeJwtSubject(session.accessToken)} token={session.accessToken} /> : <main className="flex-1" />}
+      {session ? <SupportInbox key={decodeJwtSubject(session.accessToken)} token={session.accessToken} /> : <main className="flex-1 min-h-[calc(100dvh-4rem)]" />}
       <Footer />
     </div>
   );
@@ -103,7 +103,7 @@ function SupportInbox({ token }: { token: string }) {
   const selected = selectedId ? tickets.find((ticket) => ticket.id === selectedId) : desktop ? visible[0] : undefined;
 
   return (
-    <main className="flex-1 w-full max-w-[1160px] mx-auto px-4 py-7 sm:px-6 sm:py-10">
+    <main className="flex-1 min-h-[calc(100dvh-4rem)] w-full max-w-[1160px] mx-auto px-4 py-7 sm:px-6 sm:py-10">
       <div className={`mb-5 flex-wrap items-end justify-between gap-3 sm:mb-6 lg:flex ${selectedId ? "hidden" : "flex"}`}>
         <div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-ink">Support</h1>

@@ -9,6 +9,7 @@ import { CheckoutPay, CheckoutReturn } from "./pages/CheckoutPay";
 
 import { CustomerLogin } from "./pages/customer/Login";
 import { CustomerProfile } from "./pages/customer/Profile";
+import { CustomerRiders } from "./pages/customer/Riders";
 import { CustomerSupport } from "./pages/customer/Support";
 import { MyBookings } from "./pages/customer/MyBookings";
 
@@ -71,6 +72,7 @@ export function App() {
 
       <Route path="/login" component={CustomerLogin} />
       <Route path="/account/profile" component={CustomerProfile} />
+      <Route path="/account/riders" component={CustomerRiders} />
       <Route path="/account/support" component={CustomerSupport} />
       <Route path="/account/bookings" component={MyBookings} />
       <Route path="/account/coupons" component={MyCoupons} />
