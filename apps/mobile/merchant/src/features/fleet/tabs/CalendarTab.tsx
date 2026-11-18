@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { CalendarClock, CalendarOff } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { Button, Card, ConfirmSheet, DateField, EmptyState, Text, api, istDay, useT, type Row } from "@retromobi/mobile-shared";
+import { CounterRowLink, counterStyles } from "../../../ui/Counter";
 import { useMerchantQuery } from "../../../state/query";
 import { useMerchantShop } from "../../../state/shop";
 import { renterName, useCounterWrite } from "../../bookings/common";
@@ -24,16 +26,15 @@ export function CalendarTab({ id, shopId, staged }: { id: string; shopId: string
   const valid = !!from && !!until && from <= until && from >= today;
   const upcoming = staged.filter(({ b }) => b.vehicle_id === id).sort((a, b) => String(a.b.scheduled_pickup_at).localeCompare(String(b.b.scheduled_pickup_at)));
   return <>
-    <Card title={t("fleet.upcomingTitle")}>
+    <Card style={counterStyles.panel} title={t("fleet.upcomingTitle")}>
       <Fields>
         {!upcoming.length && <EmptyState text={t("fleet.noUpcoming")} />}
-        {upcoming.map(({ b }) => <Fields key={String(b.id)}>
-          <Button label={renterName(b)} onPress={() => router.push({ pathname: "/booking/[id]", params: { id: String(b.id), shopId } })} />
-          <Text size="sm" color="ink2">{date(b.scheduled_pickup_at)} {time(b.scheduled_pickup_at)} → {date(b.scheduled_return_at)} {time(b.scheduled_return_at)}</Text>
-        </Fields>)}
+        {upcoming.map(({ b }) => <CounterRowLink key={String(b.id)} icon={CalendarClock} title={renterName(b)}
+          detail={`${date(b.scheduled_pickup_at)} ${time(b.scheduled_pickup_at)} → ${date(b.scheduled_return_at)} ${time(b.scheduled_return_at)}`}
+          onPress={() => router.push({ pathname: "/booking/[id]", params: { id: String(b.id), shopId } })} />)}
       </Fields>
     </Card>
-    <Card title={t("fleet.blocksTitle")}>
+    <Card style={counterStyles.panel} icon={CalendarOff} title={t("fleet.blocksTitle")}>
       <Fields>
         <Text color="ink2">{t("fleet.blocksHint")}</Text>
         {!q.isSuccess ? <Pending error={q.error} retry={q.refetch} /> : <>
@@ -45,8 +46,8 @@ export function CalendarTab({ id, shopId, staged }: { id: string; shopId: string
           </Fields>)}
           {can("fleet:write") && (!form ? <Button label={t("fleet.blockDays")} onPress={() => { setFrom(""); setUntil(""); setReason(""); setForm(true); }} />
             : <>
-              <DateField label={t("common.from")} value={from} min={today} onChange={setFrom} yearStepper={false} />
-              <DateField label={t("fleet.untilIncl")} value={until} min={from || today} onChange={setUntil} yearStepper={false} />
+              <DateField inline label={t("common.from")} value={from} min={today} onChange={setFrom} yearStepper={false} />
+              <DateField inline label={t("fleet.untilIncl")} value={until} min={from || today} onChange={setUntil} yearStepper={false} />
               {!!from && !!until && until < from && <Text color="danger">{t("fleet.badRange")}</Text>}
               <LabelInput label={t("fleet.fReason")} hint={t("fleet.reasonHint")} value={reason} onChangeText={setReason} />
               <FormButtons label={t("fleet.blockThese")} valid={valid} error={add.error} busy={add.busy} close={() => setForm(false)} save={() => {

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
-import { Button, DateField, ErrorNote, LoadingRows, SelectField, Text, api, dateTimeLabel, errorMessage, formatIstTime, istBookingTime, istDay,
+import { AppState, StyleSheet, View } from "react-native";
+import { Button, DateField, ErrorNote, LoadingRows, SelectField, Text, api, colors, dateTimeLabel, dayLabel, errorMessage, formatIstTime, istBookingTime, istDay, space, timeLabel,
   rupees, splitIstBookingTime, type Row } from "@retromobi/mobile-shared";
-import { Card, EmptyState } from "../../../features/RiderSurface";
+import { Card, EmptyState, Headline, PillCTA } from "../../../features/RiderSurface";
+import { trail, type } from "../../../ui/trail";
 import { BookingPage } from "../../../features/bookings/BookingPage";
 import { isPast } from "../../../features/bookings/bookings";
 import { openPayment, checkPayment } from "../../../features/checkout/cashfree";
@@ -10,7 +11,7 @@ import type { PaymentIntent } from "../../../features/checkout/payment";
 import { refreshRiderData, usePrivate, useWrite } from "../../../state/private";
 
 export default function Extend() {
-  return <BookingPage title="Extend this ride">{(row) => row.status === "CONFIRMED" && row.actual_pickup_at && !isPast(row)
+  return <BookingPage title="">{(row) => row.status === "CONFIRMED" && row.actual_pickup_at && !isPast(row)
     ? <Extension row={row} /> : <EmptyState title="This booking cannot be extended" />}</BookingPage>;
 }
 
@@ -66,8 +67,12 @@ function Extension({ row }: { row: Row }) {
   }, [launchedId, refresh]);
 
   return <>
-    <Text>Current return · {dateTimeLabel(row.scheduled_return_at)}</Text>
-    <Text>Keep your current return time until the extension is approved.</Text>
+    <Headline kicker="Extend your ride" title="Need more time?" />
+    <View style={styles.current}>
+      <Text size="xs" weight="bold" style={{ color: colors.amber, letterSpacing: 0.8 }}>CURRENT RETURN</Text>
+      <Text weight="bold" color="white" style={type.title}>{dayLabel(String(row.scheduled_return_at))}</Text>
+      <Text size="md" style={{ color: trail.mist }}>{timeLabel(String(row.scheduled_return_at))} · keep this until your extension is approved</Text>
+    </View>
     {q.isPending ? <LoadingRows label="Checking for an extension" /> : q.isError ? <ErrorNote text={errorMessage(q.error)} onRetry={() => void q.refetch()} /> : <>
       {existing && <Card title={pending ? "Extension awaiting payment" : existing.status === "APPROVED" ? "Extension approved" : "Extension not applied"}>
         <Text>{dateTimeLabel(existing.new_return_at)} · {rupees(Number(existing.payable_amount ?? existing.additional_amount ?? 0))}</Text>
@@ -75,7 +80,7 @@ function Extension({ row }: { row: Row }) {
       </Card>}
       {pending ? <>
         {quote && quote.extensionId === pending.id && launchedId !== quote.extensionId
-          ? <Button label="Continue to payment" variant="primary" busy={w.busy} onPress={() => void w.run(async () => {
+          ? <PillCTA label="Continue to payment" busy={w.busy} onPress={() => void w.run(async () => {
             setNotice(""); setLaunchedId(quote.extensionId);
             try { await openPayment(quote, () => returned(quote.extensionId)); }
             catch (err) { setLaunchedId(undefined); throw err; }
@@ -87,7 +92,7 @@ function Extension({ row }: { row: Row }) {
         <DateField label="New return date" value={day} onChange={setDay} min={istDay(new Date(earliest))} />
         <SelectField label="New return time" value={time} onChange={setTime}
           options={[...new Set([...clockTimes, time])].sort().map((value) => ({ value, label: formatIstTime(istBookingTime(day, value)) }))} />
-        <Button label="Check availability and price" variant="primary" busy={w.busy}
+        <PillCTA label="Check availability and price" busy={w.busy}
           disabled={Date.parse(returnAt) <= Date.parse(String(row.scheduled_return_at))} onPress={() => void w.run(async () => {
             if (Date.parse(returnAt) <= Date.now()) throw new Error("Choose a later return time.");
             const result = await api<Quote>(path, { method: "POST", body: { newReturnAt: returnAt } });
@@ -100,3 +105,7 @@ function Extension({ row }: { row: Row }) {
     {(w.error || notice) && <ErrorNote text={w.error || notice} />}
   </>;
 }
+
+const styles = StyleSheet.create({
+  current: { backgroundColor: trail.forest, borderRadius: 28, padding: space[5], gap: 4 },
+});

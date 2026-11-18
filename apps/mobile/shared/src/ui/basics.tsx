@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Animated, Pressable, StyleSheet, TextInput, View, type TextInputProps, type ViewStyle } from "react-native";
 import type { LucideIcon } from "lucide-react-native";
+import { Image, type ImageProps } from "expo-image";
 import { colors, radius, shadow, space, text, font, tone, type Tone } from "../theme";
 import { Text } from "./Text";
 import { Button } from "./Button";
@@ -50,10 +51,10 @@ export function Input({ style, ...rest }: TextInputProps) {
   return <TextInput placeholderTextColor={colors.ink3} selectionColor={colors.ink} {...rest} style={[styles.input, style]} />;
 }
 
-export function EmptyState({ icon: Icon, title, text: body, action }: { icon?: LucideIcon; title?: string; text?: string; action?: ReactNode }) {
+export function EmptyState({ icon: Icon, image, title, text: body, action }: { icon?: LucideIcon; /** An illustration, shown instead of the icon. */ image?: ImageProps["source"]; title?: string; text?: string; action?: ReactNode }) {
   return (
     <View style={styles.empty}>
-      {Icon && (
+      {image ? <Image source={image} contentFit="contain" accessible={false} style={styles.emptyImage} /> : Icon && (
         <View style={styles.emptyIcon}>
           <Icon size={24} color={colors.ink3} />
         </View>
@@ -117,6 +118,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space[4], fontFamily: font.regular, fontSize: text.md, color: colors.ink,
   },
   empty: { alignItems: "center", gap: space[3], paddingVertical: space[8], paddingHorizontal: space[4] },
+  emptyImage: { width: 180, height: 150 },
   emptyIcon: { height: 48, width: 48, borderRadius: radius.button, backgroundColor: colors.surface3, alignItems: "center", justifyContent: "center" },
   error: { flexDirection: "row", alignItems: "center", gap: space[3], borderRadius: radius.button, backgroundColor: colors.dangerSoft, paddingHorizontal: space[4], paddingVertical: space[3] },
   skeleton: { borderRadius: radius.button, backgroundColor: colors.surface3 },

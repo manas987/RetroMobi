@@ -224,3 +224,49 @@ test("pickup licence fallback is scoped, blocks handover until approved, and ref
     else process.env.PICKUP_LICENCE_FALLBACK = previous;
   }
 });
+
+test("beta licence declaration: unverified riders book once both statements are ticked, and the shop checks at pickup", async () => {
+  const { approvePickupLicence, assertHandoverAllowed, getIdentityForPickup, IdentityCheckMissingError } = await import("../../merchant/Operations/identityService.ts");
+  const { createMerchant, createShop } = await import("../../../test/fixtures.ts");
+  const previous = process.env.ONLINE_LICENCE_CHECK;
+  delete process.env.ONLINE_LICENCE_CHECK;
+  try {
+    const user = await createUser(pool);
+    const other = await createUser(pool);
+    const merchant = await createMerchant(pool);
+    const shop = await createShop(pool, merchant.id);
+    const rider = await createRider(pool, user.id, { verified: false });
+    const strangersRider = await createRider(pool, other.id, { verified: false });
+    const vehicle = await createBookableVehicle(pool, { shopId: shop.id });
+    const window = futureWindow(45, 1);
+    const licenceDeclaration = { validLicence: true, cancelIfMissing: true } as const;
+    const items = [{ vehicleId: vehicle.id, riderId: rider.id }];
+
+    await expect(createHold(pool, { userId: user.id, items, ...window })).rejects.toThrow("Confirm both licence statements");
+    await expect(createHold(pool, { userId: user.id, items: [{ vehicleId: vehicle.id, riderId: strangersRider.id }], licenceDeclaration, ...window }))
+      .rejects.toThrow("from your account");
+
+    const held = await createHold(pool, { userId: user.id, items, licenceDeclaration, ...window });
+    const bookingId = held.bookings[0]!.id;
+    const { rows } = await pool.query("select pickup_licence_ack_at, pickup_verification_session_id from bookings where id = $1", [bookingId]);
+    expect(rows[0].pickup_licence_ack_at).toBeTruthy();
+    expect(rows[0].pickup_verification_session_id).toBeNull();
+    const audit = await pool.query("select after from audit_logs where entity_id = $1 and action = 'booking.licence_declared'", [bookingId]);
+    expect(audit.rows[0]?.after.terms).toHaveLength(2);
+
+    await createPaymentIntent(pool, { groupId: held.groupId, userId: user.id }, fakeCashfree);
+    await handlePaymentWebhook(pool, {
+      providerEventId: `evt_declared_${held.groupId}`, type: "PAYMENT_SUCCESS", orderId: `order_${held.groupId}`, payload: {},
+    }, fakeCashfree);
+    expect((await getIdentityForPickup(pool, merchant.id, bookingId)).pickupLicenceRequired).toBe(true);
+    const client = await pool.connect();
+    try {
+      await expect(assertHandoverAllowed(client, { bookingId, requireIdentityCheck: true })).rejects.toBeInstanceOf(IdentityCheckMissingError);
+      await approvePickupLicence(pool, merchant.id, shop.id, bookingId);
+      await assertHandoverAllowed(client, { bookingId, requireIdentityCheck: true });
+    } finally { client.release(); }
+  } finally {
+    if (previous === undefined) delete process.env.ONLINE_LICENCE_CHECK;
+    else process.env.ONLINE_LICENCE_CHECK = previous;
+  }
+});

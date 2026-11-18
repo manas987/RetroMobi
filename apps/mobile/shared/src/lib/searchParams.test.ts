@@ -33,6 +33,13 @@ test("clearing Browse filters keeps the city, rental window and sort", () => {
   });
 });
 
+test("a minimum-only daily price is an active, clearable filter", () => {
+  const criteria = parseSearchParams("?minPrice=50000");
+  const [price] = activeFilters(criteria);
+  expect(price?.label).toBe("From ₹500");
+  expect(activeFilters({ ...criteria, ...price?.clear })).toEqual([]);
+});
+
 test("bodyTypeLabel formats values it was never told about", () => {
   expect(bodyTypeLabel("MOTORCYCLE")).toBe("Motorcycle");
   expect(bodyTypeLabel("QUADRICYCLE")).toBe("Quadricycle");

@@ -10,6 +10,7 @@ export default {
   rangeMonth: "इस महीने",
   rangeLast: "पिछले महीने",
   range3m: "पिछले 3 महीने",
+  period: "समय अवधि",
   range7d: "पिछले 7 दिन",
   range12m: "पिछले 12 महीने",
   rangeAll: "शुरू से अब तक",

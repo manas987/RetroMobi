@@ -9,6 +9,7 @@ export default {
   rangeMonth: "This month",
   rangeLast: "Last month",
   range3m: "Last 3 months",
+  period: "Period",
   range7d: "Last 7 days",
   range30d: "Last 30 days",
   range12m: "Last 12 months",

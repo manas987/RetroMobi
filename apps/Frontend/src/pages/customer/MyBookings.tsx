@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { CalendarDays, ChevronDown, Copy, X } from "lucide-react";
+import { CalendarDays, ChevronDown, Copy, IdCard, X } from "lucide-react";
 import { Header } from "../../components/Header";
 import { Footer } from "../../components/Footer";
 import { usePortalSession, usePortalQuery, portalFetch, type Row } from "../../lib/portal";
@@ -193,6 +193,13 @@ function BookingCard({ booking: b, token, due, onChanged }: { booking: Row; toke
         <BookingFact label={collected && !cancelled ? "Picked up" : "Pickup"} value={fmt(collected && !cancelled ? b.actual_pickup_at : b.scheduled_pickup_at)} />
         <BookingFact label={b.actual_return_at ? "Returned" : collected ? "Return due" : "Return"} value={fmt(b.actual_return_at ?? b.scheduled_return_at)} />
       </div>
+
+      {!!b.pickup_licence_ack_at && !b.pickup_licence_checked && !collected && !cancelled && b.status === "CONFIRMED" && (
+        <p className="mt-3 flex items-start gap-2 rounded-row bg-amber-soft px-3 py-2 text-sm text-on-amber">
+          <IdCard size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          Bring {b.rider_name ? `${String(b.rider_name)}’s` : "the rider’s"} original driving licence. The shop checks it before handing over the keys.
+        </p>
+      )}
 
       <div className="mt-3 flex items-center justify-between gap-x-3 gap-y-2 flex-wrap pb-3">
         <p className="text-sm text-ink-2"><span className="font-semibold text-ink tnum">{total}</span> booking total</p>

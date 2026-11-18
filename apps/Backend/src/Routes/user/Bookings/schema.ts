@@ -8,6 +8,7 @@ export const CreateHoldSchema = z.object({
   pickupAt: z.coerce.date(),
   returnAt: z.coerce.date(),
   couponCode: z.string().min(1).optional(),
+  licenceDeclaration: z.object({ validLicence: z.literal(true), cancelIfMissing: z.literal(true) }).optional(),
 });
 
 export const CancelBookingSchema = z.object({});

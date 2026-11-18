@@ -5,6 +5,7 @@ export default {
   chipTitle: "Get listed on RetroMobi",
   chipProgress: "{n} of 5 steps done",
   stepOf: "Step {n} of 5",
+  chooseStep: "Setup step",
   step_shop: "Shop details",
   step_licence: "Licence & papers",
   step_vehicles: "Vehicles",

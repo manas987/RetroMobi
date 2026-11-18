@@ -46,6 +46,23 @@ function vehicleIdsIn(results: Array<{ primaryOffer: { vehicleId: string } }>) {
 }
 
 describe("searchVehicles", () => {
+  test("price bounds and histogram use the displayed daily rate for a multi-day rental", async () => {
+    const { shopId, city } = await isolatedCity();
+    const vehicle = await createBookableVehicle(pool, { shopId });
+    const { pickupAt, returnAt } = futureWindow(500, 72);
+    const window = { city, pickupAt, returnAt };
+    const { results: [unfiltered] } = await searchVehicles(pool, window);
+    const { pricePerDay, totalAmount } = unfiltered!.primaryOffer;
+    expect(totalAmount).toBeGreaterThan(pricePerDay);
+
+    const matching = await searchVehicles(pool, { ...window, minPrice: pricePerDay, maxPrice: pricePerDay });
+    expect(vehicleIdsIn(matching.results)).toEqual([vehicle.id]);
+
+    const excluded = await searchVehicles(pool, { ...window, maxPrice: pricePerDay - 1 });
+    expect(excluded.results).toEqual([]);
+    expect(excluded.priceHistogram).toEqual([pricePerDay]);
+  });
+
   test("returns an ACTIVE vehicle that is free for the window", async () => {
     const { shopId, city } = await isolatedCity();
     const v = await createBookableVehicle(pool, { shopId });

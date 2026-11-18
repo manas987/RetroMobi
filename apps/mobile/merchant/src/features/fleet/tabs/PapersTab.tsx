@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { Camera, FileText, Upload } from "lucide-react-native";
 import { Linking, View } from "react-native";
 import {
-  Button, Card, Chip, ConfirmSheet, DateField, ErrorNote, Text, UploadFailedError, api, dateLabel,
+  Button, Card, ConfirmSheet, DateField, ErrorNote, Text, UploadFailedError, api, dateLabel,
   errorText, istDay, queryClient, space, uploadFile, useT, type PickedFile, type Row, type TKey, type Tone,
 } from "@retromobi/mobile-shared";
+import { StatusBadge, counterStyles } from "../../../ui/Counter";
 import { useMerchantQuery } from "../../../state/query";
 import { useMerchantShop } from "../../../state/shop";
 import { useCounterWrite } from "../../bookings/common";
@@ -56,8 +58,8 @@ export function PapersTab({ id, setup, electric }: { id: string; setup?: SetupVe
     setForm(type); setNumber(""); setExpiry(""); setFile(null); setCreated(null); setReplace(null); setNotice(null);
   };
   const fileButtons = (picked: (value: PickedFile) => Promise<void>) => <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-    <Button label={t("fleet.takePhoto")} disabled={write.busy} onPress={() => run(async () => { const [photo] = await pickImages(true); if (photo) await picked(photo); })} />
-    <Button label={t("common.uploadFile")} disabled={write.busy} onPress={() => run(async () => { const choice = await pickPaper(); if (choice) await picked(choice); })} />
+    <Button icon={Camera} label={t("fleet.takePhoto")} disabled={write.busy} onPress={() => run(async () => { const [photo] = await pickImages(true); if (photo) await picked(photo); })} />
+    <Button icon={Upload} label={t("common.uploadFile")} disabled={write.busy} onPress={() => run(async () => { const choice = await pickPaper(); if (choice) await picked(choice); })} />
   </View>;
 
   const render = (row: Row) => {
@@ -65,10 +67,10 @@ export function PapersTab({ id, setup, electric }: { id: string; setup?: SetupVe
     const expired = row.expires_at != null && String(row.expires_at).slice(0, 10) < istDay(new Date());
     const status = STATUS[expired ? "EXPIRED" : String(row.status)] ?? STATUS.PENDING!;
     const note = setup?.docs[type]?.state === "REJECTED" ? setup.docs[type]?.note : null;
-    return <Card key={String(row.id)} title={title(type)}>
+    return <Card key={String(row.id)} icon={FileText} style={counterStyles.panel} title={title(type)}>
       <Fields>
-        <Chip tone={row.storage_key ? status[0] : "muted"} label={t(row.storage_key ? status[1] : "fleet.noFile")} />
-        {required.includes(type) && <Chip tone="muted" label={t("fleet.neededChip")} />}
+        <StatusBadge tone={row.storage_key ? status[0] : "muted"} label={t(row.storage_key ? status[1] : "fleet.noFile")} />
+        {required.includes(type) && <StatusBadge tone="muted" label={t("fleet.neededChip")} />}
         {row.document_number != null && <Text>{String(row.document_number)}</Text>}
         <Text size="sm" color="ink2">{row.expires_at ? t(expired ? "fleet.expiredOn" : "fleet.validTo", { date: dateLabel(row.expires_at, lang) }) : t("fleet.noExpiry")}</Text>
         {note && <Text color="danger">{note}</Text>}
@@ -85,8 +87,8 @@ export function PapersTab({ id, setup, electric }: { id: string; setup?: SetupVe
     </Card>;
   };
   const other = docs.filter((row) => !required.includes(String(row.type)));
-  return <Card title={t("fleet.papersTitle")}>
-    <Fields>
+  return <Fields>
+      <Text size="lg" weight="bold" accessibilityRole="header">{t("fleet.papersTitle")}</Text>
       <Text color="ink2">{t("fleet.papersHint")}</Text>
       {notice && <ErrorNote text={notice} />}
       {settings && <Button label={lang === "hi" ? "सेटिंग खोलें" : "Open settings"} onPress={() => void Linking.openSettings().catch(() => {})} />}
@@ -94,7 +96,7 @@ export function PapersTab({ id, setup, electric }: { id: string; setup?: SetupVe
         <Fields>
           {!created && <>
             <LabelInput label={t("fleet.fPaperNumber")} value={number} onChangeText={setNumber} />
-            <DateField label={t("fleet.fExpires")} value={expiry} onChange={setExpiry} clearable={form === "RC"} />
+            <DateField inline label={t("fleet.fExpires")} value={expiry} onChange={setExpiry} clearable={form === "RC"} />
           </>}
           <Text>{t("fleet.fPaperFile")}{file?.name ? `: ${file.name}` : ""}</Text>
           {fileButtons(async (choice) => { setFile(choice); })}
@@ -117,8 +119,8 @@ export function PapersTab({ id, setup, electric }: { id: string; setup?: SetupVe
         <Text weight="bold" accessibilityRole="header">{t(`fleet.paperGroup_${key}`)}</Text>
         {types.filter((type) => required.includes(type)).map((type) => {
           const list = docs.filter((row) => row.type === type);
-          return list.length ? <Fields key={type}>{list.map(render)}</Fields> : <Card key={type} title={title(type)}>
-            <Fields><Chip tone="muted" label={t("fleet.neededChip")} />
+          return list.length ? <Fields key={type}>{list.map(render)}</Fields> : <Card key={type} icon={FileText} style={counterStyles.panel} title={title(type)}>
+            <Fields><StatusBadge tone="muted" label={t("fleet.neededChip")} />
               {canEdit && <Button label={t("fleet.addThisPaper")} disabled={write.busy} onPress={() => start(type)} />}
             </Fields>
           </Card>;
@@ -128,6 +130,5 @@ export function PapersTab({ id, setup, electric }: { id: string; setup?: SetupVe
       <ConfirmSheet open={!!remove} title={t("common.remove")} body={title(remove?.type ?? "")} danger cancelLabel={t("common.cancel")}
         confirmLabel={t("common.remove")} busy={write.busy} error={notice} onClose={() => setRemove(null)}
         onConfirm={() => { if (remove) run(async () => { await api(`${base}/${remove.id}`, { method: "DELETE" }); setRemove(null); }); }} />
-    </Fields>
-  </Card>;
+  </Fields>;
 }

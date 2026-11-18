@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { ChevronRight, Plus, Search } from "lucide-react-native";
-import { Button, ErrorNote, Input, LoadingRows, Screen, Text, colors, dateTimeLabel, errorMessage, radius, space, useSession } from "@retromobi/mobile-shared";
-import { EmptyState, IconAction } from "../../features/RiderSurface";
+import { CheckCircle2, MessageCircle, Plus, Search } from "lucide-react-native";
+import { Button, Chip, ErrorNote, Input, LoadingRows, Screen, Text, colors, dateTimeLabel, errorMessage, radius, space, useSession } from "@retromobi/mobile-shared";
+import { EmptyState, Headline, IconAction, PhotoPill } from "../../features/RiderSurface";
+import { art } from "../../ui/art";
 import { senderLabel, ticketTitle, type Ticket } from "../../features/support/tickets";
 import { usePrivate } from "../../state/private";
 
@@ -23,16 +24,13 @@ export default function Support() {
   const start = () => router.push("/support/new");
   const filtered = !!search.trim() || filter !== "all";
   return <Screen scroll={false} padded={false}>
-    {!session ? <EmptyState title="Need help with a ride?" text="Sign in to message RetroMobi or check an existing conversation."
+    {!session ? <EmptyState image={art.emptyChat} title="Need help with a ride?" text="Sign in to message RetroMobi or check an existing conversation."
       action={<Button label="Sign in" variant="primary" onPress={() => router.push("/login")} />} />
       : <FlatList showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} data={rows} keyExtractor={(item) => item.id} onRefresh={() => void q.refetch()} refreshing={q.isRefetching}
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={<View style={{ gap: space[3] }}>
-          <View style={styles.heading}>
-            <Text size="xxl" weight="bold" accessibilityRole="header">Support</Text>
-            <IconAction icon={Plus} label="New conversation" onPress={start} />
-          </View>
+          <Headline kicker="Questions about a ride?" title="Help" action={<IconAction icon={Plus} tone="forest" label="New conversation" onPress={start} />} />
           {!!q.data?.tickets.length && <>
             <View style={styles.search}>
               <Search size={17} color={colors.ink2} />
@@ -40,37 +38,39 @@ export default function Support() {
                 value={search} onChangeText={setSearch} returnKeyType="search" />
             </View>
             <View style={styles.filters}>
-              {FILTERS.map(({ value, label }) => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: filter === value }}
-                style={[styles.filter, filter === value && styles.activeFilter]} onPress={() => setFilter(value)}>
-                <Text size="sm" weight={filter === value ? "bold" : "medium"} color={filter === value ? "ink" : "ink2"}>{label}</Text>
-              </Pressable>)}
+              {FILTERS.map(({ value, label }) => <PhotoPill key={value} label={label} selected={filter === value} onPress={() => setFilter(value)} />)}
             </View>
           </>}
           {q.error && <ErrorNote text={errorMessage(q.error, "Couldn’t load conversations.")} onRetry={() => void q.refetch()} />}
         </View>}
         ListEmptyComponent={q.isPending ? <LoadingRows label="Loading conversations" /> : q.isSuccess
-          ? <EmptyState title={filtered ? "No matching conversations" : "No conversations yet"}
+          ? <EmptyState image={filtered ? undefined : art.emptyChat} title={filtered ? "No matching conversations" : "No conversations yet"}
             text={filtered ? "Try another search or filter." : "Start a conversation if you need help with a booking or the app."}
             action={filtered ? <Button label="Clear filters" onPress={() => { setFilter("all"); setSearch(""); }} /> : <Button label="New conversation" variant="primary" onPress={start} />} /> : undefined}
-        renderItem={({ item }) => <Pressable accessibilityRole="button" style={styles.conversation}
+        renderItem={({ item }) => <Pressable accessibilityRole="button" style={({ pressed }) => [styles.conversation, pressed && { opacity: 0.8 }]}
           onPress={() => router.push({ pathname: "/support/[ticketId]", params: { ticketId: item.id } })}>
-          <View style={{ flex: 1, gap: space[1] }}>
-            <Text weight="bold" numberOfLines={1}>{ticketTitle(item)}</Text>
-            <Text size="sm" color="ink2" numberOfLines={1}>{item.latest_message ? `${senderLabel(item.latest_sender_type, item.latest_is_mine)}: ${item.latest_message}` : item.first_message}</Text>
-            <Text size="xs" color="ink2">{dateTimeLabel(item.latest_message_at ?? item.created_at)} · {item.status === "RESOLVED" ? "Resolved" : item.status === "IN_PROGRESS" ? "In progress" : "Open"}</Text>
+          <View style={[styles.bubble, item.status === "RESOLVED" && { backgroundColor: colors.surface3 }]}>
+            {item.status === "RESOLVED" ? <CheckCircle2 size={20} color={colors.verified} /> : <MessageCircle size={20} color={colors.onAmber} />}
           </View>
-          <ChevronRight size={17} color={colors.ink2} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+              <Text weight="bold" numberOfLines={1} style={{ flex: 1 }}>{ticketTitle(item)}</Text>
+              <Text size="xs" color="ink2">{dateTimeLabel(item.latest_message_at ?? item.created_at)}</Text>
+            </View>
+            <Text size="sm" color="ink2" numberOfLines={1}>{item.latest_message ? `${senderLabel(item.latest_sender_type, item.latest_is_mine)}: ${item.latest_message}` : item.first_message}</Text>
+            <View style={{ alignSelf: "flex-start", marginTop: 2 }}>
+              <Chip tone={item.status === "RESOLVED" ? "good" : item.status === "IN_PROGRESS" ? "info" : "attention"} label={item.status === "RESOLVED" ? "Resolved" : item.status === "IN_PROGRESS" ? "In progress" : "Open"} />
+            </View>
+          </View>
         </Pressable>} />}
   </Screen>;
 }
 
 const styles = StyleSheet.create({
-  list: { flexGrow: 1, paddingHorizontal: space[4], paddingBottom: space[4] },
-  heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  search: { flexDirection: "row", alignItems: "center", paddingLeft: space[3], backgroundColor: colors.surface2, borderRadius: radius.full },
+  list: { flexGrow: 1, padding: space[4], gap: space[3] },
+  search: { flexDirection: "row", alignItems: "center", paddingLeft: space[4], backgroundColor: colors.surface3, borderRadius: radius.full },
   searchField: { flex: 1, paddingHorizontal: space[2], backgroundColor: "transparent", borderWidth: 0 },
-  filters: { flexDirection: "row", alignItems: "center", gap: space[4], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
-  filter: { minHeight: 48, minWidth: 48, justifyContent: "center", alignItems: "center", paddingHorizontal: space[1], borderBottomWidth: 2, borderBottomColor: "transparent" },
-  activeFilter: { borderBottomColor: colors.ink },
-  conversation: { minHeight: 72, paddingVertical: space[3], flexDirection: "row", alignItems: "center", gap: space[3], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  filters: { flexDirection: "row", alignItems: "center", gap: space[2] },
+  conversation: { padding: space[3], flexDirection: "row", alignItems: "flex-start", gap: space[3], borderRadius: 24, backgroundColor: colors.surface2, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+  bubble: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.amber, alignItems: "center", justifyContent: "center" },
 });

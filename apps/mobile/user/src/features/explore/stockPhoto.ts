@@ -9,8 +9,8 @@ const PHOTOS: Record<string, number[]> = {
   "TVS iQube": [require("../../../assets/vehicles/tvs-iqube.jpg")],
   "Yamaha Fascino 125": [require("../../../assets/vehicles/yamaha-fascino-125.jpg")],
   "Bajaj Chetak": [require("../../../assets/vehicles/bajaj-chetak.jpg")],
-  "TVS Jupiter 125": [require("../../../assets/vehicles/tvs-jupiter-125-side.webp"), require("../../../assets/vehicles/tvs-jupiter-125-front.webp")],
-  "Suzuki Access 125": [require("../../../assets/vehicles/suzuki-access-125-gold.png"), require("../../../assets/vehicles/suzuki-access-125-black.png")],
+  "TVS Jupiter 125": [require("../../../assets/vehicles/tvs-jupiter-125-side.jpg")],
+  "Suzuki Access 125": [require("../../../assets/vehicles/suzuki-access-125-studio.jpg")],
 };
 
 export function stockPhotos(make: string, model: string): number[] {

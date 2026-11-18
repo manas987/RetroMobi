@@ -76,17 +76,17 @@ export async function updateRider(
   pool: Pool,
   userId: string,
   riderId: string,
-  input: { name?: string; dob?: string },
+  input: { name?: string; dob?: string | null },
 ) {
   await requireOwnedRider(pool, userId, riderId);
   const { rows } = await pool.query(
     `update riders
         set name = coalesce($1, name),
-            dob = coalesce($2, dob),
+            dob = case when $4 then $2::date else dob end,
             updated_at = now()
       where id = $3
       returning id, name, dob`,
-    [input.name ?? null, input.dob ?? null, riderId],
+    [input.name ?? null, input.dob ?? null, riderId, input.dob !== undefined],
   );
   return rows[0];
 }

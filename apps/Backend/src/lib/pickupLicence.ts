@@ -17,3 +17,17 @@ export function isPickupLicenceOutage(session: {
 }
 
 export const PICKUP_LICENCE_ACK = "Bring the rider’s original, valid licence for this vehicle. If the shop can’t hand it over because the licence is missing or invalid, the usual cancellation charges apply.";
+
+/**
+ * Off for the beta: there is no registered company yet, so no KYC provider.
+ * Customers declare instead (LICENCE_DECLARATION) and the shop checks the
+ * original at pickup. "true" restores the online gate in lib/licenceGate.ts.
+ */
+export function onlineLicenceCheck() {
+  return process.env.ONLINE_LICENCE_CHECK === "true";
+}
+
+export const LICENCE_DECLARATION = [
+  "Every rider has a valid driving licence for the vehicle they are riding.",
+  "I will bring the original licence to pickup. If the shop can't check it, the booking is cancelled: the deposit is refunded, the rental is not.",
+];

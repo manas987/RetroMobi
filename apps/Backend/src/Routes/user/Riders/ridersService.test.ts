@@ -85,7 +85,7 @@ describe("ridersService", () => {
 
   test("updating name/dob does not touch the licence verification", async () => {
     const user = await createUser(pool);
-    const rider = await createRider(pool, user.id, { name: "Before Name" });
+    const rider = await createRider(pool, user.id, { name: "Before Name", dob: "1995-04-03" });
     await pool.query(
       `insert into driving_licence_verifications (rider_id, provider, licence_number, status, expires_on, verified_at)
        values ($1, 'TEST', 'DLTEST2', 'VERIFIED', '2035-01-01', now())`,
@@ -93,6 +93,9 @@ describe("ridersService", () => {
     );
 
     await updateRider(pool, user.id, rider.id, { name: "After Name" });
+    expect((await listRiders(pool, user.id))[0]?.dob).toBe("1995-04-03");
+    await updateRider(pool, user.id, rider.id, { dob: null });
+    expect((await listRiders(pool, user.id))[0]?.dob).toBeNull();
 
     const { rows } = await pool.query(
       `select status, licence_number from driving_licence_verifications where rider_id = $1`,

@@ -8,6 +8,7 @@ export default {
   searchPlaceholder: "Name, phone or number plate",
   allVehicles: "All vehicles",
   allSources: "All bookings",
+  filters: "Filters",
   filterSource: "Online or walk-in",
   filterVehicle: "Vehicle",
   tabToday: "Today",

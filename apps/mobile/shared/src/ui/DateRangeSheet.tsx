@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { ChevronDown } from "lucide-react-native";
 import { istBookingTime, monthOf, splitIstBookingTime, type DateWindow } from "../lib/calendar";
 import { tapDay } from "../lib/dateRange";
 import { formatClock, formatIstTime, istDay, type Lang } from "../lib/format";
-import { space } from "../theme";
+import { colors, radius, space } from "../theme";
 import { MonthGrid } from "./MonthGrid";
 import { Sheet } from "./Sheet";
 import { SelectOptions } from "./SelectSheet";
@@ -73,8 +74,13 @@ function RangeEditor({ onClose, value, onChange, lang, monochrome }: {
             if (result.commit) setTo(day);
             else { setFrom(day); setTo(""); }
           }} />
-        <Button label={`${pickupLabel} · ${timeLabel(pickupTime)}`} onPress={() => setEditingTime("pickup")} />
-        <Button label={`${returnLabel} · ${timeLabel(returnTime)}`} onPress={() => setEditingTime("return")} />
+        {monochrome ? <View style={styles.times}>
+          <TimeTile label={pickupLabel} value={timeLabel(pickupTime)} onPress={() => setEditingTime("pickup")} />
+          <TimeTile label={returnLabel} value={timeLabel(returnTime)} onPress={() => setEditingTime("return")} />
+        </View> : <>
+          <Button label={`${pickupLabel} · ${timeLabel(pickupTime)}`} onPress={() => setEditingTime("pickup")} />
+          <Button label={`${returnLabel} · ${timeLabel(returnTime)}`} onPress={() => setEditingTime("return")} />
+        </>}
         {!!to && !validWindow && <Text color="danger" size="sm" accessibilityRole="alert">
           {hi ? "आने वाला पिकअप समय चुनें। वापसी पिकअप के बाद होनी चाहिए।" : "Choose a future pick-up time and a return after pick-up."}
         </Text>}
@@ -82,3 +88,21 @@ function RangeEditor({ onClose, value, onChange, lang, monochrome }: {
     </Sheet>
   );
 }
+
+/** The website's two side-by-side time fields under the calendar. */
+function TimeTile({ label, value, onPress }: { label: string; value: string; onPress: () => void }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}, ${value}`} onPress={onPress}
+    style={({ pressed }) => [styles.tile, pressed && { backgroundColor: colors.surface3 }]}>
+    <View style={{ flex: 1 }}>
+      <Text size="xs" color="ink3">{label}</Text>
+      <Text weight="bold">{value}</Text>
+    </View>
+    <ChevronDown size={16} color={colors.ink3} />
+  </Pressable>;
+}
+
+const styles = StyleSheet.create({
+  times: { flexDirection: "row", gap: space[2], borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingTop: space[3] },
+  tile: { flex: 1, minHeight: 56, flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], borderRadius: radius.panel,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.lineStrong },
+});

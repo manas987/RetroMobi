@@ -17,6 +17,8 @@ export const REJECTION_COPY: Record<string, string> = {
   CONSENT_EXPIRED: "That DigiLocker request timed out. Start again when you're ready.",
   PROVIDER_UNAVAILABLE:
     "We couldn't reach the licence check just now, so a person will review this instead. Nothing more is needed from you.",
+  PROVIDER_OUTAGE:
+    "The licence provider is temporarily unavailable. Your check is waiting for review.",
   DOCUMENT_UNAVAILABLE:
     "DigiLocker didn't return your licence. A person will review this instead.",
   DOCUMENT_UNREADABLE:

@@ -9,6 +9,7 @@ import {
   useSession, decodeJwtSubject, type PickedFile,
 } from "@retromobi/mobile-shared";
 import { Card, EmptyState, IconAction } from "../../features/RiderSurface";
+import { trail } from "../../ui/trail";
 import { canPreviewImage, messageCaption, senderLabel, ticketTitle, type Attachment, type Message, type Ticket } from "../../features/support/tickets";
 import { useDiscardChanges } from "../../state/discard";
 import { refreshRiderData, usePrivate, useWrite } from "../../state/private";
@@ -111,7 +112,7 @@ function ChatThread({ id, userId }: { id: string; userId: string | null }) {
           <Input accessibilityLabel="Your message" placeholder="Message" multiline value={body} onChangeText={setBody}
             editable={!w.busy} style={styles.messageInput} />
         </>}
-        <IconAction icon={posted ? RotateCw : Send} label={sendingFile ? "Uploading attachment" : posted ? "Retry attachment" : "Send message"}
+        <IconAction tone="forest" icon={posted ? RotateCw : Send} label={sendingFile ? "Uploading attachment" : posted ? "Retry attachment" : "Send message"}
           primary busy={w.busy}
           disabled={!body.trim() && !file} onPress={send} />
       </View>
@@ -141,10 +142,10 @@ function ChatThread({ id, userId }: { id: string; userId: string | null }) {
           {newDay && <Text style={styles.day} center size="xs" color="ink2">{dateLabel(day)}</Text>}
           <View style={[styles.message, mine ? styles.outgoing : styles.incoming, newSpeaker && { marginTop: space[1] }]}>
             {!mine && newSpeaker && <Text size="xs" weight="bold" color="ink2">{senderLabel(item.sender_type, false)}</Text>}
-            {!!caption && <Text selectable>{caption}</Text>}
+            {!!caption && <Text selectable color={mine ? "white" : "ink"}>{caption}</Text>}
             {item.attachments?.map((attachment) => <AttachmentPreview key={attachment.id} attachment={attachment}
               path={`${base}/attachments/${encodeURIComponent(attachment.id)}/download`} onOpen={() => open(attachment)} disabled={download.busy} />)}
-            <Text style={{ alignSelf: mine ? "flex-end" : "flex-start" }} size="xs" color="ink2">{formatIstTime(item.created_at)}</Text>
+            <Text style={{ alignSelf: mine ? "flex-end" : "flex-start", color: mine ? trail.mist : colors.ink2 }} size="xs">{formatIstTime(item.created_at)}</Text>
           </View>
         </View>;
       }} />
@@ -172,12 +173,12 @@ function AttachmentPreview({ attachment, path, onOpen, disabled }: { attachment:
 
 const styles = StyleSheet.create({
   composer: { flexDirection: "row", alignItems: "flex-end", gap: space[2] },
-  messageInput: { flex: 1, maxHeight: 120, borderRadius: radius.sheet, borderColor: colors.line, backgroundColor: colors.surface2, paddingVertical: space[3] },
+  messageInput: { flex: 1, maxHeight: 120, borderRadius: 26, borderColor: colors.line, backgroundColor: colors.surface2, paddingVertical: space[3] },
   attachment: { flexDirection: "row", alignItems: "center", gap: space[2], paddingLeft: space[3], backgroundColor: colors.surface2, borderRadius: radius.sheet },
   day: { alignSelf: "center", backgroundColor: colors.surface3, paddingHorizontal: space[3], paddingVertical: space[1], borderRadius: radius.full },
-  message: { maxWidth: "88%", paddingHorizontal: space[3], paddingVertical: space[2], borderRadius: radius.panel, gap: space[1] },
-  outgoing: { alignSelf: "flex-end", backgroundColor: `${colors.amber}55`, borderBottomRightRadius: 4 },
-  incoming: { alignSelf: "flex-start", backgroundColor: colors.surface3, borderBottomLeftRadius: 4 },
-  file: { minHeight: 48, width: 220, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: space[2] },
+  message: { maxWidth: "84%", paddingHorizontal: space[4], paddingVertical: space[3], borderRadius: 22, gap: space[1] },
+  outgoing: { alignSelf: "flex-end", backgroundColor: trail.forest, borderBottomRightRadius: 6 },
+  incoming: { alignSelf: "flex-start", backgroundColor: colors.surface3, borderBottomLeftRadius: 6 },
+  file: { minHeight: 48, width: 220, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: space[2], backgroundColor: colors.surface, borderRadius: 16, paddingHorizontal: space[3] },
   image: { width: 220, maxWidth: "100%", aspectRatio: 4 / 3, backgroundColor: colors.surface, borderRadius: radius.row, overflow: "hidden" },
 });

@@ -43,7 +43,7 @@ export const colors = {
 /** 4-point scale. `space[4]` = 16. */
 export const space = { 0: 0, 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32, 10: 40, 12: 48 } as const;
 
-export const radius = { row: 10, panel: 14, button: 16, card: 20, sheet: 24, full: 999 } as const;
+export const radius = { row: 10, panel: 14, button: 16, card: 20, sheet: 24, hero: 28, full: 999 } as const;
 
 /**
  * Airbnb Cereal, three cuts. React Native picks a font file by family name,
@@ -55,6 +55,19 @@ export const font = { regular: "Cereal-Book", medium: "Cereal-Medium", bold: "Ce
 
 /** Type scale. Body is 15, as on the website. */
 export const text = { xs: 12, sm: 13, base: 15, md: 16, lg: 18, xl: 22, xxl: 26, display: 32 } as const;
+
+/**
+ * Scale the whole type ramp so body text is `base`. Call once at module load,
+ * before the first render (the merchant app uses 16 for easier reading).
+ * ponytail: mutates the shared ramp in place; StyleSheets built at import
+ * time keep the old sizes. Pass the scale through context if that ever matters.
+ */
+const TEXT_15 = { ...text };
+export function setTextScale(base: number) {
+  // From the original ramp, so running twice (Fast Refresh) never compounds.
+  const ramp = text as Record<keyof typeof text, number>;
+  for (const key of Object.keys(TEXT_15) as (keyof typeof text)[]) ramp[key] = Math.round(TEXT_15[key] * base / 15);
+}
 
 /** Smallest touch target, in points (Apple 44, Android 48). */
 export const HIT = 48;

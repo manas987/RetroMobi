@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { FlatList, View } from "react-native";
+import { FlatList, Pressable, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Bike, Plus } from "lucide-react-native";
-import { Button, Card, Chip, ConfirmSheet, EmptyState, ErrorNote, LoadingRows, Screen, Segmented, Text,
-  api, bookingStage, errorText, queryClient, rupees, space, useT, type Row } from "@retromobi/mobile-shared";
+import { CalendarPlus, ChevronRight, Plus } from "lucide-react-native";
+import { Button, Card, ConfirmSheet, EmptyState, ErrorNote, LoadingRows, Screen, Segmented, Text,
+  api, bookingStage, colors, errorText, queryClient, radius, rupees, space, useT, type Row } from "@retromobi/mobile-shared";
+import { IconAction, PageTitle, StatusBadge, counter, counterStyles } from "../../../ui/Counter";
+import { VehicleThumb } from "../../../features/fleet/VehicleThumb";
+import { art } from "../../../ui/art";
 import { useMerchantShop } from "../../../state/shop";
 import { useMerchantQuery } from "../../../state/query";
 import { AddVehicleSheet } from "../../../features/fleet/AddVehicleSheet";
@@ -55,11 +58,10 @@ function VehiclesBody({ shopId }: { shopId: string }) {
   const open = (id: string, tab?: string) => router.push({ pathname: "/vehicle/[id]", params: { id, shopId, tab } });
 
   const controls = <View style={{ gap: space[3] }}>
-    <Text size="xl" weight="bold" accessibilityRole="header">{t("fleet.title")}</Text>
-    <Text color="ink2">{t("fleet.subtitle")}</Text>
-    {can("fleet:write") && <Button icon={Plus} label={t("fleet.addVehicle")} variant="primary" onPress={() => setAdd(true)} />}
-    {!!ready.length && can("fleet:write") && <Button label={t("fleet.showAll")} onPress={() => { setDone(0); setConfirm(ready); }} />}
-    <Segmented value={view} onChange={(next) => router.setParams({ view: next })}
+    <PageTitle title={t("fleet.title")} subtitle={t("fleet.subtitle")} action={can("fleet:write") &&
+      <IconAction icon={Plus} label={t("fleet.addVehicle")} primary onPress={() => setAdd(true)} />} />
+    {!!ready.length && can("fleet:write") && <Button label={t("fleet.showAll")} variant="dark" onPress={() => { setDone(0); setConfirm(ready); }} />}
+    <Segmented pill value={view} onChange={(next) => router.setParams({ view: next })}
       options={[{ value: "list", label: t("fleet.viewList") }, { value: "calendar", label: t("fleet.viewCalendar") }, { value: "setup", label: t("fleet.viewSetup") }]} />
   </View>;
   return <Screen scroll={false} padded={false} background="canvas">
@@ -72,26 +74,40 @@ function VehiclesBody({ shopId }: { shopId: string }) {
         {active.isError ? <ErrorNote text={errorText(lang, active.error)} retryLabel={t("common.retry")} onRetry={() => void active.refetch()} />
           : active.isSuccess && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
             {options.filter(([key]) => (key !== "BLOCKED" && key !== "MISSED") || tally[key] > 0)
-              .map(([key, label, tone]) => <Chip key={key} tone={tone} label={t(`fleet.${label}`, { n: tally[key] })} />)}
+              .map(([key, label, tone]) => <StatusBadge key={key} tone={tally[key] > 0 ? tone : "muted"} label={t(`fleet.${label}`, { n: tally[key] })} />)}
           </View>}
         {setup.isError && <ErrorNote text={errorText(lang, setup.error)} retryLabel={t("common.retry")} onRetry={() => void setup.refetch()} />}
       </View>}
       ListEmptyComponent={q.isPending ? <LoadingRows label={t("common.loading")} />
         : q.isError ? <ErrorNote text={errorText(lang, q.error)} retryLabel={t("common.retry")} onRetry={() => void q.refetch()} />
-        : <EmptyState text={t("fleet.empty")} icon={Bike} />}
+        : <EmptyState text={t("fleet.empty")} image={art.emptyVehicles} action={can("fleet:write") &&
+          <Button icon={Plus} label={t("fleet.addVehicle")} onPress={() => setAdd(true)} />} />}
       renderItem={({ item }) => {
         const id = String(item.id);
         const free = active.isSuccess && vehicleNow(item, staged).avail === "FREE";
-        return <Card icon={Bike} title={vehicleLabel(item)}>
-          <View style={{ gap: space[2] }}>
-            {active.isSuccess && <AvailChip vehicle={item} staged={staged} />}
-            {item.amount == null ? <Text color="danger" size="sm">{t("fleet.noPrice")}</Text>
-              : <Text color="ink2" size="sm">{t("common.perDay", { amount: rupees(Number(item.amount)) })} · {t("fleet.depositShort", { amount: rupees(Number(item.security_deposit_amount ?? 0)) })}</Text>}
-            <Listing item={setupById.get(id)} />
-            {free && item.amount != null && can("bookings:write") && <Button label={t("fleet.book")} onPress={() => setWalkin({ id })} />}
+        const name = [item.make, item.model].filter(Boolean).join(" ") || vehicleLabel(item);
+        return <Card style={{ ...counterStyles.panel, padding: space[3], gap: space[2] }}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${name} · ${String(item.registration_number ?? "")}`} onPress={() => open(id)}
+            style={({ pressed }) => [{ ...counterStyles.row, borderRadius: radius.panel }, pressed && { backgroundColor: counter.pale }]}>
+            <VehicleThumb vehicleId={id} vehicle={item} size={88} />
+            <View style={{ flex: 1, minWidth: 0, gap: space[1] }}>
+              <Text weight="bold" size="md" numberOfLines={2} style={{ color: counter.navy }}>{name}</Text>
+              <Text size="sm" color="ink2" tnum>{String(item.registration_number ?? "")}</Text>
+              {active.isSuccess && <AvailChip vehicle={item} staged={staged} />}
+            </View>
+            <ChevronRight size={18} color={colors.ink2} />
+          </Pressable>
+          <View style={{ ...counterStyles.row, flexWrap: "wrap", justifyContent: "space-between", paddingHorizontal: space[1] }}>
+            <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 110 }}>
+              {item.amount == null ? <Text color="danger" size="sm">{t("fleet.noPrice")}</Text> : <>
+                <Text weight="bold" size="lg" tnum style={{ color: counter.navy }}>{t("common.perDay", { amount: rupees(Number(item.amount)) })}</Text>
+                <Text color="ink2" size="xs">{t("fleet.depositShort", { amount: rupees(Number(item.security_deposit_amount ?? 0)) })}</Text>
+              </>}
+            </View>
+            {free && item.amount != null && can("bookings:write") && <Button label={t("fleet.book")} icon={CalendarPlus} variant="primary" onPress={() => setWalkin({ id })} />}
             {item.amount == null && can("pricing:write") && <Button label={t("fleet.addPrice")} onPress={() => open(id, "price")} />}
-            <Button label={t("fleet.manage")} variant="ghost" onPress={() => open(id)} />
           </View>
+          <Listing item={setupById.get(id)} />
         </Card>;
       }} />}
     <AddVehicleSheet open={add} onClose={() => setAdd(false)} onManage={(id) => { setAdd(false); open(id, "photos"); }} />

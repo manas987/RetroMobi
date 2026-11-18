@@ -6,6 +6,7 @@ export default {
   chipTitle: "RetroMobi पर लिस्ट करें",
   chipProgress: "5 में से {n} स्टेप पूरे",
   stepOf: "स्टेप {n} / 5",
+  chooseStep: "सेटअप का चरण",
   step_shop: "दुकान की जानकारी",
   step_licence: "लाइसेंस और कागज़",
   step_vehicles: "गाड़ियाँ",

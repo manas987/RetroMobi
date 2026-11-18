@@ -1,16 +1,21 @@
 import { useRef, useState } from "react";
-import { Platform, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
+import { Image } from "expo-image";
+import { ArrowLeft, X } from "lucide-react-native";
 import { Stack, useRouter } from "expo-router";
 import { GoogleSignin, isSuccessResponse } from "@react-native-google-signin/google-signin";
 import {
-  ApiError, Button, ErrorNote, Field, Input, Logo, OtpField, PhoneField, Screen, Text,
-  api, DEFAULT_COUNTRY, errorMessage, getDeviceId, setSession, space, useCountdown, validPhone,
+  ApiError, Button, ErrorNote, Field, Input, OtpField, PhoneField, Screen, Text,
+  api, colors, DEFAULT_COUNTRY, errorMessage, getDeviceId, setSession, space, useCountdown, validPhone,
 } from "@retromobi/mobile-shared";
-import { Card } from "../features/RiderSurface";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { IconAction, PillCTA } from "../features/RiderSurface";
+import { trail, type } from "../ui/trail";
+import { art } from "../ui/art";
 
 type Step = "phone" | "otp" | "email" | "emailOtp" | "name";
 const titles: Record<Step, string> = {
-  phone: "Welcome to RetroMobi", otp: "Verify your number", email: "Verify your email", emailOtp: "Verify your email", name: "Almost there",
+  phone: "Let’s get you riding", otp: "Verify your number", email: "Verify your email", emailOtp: "Verify your email", name: "Almost there",
 };
 const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
@@ -19,6 +24,7 @@ const emailLooksValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val
 
 export default function Login() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>("phone");
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const [digits, setDigits] = useState("");
@@ -127,16 +133,22 @@ export default function Login() {
     else { setCode(""); setSignup(""); set("phone"); }
   };
 
-  return <Screen edges={["left", "right", "bottom"]} contentStyle={{ gap: space[4] }}
-    footer={<Button label={label} variant="primary" size="lg" full busy={busy} disabled={!enabled} onPress={submit} />}>
-    <Stack.Screen options={{ title: "Sign in" }} />
-    <Logo size={34} />
-    <Text size="xl" weight="bold">Ride the road less ordinary.</Text>
-    <Text color="ink2">Licensed scooters and motorcycles across Dehradun, Haridwar and Rishikesh.</Text>
-    <Card title={titles[step]}>
-      <View style={{ gap: space[3] }}>
+  return <Screen edges={["left", "right", "bottom"]} padded={false}
+    footer={<PillCTA label={label} busy={busy} disabled={!enabled} onPress={submit} />}>
+    <Stack.Screen options={{ title: "Sign in", headerShown: false }} />
+    <View style={styles.hero}>
+      <Image source={art.login} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={{ top: "62%" }} accessible={false} />
+      <View style={[styles.heroBar, { paddingTop: insets.top + space[2] }]}>
+        <IconAction icon={step === "phone" ? X : ArrowLeft} tone="white" label={step === "phone" ? "Close" : "Back"} disabled={busy}
+          onPress={step === "phone" ? close : back} />
+      </View>
+    </View>
+    <View style={styles.sheet}>
+      <View style={{ gap: space[2] }}>
+        <Text weight="bold" accessibilityRole="header" style={type.headline}>{titles[step]}</Text>
         <Text color="ink2">{description}</Text>
-        {step !== "phone" && <Button variant="ghost" label="Back" disabled={busy} onPress={back} />}
+      </View>
+      <View style={{ gap: space[3] }}>
         {error && <ErrorNote text={error} />}
         {step === "phone" && <PhoneField value={digits} onChange={setDigits} country={country} onCountryChange={setCountry} autoFocus onSubmit={sendPhone} />}
         {step === "otp" && <OtpField key="phone-code" value={code} onChange={setCode} onComplete={verifyPhone} />}
@@ -155,6 +167,13 @@ export default function Login() {
           variant="ghost" disabled={busy || resend.remaining > 0} onPress={step === "otp" ? sendPhone : sendEmail} />}
         {step === "phone" && <Text color="ink2" size="xs">By continuing, you agree to RetroMobi&apos;s Terms and Privacy notice.</Text>}
       </View>
-    </Card>
+    </View>
   </Screen>;
 }
+
+const styles = StyleSheet.create({
+  hero: { height: 290, backgroundColor: trail.forest },
+  heroBar: { paddingHorizontal: space[4] },
+  sheet: { flexGrow: 1, marginTop: -trail.hero, borderTopLeftRadius: trail.hero, borderTopRightRadius: trail.hero, backgroundColor: colors.surface,
+    padding: space[5], paddingTop: space[6], gap: space[5] },
+});

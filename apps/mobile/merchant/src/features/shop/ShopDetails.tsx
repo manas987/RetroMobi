@@ -2,9 +2,10 @@ import { useState } from "react";
 import { View } from "react-native";
 import { usePreventRemove } from "expo-router";
 import {
-  Button, Card, ConfirmSheet, ErrorNote, SelectField, Switch, Text, api, queryClient, space, useT, useToast, type Row, type TKey,
+  Button, Card, ConfirmSheet, ErrorNote, Line, SelectField, Switch, Text, api, queryClient, space, useT, useToast, type Row, type TKey,
 } from "@retromobi/mobile-shared";
 import { useMerchantShop } from "../../state/shop";
+import { counterStyles } from "../../ui/Counter";
 import { useMerchantQuery } from "../../state/query";
 import { useCounterWrite } from "../bookings/common";
 import { Fields, LabelInput, Pending } from "../fleet/tabs/Fields";
@@ -15,24 +16,25 @@ export function HoursEditor({ value, onChange, editable }: { value: Hours; onCha
   const { t, date, time } = useT();
   const clock = (value: string) => time(`2024-01-01T${value}:00+05:30`);
   const options = (value: string) => [...new Set([...HALF_HOURS, value])].sort().map((v) => ({ value: v, label: clock(v) }));
-  return <Card title={t("setup.hoursTitle")}>
+  return <Card style={counterStyles.panel} title={t("setup.hoursTitle")}>
     <Fields>
       {editable && <Button variant="ghost" label={t("setup.sameEveryDay")} onPress={() => onChange(sameEveryDay(value))} />}
       {DAY_ORDER.map((day) => {
         const name = date(`2024-01-0${day || 7}T12:00:00+05:30`, { weekday: "long" });
         const slot = value[day];
         return <Fields key={day}>
+          <Line />
           <View style={{ minHeight: 48, flexDirection: "row", gap: space[2], alignItems: "center" }}>
             <Text style={{ flex: 1 }} weight="medium">{name}</Text>
             {editable && <Switch accessibilityLabel={name} value={!!slot} onValueChange={(open) => onChange({ ...value, [day]: open ? { ...DEFAULT_SLOT } : null })} />}
             {!editable && <Text color="ink2">{slot ? `${clock(slot.opensAt)} – ${clock(slot.closesAt)}` : t("setup.closedDay")}</Text>}
           </View>
-          {editable && (slot ? <>
-            <SelectField label={t("setup.opensAt")} value={slot.opensAt} options={options(slot.opensAt)} closeLabel={t("common.close")}
-              onChange={(opensAt) => onChange({ ...value, [day]: { ...slot, opensAt } })} />
-            <SelectField label={t("setup.closesAt")} value={slot.closesAt} options={options(slot.closesAt)} closeLabel={t("common.close")}
-              onChange={(closesAt) => onChange({ ...value, [day]: { ...slot, closesAt } })} />
-          </> : <Text color="ink2">{t("setup.closedDay")}</Text>)}
+          {editable && (slot ? <View style={{ flexDirection: "row", gap: space[2] }}>
+            <View style={{ flex: 1 }}><SelectField compact label={t("setup.opensAt")} value={slot.opensAt} options={options(slot.opensAt)} closeLabel={t("common.close")}
+              onChange={(opensAt) => onChange({ ...value, [day]: { ...slot, opensAt } })} /></View>
+            <View style={{ flex: 1 }}><SelectField compact label={t("setup.closesAt")} value={slot.closesAt} options={options(slot.closesAt)} closeLabel={t("common.close")}
+              onChange={(closesAt) => onChange({ ...value, [day]: { ...slot, closesAt } })} /></View>
+          </View> : <Text color="ink2">{t("setup.closedDay")}</Text>)}
         </Fields>;
       })}
       {editable && hoursInvalid(value) && <ErrorNote text={t("setup.hoursInvalid")} />}
@@ -102,7 +104,7 @@ function ShopEditor({ shop, shopId, setup, onDone }: { shop: Row; shopId: string
   }
 
   return <Fields>
-    <Card title={t(setup ? "setup.shopTitle" : "shop.detailsCard")}>
+    <Card style={counterStyles.panel} title={t(setup ? "setup.shopTitle" : "shop.detailsCard")}>
       <Fields>
         {setup && <Text color="ink2">{t("setup.shopWhy")}</Text>}
         {details.filter(([key]) => !setup || ["addressLine1", "city", "pincode", "phone"].includes(key)).map(([key, , label]) =>

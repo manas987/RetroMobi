@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { FlatList } from "react-native";
+import { ChevronRight } from "lucide-react-native";
+import { FlatList, Pressable, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useQueries } from "@tanstack/react-query";
 import {
-  Button, Card, Chip, ConfirmSheet, EmptyState, ErrorNote, Input, LoadingRows, Screen, SelectField, Text,
-  api, bookingStage, can, decodeJwtSubject, errorText, rupees, space, useSession, useT, useToast, type Row,
+  Card, ConfirmSheet, EmptyState, ErrorNote, LoadingRows, Screen, SelectField, Text,
+  api, bookingStage, can, colors, decodeJwtSubject, errorText, rupees, space, useSession, useT, useToast, type Row,
 } from "@retromobi/mobile-shared";
+import { SearchField, StatusBadge, counter, counterStyles } from "../../ui/Counter";
+import { VehicleThumb } from "../../features/fleet/VehicleThumb";
 import { AvailChip, STAGE_TONE, type SetupData } from "../../features/fleet/listing";
 import { Fields } from "../../features/fleet/tabs/Fields";
 import { useMerchantShop } from "../../state/shop";
@@ -57,8 +60,8 @@ export default function AllVehicles() {
       contentContainerStyle={{ gap: space[3], padding: space[4] }} onRefresh={reload} refreshing={fetching} keyboardShouldPersistTaps="handled"
       ListHeaderComponent={<Fields>
         <Text color="ink2">{t("shop.allVehiclesSubtitle")}</Text>
-        <Input accessibilityLabel={t("shop.vehSearch")} placeholder={t("shop.vehSearch")} value={search} onChangeText={setSearch} returnKeyType="search" />
-        <SelectField label={t("shop.colBranch")} value={branch} onChange={setBranch} closeLabel={t("common.close")}
+        <SearchField accessibilityLabel={t("shop.vehSearch")} placeholder={t("shop.vehSearch")} value={search} onChangeText={setSearch} returnKeyType="search" />
+        <SelectField compact label={t("shop.colBranch")} value={branch} onChange={setBranch} closeLabel={t("common.close")}
           options={[{ value: "", label: t("shop.vehAllBranches") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
         <Text size="sm" color="ink2">{t("shop.vehCount", { n: items.length, m: branches.length })}</Text>
         {errors.length > 0 && <ErrorNote text={errorText(lang, errors[0]?.error)} retryLabel={t("common.retry")} onRetry={reload} />}
@@ -69,15 +72,25 @@ export default function AllVehicles() {
         const { vehicle: v, branch: source, staged, stage, hasStatus } = item;
         const targets = source.write && source.owner ? branches.filter((b) => b.id !== source.id && b.write && b.owner === source.owner) : [];
         const booked = staged.some((s) => s.b.vehicle_id === v.id);
-        return <Card title={vehicleLabel(v)}>
+        return <Card style={counterStyles.panel}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${vehicleLabel(v)} · ${source.name}`} style={({ pressed }) => [counterStyles.row, pressed && { opacity: 0.7 }]}
+            onPress={() => { setShopId(source.id); router.push({ pathname: "/vehicle/[id]", params: { id: String(v.id) } }); }}>
+            <VehicleThumb vehicleId={String(v.id)} vehicle={v} size={64} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text weight="bold" style={{ color: counter.navy }}>{[v.make, v.model].filter(Boolean).join(" ")}</Text>
+              <Text size="sm" color="ink2">{String(v.registration_number ?? "")} · {source.name}</Text>
+            </View>
+            <ChevronRight size={18} color={colors.ink2} />
+          </Pressable>
           <Fields>
-            <Text weight="medium">{source.name}</Text>
-            {stage && <Chip label={t(`fleet.stage_${stage}`)} tone={STAGE_TONE[stage]} />}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+            {stage && <StatusBadge label={t(`fleet.stage_${stage}`)} tone={STAGE_TONE[stage]} />}
             {hasStatus && <AvailChip vehicle={v} staged={staged} />}
-            <Text size="sm" color="ink2">{v.amount == null ? t("fleet.noPrice") : t("common.perDay", { amount: rupees(Number(v.amount)) })}</Text>
-            <Button label={t("fleet.manage")} onPress={() => { setShopId(source.id); router.push({ pathname: "/vehicle/[id]", params: { id: String(v.id) } }); }} />
-            {!!targets.length && hasStatus && (booked ? <><Chip label={t("shop.hasBooking")} tone="muted" /><Text size="xs" color="ink2">{t("shop.hasBookingWhy")}</Text></>
-              : <SelectField label={t("shop.moveTo")} value={null} placeholder={t("shop.moveLabel", { vehicle: String(v.registration_number) })}
+            </View>
+            {v.amount == null ? <Text size="sm" color="danger">{t("fleet.noPrice")}</Text>
+              : <Text weight="bold" size="lg" tnum style={{ color: counter.navy }}>{t("common.perDay", { amount: rupees(Number(v.amount)) })}</Text>}
+            {!!targets.length && hasStatus && (booked ? <><StatusBadge label={t("shop.hasBooking")} tone="muted" /><Text size="xs" color="ink2">{t("shop.hasBookingWhy")}</Text></>
+              : <SelectField compact label={t("shop.moveTo")} value={null} placeholder={t("shop.colBranch")}
                 closeLabel={t("common.close")} options={targets.map((b) => ({ value: b.id, label: b.name }))}
                 onChange={(id) => { const to = targets.find((b) => b.id === id); if (to) setMove({ vehicle: v, from: source, to }); }} />)}
           </Fields>

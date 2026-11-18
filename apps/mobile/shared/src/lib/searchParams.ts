@@ -148,11 +148,12 @@ export function activeFilters(c: SearchCriteria): { key: string; label: string; 
   for (const m of c.make ?? []) {
     out.push({ key: `make:${m}`, label: m, clear: { make: c.make!.filter((v) => v !== m) } });
   }
-  if (c.maxPrice)
+  if (c.minPrice != null || c.maxPrice != null)
     out.push({
       key: "maxPrice",
-      label: `Under ${rupees(c.maxPrice)}`,
-      clear: { maxPrice: undefined },
+      label: c.maxPrice == null ? `From ${rupees(c.minPrice!)}`
+        : c.minPrice == null ? `Up to ${rupees(c.maxPrice)}` : `${rupees(c.minPrice)}–${rupees(c.maxPrice)}`,
+      clear: { minPrice: undefined, maxPrice: undefined },
     });
   if (c.maxDistanceKm)
     out.push({ key: "maxDistanceKm", label: `Within ${c.maxDistanceKm} km`, clear: { maxDistanceKm: undefined } });

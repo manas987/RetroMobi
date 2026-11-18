@@ -24,7 +24,7 @@ export const FAQS = [
   },
   {
     q: "What documents do I need?",
-    a: "A valid driving licence for the vehicle class and a government photo ID. You upload the licence once, at the booking step.",
+    a: "A valid driving licence for the vehicle class and a government photo ID. Bring the original to pickup: the shop checks it before handing over the keys.",
   },
   {
     q: "How does fuel work?",

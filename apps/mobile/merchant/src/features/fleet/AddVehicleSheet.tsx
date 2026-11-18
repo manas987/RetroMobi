@@ -2,8 +2,10 @@ import { useState } from "react";
 import { View } from "react-native";
 import { CheckCircle2 } from "lucide-react-native";
 import {
-  Button, Card, ErrorNote, Field, Input, LoadingRows, SelectOptions, Sheet, api, enumLabel, errorText, queryClient, space, useT, type Row,
+  Button, Card, ErrorNote, LoadingRows, SelectOptions, SelectTrigger, Sheet, api, enumLabel, errorText, queryClient, space, useT, type Row,
 } from "@retromobi/mobile-shared";
+import { LabelInput } from "./tabs/Fields";
+import { Disclosure } from "../../ui/Disclosure";
 import { useMerchantShop } from "../../state/shop";
 import { useMerchantQuery } from "../../state/query";
 import { useCounterWrite } from "../bookings/common";
@@ -22,7 +24,6 @@ function AddVehicle({ onClose, onManage }: { onClose: () => void; onManage: (id:
   const [picking, setPicking] = useState(false);
   const [plate, setPlate] = useState("");
   const [color, setColor] = useState("");
-  const [price, setPrice] = useState(false);
   const [amount, setAmount] = useState("");
   const [deposit, setDeposit] = useState("");
   const [lateFee, setLateFee] = useState("50");
@@ -66,17 +67,17 @@ function AddVehicle({ onClose, onManage }: { onClose: () => void; onManage: (id:
       : <View style={{ gap: space[3] }}>
         {models.isPending ? <LoadingRows rows={1} label={t("common.loading")} /> : models.isError
           ? <ErrorNote text={errorText(lang, models.error)} retryLabel={t("common.retry")} onRetry={() => void models.refetch()} />
-          : <Field label={t("fleet.fModel")}><Button label={selected ? `${selected.group} · ${selected.label}` : t("fleet.pickModel")} onPress={() => setPicking(true)} /></Field>}
-        <Field label={t("fleet.fPlate")}><Input value={plate} accessibilityLabel={t("fleet.fPlate")} autoCapitalize="characters" autoCorrect={false} onChangeText={(v) => setPlate(v.toUpperCase())} /></Field>
-        <Field label={`${t("fleet.fColor")} (${t("common.optional")})`}><Input value={color} accessibilityLabel={t("fleet.fColor")} onChangeText={setColor} /></Field>
-        {can("pricing:write") && <>
-          <Button label={t("fleet.priceLater")} accessibilityState={{ expanded: price }} onPress={() => setPrice(!price)} />
-          {price && <>
-            <Field label={t("fleet.fPerDay")}><Input keyboardType="decimal-pad" accessibilityLabel={t("fleet.fPerDay")} value={amount} onChangeText={setAmount} /></Field>
-            <Field label={t("fleet.fDeposit")} error={depositTooHigh ? t("fleet.depositMax") : undefined}><Input keyboardType="decimal-pad" accessibilityLabel={t("fleet.fDeposit")} value={deposit} onChangeText={setDeposit} /></Field>
-            <Field label={t("fleet.fLateFee")}><Input keyboardType="decimal-pad" accessibilityLabel={t("fleet.fLateFee")} value={lateFee} onChangeText={setLateFee} /></Field>
-          </>}
-        </>}
+          : <SelectTrigger compact label={t("fleet.fModel")} value={selected ? `${selected.group} · ${selected.label}` : undefined}
+            placeholder={t("fleet.pickModel")} onPress={() => setPicking(true)} />}
+        <LabelInput label={t("fleet.fPlate")} value={plate} accessibilityLabel={t("fleet.fPlate")} autoCapitalize="characters" autoCorrect={false} onChangeText={(v) => setPlate(v.toUpperCase())} />
+        <LabelInput label={`${t("fleet.fColor")} (${t("common.optional")})`} value={color} accessibilityLabel={t("fleet.fColor")} onChangeText={setColor} />
+        {can("pricing:write") && <Disclosure label={t("fleet.priceLater")}>
+          <LabelInput label={t("fleet.fPerDay")} prefix="₹" keyboardType="decimal-pad" value={amount} onChangeText={setAmount} />
+          <LabelInput label={t("fleet.fDeposit")} error={depositTooHigh ? t("fleet.depositMax") : undefined}
+            prefix="₹" keyboardType="decimal-pad" value={deposit} onChangeText={setDeposit} />
+          <LabelInput label={t("fleet.fLateFee")} prefix="₹" keyboardType="decimal-pad" value={lateFee} onChangeText={setLateFee} />
+        </Disclosure>}
+
         {error && <ErrorNote text={error} />}
       </View>}
   </Sheet>;

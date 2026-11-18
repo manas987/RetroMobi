@@ -2,12 +2,13 @@ import { useState } from "react";
 import { View } from "react-native";
 import { CheckCircle2 } from "lucide-react-native";
 import {
-  Button, Card, COUNTRIES, DateRangeSheet, ErrorNote, Field, Input, LoadingRows, SelectOptions, Sheet, Text,
+  Button, Card, COUNTRIES, DateRangeSheet, ErrorNote, Field, Input, LoadingRows, SelectOptions, SelectTrigger, Sheet, Text,
   api, colors, dateTimeLabel, errorText, istDay, rupees, space, useT, validPhone, type DateWindow, type Row,
 } from "@retromobi/mobile-shared";
 import { useMerchantShop } from "../../state/shop";
 import { useMerchantQuery } from "../../state/query";
 import { useCounterWrite, vehicleLabel } from "./common";
+import { LabelInput } from "../fleet/tabs/Fields";
 
 function walkinWindow(startDay?: string): DateWindow {
   if (startDay && startDay > istDay(new Date())) {
@@ -80,12 +81,9 @@ function WalkinForm({ onClose, vehicleId: initialVehicleId, startDay }: Props) {
       : vehicles.length === 0 ? <Text color="ink2">{t("actions.walkinNoVehicles")}</Text>
       : <View style={{ gap: space[3] }}>
         <Text color="ink2">{t("actions.walkinIntro")}</Text>
-        <Field label={t("actions.walkinVehicle")}>
-          <Button label={selected ? vehicleLabel(selected) : t("actions.walkinChooseVehicle")} onPress={() => setPick("vehicle")} />
-        </Field>
-        <Field label={t("actions.walkinName")}>
-          <Input value={name} onChangeText={setName} accessibilityLabel={t("actions.walkinName")} autoComplete="name" />
-        </Field>
+        <SelectTrigger compact label={t("actions.walkinVehicle")} value={selected ? vehicleLabel(selected) : undefined}
+          placeholder={t("actions.walkinChooseVehicle")} onPress={() => setPick("vehicle")} />
+        <LabelInput label={t("actions.walkinName")} value={name} onChangeText={setName} accessibilityLabel={t("actions.walkinName")} autoComplete="name" />
         <Field label={t("actions.walkinPhone")}>
           <View style={{ flexDirection: "row", gap: space[2] }}>
             <Button label={`${country.flag} ${country.dial}`} accessibilityLabel={`${t("actions.walkinPhone")} · ${country.name} ${country.dial}`} onPress={() => setPick("country")} />
@@ -93,13 +91,9 @@ function WalkinForm({ onClose, vehicleId: initialVehicleId, startDay }: Props) {
               accessibilityLabel={t("actions.walkinPhone")} maxLength={12} onChangeText={(v) => setDigits(v.replace(/\D/g, ""))} />
           </View>
         </Field>
-        <Field label={t("actions.licenceNumber")}>
-          <Input value={dl} onChangeText={(v) => setDl(v.toUpperCase())} accessibilityLabel={t("actions.licenceNumber")} autoCapitalize="characters" autoCorrect={false} />
-        </Field>
-        <Field label={t("actions.walkinWhen")}>
-          <Button label={t("common.change")} accessibilityLabel={t("actions.walkinWhen")} onPress={() => setPick("dates")} />
-          <Text color="ink2">{lang === "en" ? dateTimeLabel(win.pickupAt) : `${date(win.pickupAt)}, ${time(win.pickupAt)}`} — {date(win.returnAt)}, {time(win.returnAt)}</Text>
-        </Field>
+        <LabelInput label={t("actions.licenceNumber")} value={dl} onChangeText={(v) => setDl(v.toUpperCase())} accessibilityLabel={t("actions.licenceNumber")} autoCapitalize="characters" autoCorrect={false} />
+        <SelectTrigger compact label={t("actions.walkinWhen")} onPress={() => setPick("dates")}
+          value={`${lang === "en" ? dateTimeLabel(win.pickupAt) : `${date(win.pickupAt)}, ${time(win.pickupAt)}`} → ${date(win.returnAt)}, ${time(win.returnAt)}`} />
         {end <= start && <Text color="danger">{t("actions.walkinWindowError")}</Text>}
         {error && <ErrorNote text={error} />}
       </View>}

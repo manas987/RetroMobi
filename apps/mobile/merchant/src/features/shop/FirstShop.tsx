@@ -2,8 +2,11 @@ import { useRef, useState } from "react";
 import { View } from "react-native";
 import { Store } from "lucide-react-native";
 import {
-  api, Button, Card, ErrorNote, Field, Input, Text, errorText, space, useT, type TKey,
+  api, Button, Card, ErrorNote, Text, errorText, space, useT, type TKey,
 } from "@retromobi/mobile-shared";
+
+import { LabelInput } from "../fleet/tabs/Fields";
+import { counterStyles } from "../../ui/Counter";
 
 const fields = [
   ["name", "common.shopName"], ["addressLine1", "common.address"], ["city", "common.city"],
@@ -34,16 +37,14 @@ export function FirstShop({ onCreated }: { onCreated: () => Promise<unknown> }) 
     }
   }
 
-  return <Card title={t("common.firstShopTitle")} icon={Store}>
+  return <Card style={counterStyles.panel} title={t("common.firstShopTitle")} icon={Store}>
     <View style={{ gap: space[3] }}>
       <Text color="ink2">{t("common.firstShopBody")}</Text>
-      {fields.map(([key, label]) => <Field key={key} label={t(label)}>
-        <Input value={form[key]} accessibilityLabel={t(label)} editable={!busy}
+      {fields.map(([key, label]) => <LabelInput key={key} label={t(label)} value={form[key]} accessibilityLabel={t(label)} editable={!busy}
           autoComplete={key === "pincode" ? "postal-code" : key === "addressLine1" ? "street-address" : undefined}
           keyboardType={key === "pincode" ? "number-pad" : "default"} returnKeyType={key === "state" ? "done" : "next"}
           maxLength={key === "pincode" ? 6 : undefined}
-          onChangeText={(value) => setForm((prev) => ({ ...prev, [key]: key === "pincode" ? value.replace(/\D/g, "") : value }))} />
-      </Field>)}
+          onChangeText={(value) => setForm((prev) => ({ ...prev, [key]: key === "pincode" ? value.replace(/\D/g, "") : value }))} />)}
       {invalid.length > 0 && <Text size="sm" color="ink2">{t("setup.stillNeeded", { items: invalid.map(([key, label]) => t(key === "pincode" ? "setup.need_pincode" : label)).join(", ") })}</Text>}
       {error && <ErrorNote text={error} />}
       <Button label={busy ? t("common.saving") : t("common.createShop")} variant="primary" size="lg" full busy={busy}

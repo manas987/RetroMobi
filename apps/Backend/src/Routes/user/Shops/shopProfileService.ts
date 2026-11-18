@@ -100,7 +100,7 @@ export async function getShopProfile(pool: Pool, shopId: string): Promise<ShopPr
     name: shop.name,
     ownerName: shop.owner_name,
     landmark: shop.landmark,
-    phone: shop.phone,
+    phone: null,
     addressLine1: shop.address_line1,
     city: shop.city,
     state: shop.state,

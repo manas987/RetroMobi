@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Linking, View } from "react-native";
+import { Bike, Camera, FileText, Plus, Upload } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import {
-  ApiError, Button, Card, Chip, ConfirmSheet, DateField, EmptyState, ErrorNote, SelectField, Text, UploadFailedError,
+  ApiError, Button, Card, ConfirmSheet, DateField, EmptyState, ErrorNote, SelectField, Text, UploadFailedError,
   api, dateLabel, errorText, istDay, queryClient, space, uploadFile, useT, type PickedFile, type Row, type Tone,
 } from "@retromobi/mobile-shared";
+import { CounterRowLink, StatusBadge, counterStyles } from "../../ui/Counter";
 import { useMerchantQuery } from "../../state/query";
 import { useMerchantShop } from "../../state/shop";
 import { useCounterWrite } from "../bookings/common";
@@ -35,8 +37,8 @@ function FileButtons({ select, busy }: { select: (file: PickedFile) => Promise<v
   };
   return <Fields>
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-      <Button label={t("fleet.takePhoto")} disabled={busy || picking} onPress={() => void choose(true)} />
-      <Button label={t("common.uploadFile")} disabled={busy || picking} onPress={() => void choose(false)} />
+      <Button icon={Camera} label={t("fleet.takePhoto")} disabled={busy || picking} onPress={() => void choose(true)} />
+      <Button icon={Upload} label={t("common.uploadFile")} disabled={busy || picking} onPress={() => void choose(false)} />
     </View>
     {error && <ErrorNote text={error} />}
     {settings && <Button label={lang === "hi" ? "सेटिंग खोलें" : "Open settings"} onPress={() => void Linking.openSettings().catch(() => {})} />}
@@ -63,9 +65,9 @@ function PaperCard({ entry, row, base, editable }: { entry: SetupPaper; row?: Ro
         ? t("shop.fileMissing") : errorText(lang, err)); return true;
     } });
   }
-  return <Card title={title}>
+  return <Card title={title} icon={FileText} style={counterStyles.panel}>
     <Fields>
-      <Chip tone={tones[state] ?? "muted"} label={tMaybe(`shop.status_${state}`) ?? t("shop.notAdded")} />
+      <StatusBadge tone={tones[state] ?? "muted"} label={tMaybe(`shop.status_${state}`) ?? t("shop.notAdded")} />
       <Text size="sm" color="ink2">{t(entry.required ? "shop.neededToList" : "common.optional")}</Text>
       {row?.document_number != null && <Text>{String(row.document_number)}</Text>}
       {row?.expires_at != null && <Text size="sm" color="ink2">{t("shop.validTill", { date: dateLabel(row.expires_at, lang) })}</Text>}
@@ -77,7 +79,7 @@ function PaperCard({ entry, row, base, editable }: { entry: SetupPaper; row?: Ro
       {editable && (!edit ? <Button label={t(path ? "fleet.replaceFile" : "shop.upload")} disabled={write.busy} onPress={() => setEdit(true)} /> : <>
         {!path && !created && <>
           <LabelInput label={t("shop.paperNumber")} value={number} onChangeText={setNumber} />
-          <DateField label={t("fleet.fExpires")} value={expiry} onChange={setExpiry} clearable />
+          <DateField inline label={t("fleet.fExpires")} value={expiry} onChange={setExpiry} clearable />
         </>}
         {file?.name && <Text size="sm">{file.name}</Text>}
         <FileButtons busy={write.busy} select={async (picked) => { setFile(picked); }} />
@@ -122,35 +124,36 @@ function Licences({ shopId, all, editable }: { shopId: string; all: boolean; edi
     setSelected("");
   });
 
-  return <Card title={t("shop.group_licence")}>
-    <Fields>
+  return <Fields>
+      <Text size="lg" weight="bold" accessibilityRole="header">{t("shop.group_licence")}</Text>
       <Text color="ink2">{t(all ? "shop.licenceCardHint" : "shop.group_licenceHint")}</Text>
       {list.length === 0 && <EmptyState text={t(all ? "shop.noLicences" : "shop.noLicenceForBranch")} />}
       {list.map((row) => {
         const linkedHere = covers(row, shopId);
         const status = row.expires_at && String(row.expires_at).slice(0, 10) < istDay(new Date()) ? "EXPIRED" : String(row.status);
-        return <Card key={String(row.id)} title={String(row.licence_number ?? "")}>
+        return <Card key={String(row.id)} style={counterStyles.panel} icon={FileText} title={String(row.licence_number ?? "")}>
           <Fields>
-            <Chip tone={tones[status] ?? "muted"} label={tMaybe(`shop.status_${status}`) ?? t("shop.status_OTHER")} />
+            <StatusBadge tone={tones[status] ?? "muted"} label={tMaybe(`shop.status_${status}`) ?? t("shop.status_OTHER")} />
             <Text size="sm" color="ink2">{t("shop.validTill", { date: dateLabel(row.expires_at, lang) })}</Text>
-            {!!row.storage_key && <Button label={t("common.view")} disabled={write.busy} onPress={() => void write.run(async () => {
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+            {!!row.storage_key && <Button icon={FileText} label={t("common.view")} disabled={write.busy} onPress={() => void write.run(async () => {
               await openFile((await api<{ downloadUrl: string }>(`/licences/${row.id}/download`)).downloadUrl);
             })} />}
             {editable && linkedHere && <Button label={t("shop.detach")} variant="ghost" disabled={write.busy} onPress={() => link(String(row.id), true)} />}
-            {linkedHere && !editable && <Chip tone="good" label={t("shop.covers")} />}
+            {linkedHere && !editable && <StatusBadge tone="good" label={t("shop.covers")} />}
             {editable && all && !linkedHere && <Button label={t("shop.linkLicence")} disabled={write.busy} onPress={() => link(String(row.id), false)} />}
+            </View>
           </Fields>
         </Card>;
       })}
       {editable && !all && unlinked.length > 0 && <>
-        <SelectField label={t("shop.attachPick")} value={selected || null} onChange={setSelected} closeLabel={t("common.close")}
+        <SelectField compact label={t("shop.attachPick")} value={selected || null} onChange={setSelected} closeLabel={t("common.close")}
           options={unlinked.map((row) => ({ value: String(row.id), label: String(row.licence_number) }))} />
         {selected && <Button label={t("shop.attach")} busy={write.busy} onPress={() => link(selected, false)} />}
       </>}
       {write.error && <ErrorNote text={write.error} />}
-      {editable && (adding ? <LicenceForm shopId={shopId} close={() => setAdding(false)} /> : <Button label={t("shop.addLicence")} onPress={() => setAdding(true)} />)}
-    </Fields>
-  </Card>;
+      {editable && (adding ? <LicenceForm shopId={shopId} close={() => setAdding(false)} /> : <Button icon={Plus} label={t("shop.addLicence")} onPress={() => setAdding(true)} />)}
+  </Fields>;
 }
 
 function LicenceForm({ shopId, close }: { shopId: string; close: () => void }) {
@@ -164,7 +167,7 @@ function LicenceForm({ shopId, close }: { shopId: string; close: () => void }) {
   const valid = !!number.trim() && !!expiry && !!file;
   return <Fields>
     <LabelInput label={t("setup.licenceNumber")} value={number} onChangeText={setNumber} editable={created === null} />
-    {created ? <Text>{expiry}</Text> : <DateField label={t("setup.licenceExpiry")} value={expiry} onChange={setExpiry} min={istDay(new Date())} />}
+    {created ? <Text>{expiry}</Text> : <DateField inline label={t("setup.licenceExpiry")} value={expiry} onChange={setExpiry} min={istDay(new Date())} />}
     {file?.name && <Text>{file.name}</Text>}
     {!uploaded && <FileButtons busy={write.busy} select={async (picked) => { setFile(picked); }} />}
     <FormButtons valid={valid} busy={write.busy} error={write.error} close={close} save={() => {
@@ -199,17 +202,16 @@ export function ShopPapers({ shopId, mode = "shop" }: { shopId: string; mode?: "
   const section = (kind: "shop" | "business") => {
     const q = kind === "shop" ? own : business;
     const source = kind === "shop" ? base : "/merchant-documents";
-    return <Card title={t(kind === "shop" ? "shop.thisShopPapers" : "shop.businessPapers")}>
-      <Fields>
+    return <Fields>
+        <Text weight="bold" size="lg" accessibilityRole="header">{t(kind === "shop" ? "shop.thisShopPapers" : "shop.businessPapers")}</Text>
         <Text color="ink2">{t(kind === "shop" ? "shop.thisShopPapersHint" : "shop.businessPapersHint")}</Text>
         {editable && !q.isSuccess ? <Pending error={q.error} retry={q.refetch} /> : data.papers[kind].filter((entry) => mode !== "setup" || entry.required).map((entry) => <PaperCard
           key={entry.type} base={source} entry={entry} editable={editable} row={q.data?.documents.find((row) => row.type === entry.type)} />)}
-      </Fields>
-    </Card>;
+    </Fields>;
   };
   return <Fields>
     {editable ? <Licences all={mode === "all"} shopId={shopId} editable /> : <Card title={t("shop.group_licence")}>
-      <Chip tone={tones[data.licence.status] ?? "muted"} label={t(`setup.st_licence_${data.licence.status}`)} />
+      <StatusBadge tone={tones[data.licence.status] ?? "muted"} label={t(`setup.st_licence_${data.licence.status}`)} />
     </Card>}
     {mode !== "all" && section("shop")}
     {section("business")}
@@ -221,9 +223,9 @@ export function ShopPapers({ shopId, mode = "shop" }: { shopId: string; mode?: "
         <Text color="ink2">{t("shop.vehiclePapersHint")}</Text>
         {!data.vehicles.length && <EmptyState text={t("shop.noVehicles")} />}
         {data.vehicles.map((item) => <Fields key={item.id}>
-          <Button label={`${item.make} ${item.model} · ${item.registrationNumber}`} onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: item.id, tab: "documents" } })} />
+          <CounterRowLink icon={Bike} title={`${item.make} ${item.model}`} detail={item.registrationNumber} onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: item.id, tab: "documents" } })} />
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
-            {item.requiredDocs.map((doc) => <Chip key={doc} tone={tones[item.docs[doc]?.state ?? ""] ?? "muted"}
+            {item.requiredDocs.map((doc) => <StatusBadge key={doc} tone={tones[item.docs[doc]?.state ?? ""] ?? "muted"}
               label={`${tMaybe(`shop.vdoc_${doc}`) ?? doc} · ${tMaybe(`shop.mark_${item.docs[doc]?.state}`) ?? t("shop.notAdded")}`} />)}
           </View>
         </Fields>)}

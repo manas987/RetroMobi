@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { Animated, FlatList, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
-import { ChevronLeft, ChevronRight } from "lucide-react-native";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import {
-  Button, Chip, EmptyState, ErrorNote, Segmented, Text, STAGE_TONE, bookingStage, colors, dateLabel,
-  errorText, HIT, istDay, space, timeline, tone, useT, type Row, type Tone,
+  Chip, EmptyState, ErrorNote, Segmented, Text, STAGE_TONE, bookingStage, colors, dateLabel,
+  errorText, HIT, istDay, radius, space, timeline, tone, useT, type Row, type Tone,
 } from "@retromobi/mobile-shared";
+import { IconAction, counterStyles } from "../../ui/Counter";
 import { useMerchantQuery } from "../../state/query";
 import { useMerchantShop } from "../../state/shop";
 import { renterName, vehicleLabel } from "../bookings/common";
@@ -18,6 +19,7 @@ const shift = (day: string, n: number) => istDay(new Date(Date.parse(at(day)) + 
 
 export function FleetTimeline({ shopId, header, onBook }: { shopId: string; header: ReactNode; onBook: (id: string, day: string) => void }) {
   const { t, lang, date } = useT();
+  const { can } = useMerchantShop();
   const { width: viewport } = useWindowDimensions();
   const today = istDay(new Date());
   const [range, setRange] = useState<"14" | "30">("14");
@@ -32,23 +34,24 @@ export function FleetTimeline({ shopId, header, onBook }: { shopId: string; head
   const retry = () => { void Promise.all([vehicles.refetch(), bookings.refetch()]); };
   const listHead = <Fields>
     {header}
-    <Segmented value={range} onChange={setRange}
+    <Segmented pill value={range} onChange={setRange}
       options={[{ value: "14", label: t("fleet.daysN", { n: 14 }) }, { value: "30", label: t("fleet.daysN", { n: 30 }) }]} />
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-      <Button icon={ChevronLeft} label={t("common.previous")} onPress={() => setStart(shift(start, -7))} />
-      <Button icon={ChevronRight} label={t("common.next")} onPress={() => setStart(shift(start, 7))} />
-      <Button variant="ghost" label={t("common.today")} onPress={() => setStart(today)} />
+    <View style={{ ...counterStyles.row, gap: space[1] }}>
+      <IconAction icon={ChevronLeft} label={t("common.previous")} onPress={() => setStart(shift(start, -7))} />
+      <Text weight="medium" size="sm" center style={{ flex: 1 }} tnum>{dateLabel(days[0], lang)} – {dateLabel(days.at(-1), lang)}</Text>
+      <IconAction icon={ChevronRight} label={t("common.next")} onPress={() => setStart(shift(start, 7))} />
+      <IconAction icon={CalendarDays} label={t("common.today")} onPress={() => setStart(today)} />
     </View>
-    <Text weight="medium">{dateLabel(days[0], lang)} – {dateLabel(days.at(-1), lang)}</Text>
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
       {([["fleet.legendPickup", "attention"], ["fleet.legendOut", "info"], ["fleet.legendLate", "bad"], ["fleet.legendDone", "good"], ["fleet.legendBlocked", "muted"]] as const)
         .map(([label, status]) => <Chip key={label} tone={status} label={t(label)} />)}
     </View>
+    {can("bookings:write") && <Text size="sm" color="ink2">{t("fleet.tapToBook")}</Text>}
     <Text size="sm" color="ink2">{t("fleet.blockHint")}</Text>
   </Fields>;
 
   const ready = vehicles.isSuccess && bookings.isSuccess;
-  return <Animated.ScrollView horizontal nestedScrollEnabled scrollEventThrottle={16}
+  return <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled scrollEventThrottle={16}
     contentContainerStyle={{ flexGrow: 1 }}
     onScroll={Animated.event([{ nativeEvent: { contentOffset: { x } } }], { useNativeDriver: true })}>
     <FlatList showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} data={ready ? vehicles.data.vehicles : []} keyExtractor={(vehicle) => String(vehicle.id)}
@@ -110,9 +113,12 @@ function TimelineRow({ vehicle, days, today, real, x, shopId, onBook }: {
         const bookable = !bar && q.isSuccess && can("bookings:write") && vehicle.amount != null && day >= today;
         const action = bar?.booking ? () => router.push({ pathname: "/booking/[id]", params: { id: bar.booking!, shopId } })
           : bookable ? () => onBook(id, day) : undefined;
-        const style = [styles.cell, day === today && styles.today, bar && { backgroundColor: tone[bar.status].bg }];
+        const style = [styles.cell, day === today && styles.today, bar && { backgroundColor: tone[bar.status].bg, borderLeftWidth: 0,
+          borderTopLeftRadius: i === bar.start ? radius.row : 0, borderBottomLeftRadius: i === bar.start ? radius.row : 0,
+          borderTopRightRadius: i === bar.start + bar.span - 1 ? radius.row : 0, borderBottomRightRadius: i === bar.start + bar.span - 1 ? radius.row : 0,
+          marginVertical: 6 }];
         const labelNode = bar ? <Text color="ink" size="xs" center numberOfLines={1}>{i === bar.start ? bar.label : ""}</Text>
-          : bookable ? <Text color="ink2" size="sm">+</Text> : null;
+          : null;
         return action ? <Pressable key={day} style={style} accessibilityRole="button" accessibilityLabel={label} onPress={action}>{labelNode}</Pressable>
           : <View key={day} style={style} accessible={!!bar} accessibilityLabel={bar ? label : undefined}>{labelNode}</View>;
       })}

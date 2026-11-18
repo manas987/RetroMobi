@@ -116,7 +116,7 @@ async function consumeOtpChallenge(pool: Pool, target: string, code: string): Pr
       `update otp_challenges set attempt_count = attempt_count + 1 where id = $1`,
       [challenge.id],
     );
-    throw new InvalidOtpError("incorrect code");
+    throw new InvalidOtpError("That code is incorrect. Check it and try again.");
   }
 
   await pool.query(`update otp_challenges set consumed_at = now() where id = $1`, [
@@ -464,6 +464,14 @@ export async function logout(pool: Pool, input: LogoutInput): Promise<void> {
 export interface RevokeSessionInput {
   userId: string;
   sessionId: string;
+}
+
+export async function getProfile(pool: Pool, userId: string) {
+  const { rows: [profile] } = await pool.query<{ name: string | null; email: string | null; phone: string }>(
+    "select name, email, phone from users where id = $1 and status = 'ACTIVE'",
+    [userId],
+  );
+  return profile ?? null;
 }
 
 /**

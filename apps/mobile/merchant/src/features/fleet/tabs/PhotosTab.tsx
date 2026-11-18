@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
-import { Image as ImageIcon } from "lucide-react-native";
+import { Camera, ChevronDown, ChevronUp, Image as ImageIcon, Trash2 } from "lucide-react-native";
 import {
-  ApiError, Button, Card, ConfirmSheet, EmptyState, ErrorNote, Switch, Text, UploadFailedError, api, colors, errorText,
+  ApiError, Button, Card, ConfirmSheet, EmptyState, ErrorNote, LoadingRows, Switch, Text, UploadFailedError, api, colors, errorText,
   queryClient, radius, space, uploadFile, useT, type Row,
 } from "@retromobi/mobile-shared";
+import { IconAction, counterStyles } from "../../../ui/Counter";
 import { useMerchantQuery } from "../../../state/query";
 import { useMerchantShop } from "../../../state/shop";
 import { useCounterWrite } from "../../bookings/common";
@@ -65,20 +66,20 @@ export function PhotosTab({ id, basePath, canWrite }: { id: string; basePath?: s
     run(async () => { await api(`${base}/order`, { method: "PATCH", body: { order: next.map((row, index) => ({ id: String(row.id), displayOrder: index })) } }); });
   }
 
-  return <Card title={t("fleet.photosTitle")}>
-    <Fields>
+  return <Fields>
+      <Text size="lg" weight="bold" accessibilityRole="header">{t("fleet.photosTitle")}</Text>
       <Text color="ink2">{t("fleet.photosHint")}</Text>
       {notice && <ErrorNote text={notice} />}
       {settings && <Button label={lang === "hi" ? "सेटिंग खोलें" : "Open settings"} onPress={() => void openSettings().catch(() => {})} />}
       {!media.length && <EmptyState text={t("fleet.photosEmpty")} />}
       {writable && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-        <Button variant="primary" label={t("fleet.takePhoto")} disabled={write.busy} onPress={() => upload(true)} />
-        <Button label={t("fleet.fromGallery")} disabled={write.busy} onPress={() => upload(false)} />
+        <Button variant="primary" icon={Camera} label={t("fleet.takePhoto")} disabled={write.busy} onPress={() => upload(true)} />
+        <Button icon={ImageIcon} label={t("fleet.fromGallery")} disabled={write.busy} onPress={() => upload(false)} />
       </View>}
       {write.busy && <Text color="ink2" accessibilityLiveRegion="polite">{t("common.saving")}</Text>}
       {media.map((row, i) => {
         const label = t(row.type === "VIDEO" ? "fleet.video" : "fleet.photoN", { n: i + 1 });
-        return <Card key={String(row.id)} title={label}>
+        return <Card key={String(row.id)} style={counterStyles.panel} title={label}>
           <Fields>
             <MediaThumb path={`${base}/${row.id}/download`} canPreview={row.type !== "VIDEO"} id={String(row.id)} />
             {writable && row.type !== "VIDEO" ? <View style={{ flexDirection: "row", alignItems: "center", minHeight: 48, gap: space[2] }}>
@@ -87,9 +88,9 @@ export function PhotosTab({ id, basePath, canWrite }: { id: string; basePath?: s
                 onValueChange={(published) => run(async () => { await api(`${base}/${row.id}`, { method: "PATCH", body: { published } }); })} />
             </View> : <Text color="ink2">{t(row.published ? "fleet.shown" : "fleet.hidden")}</Text>}
             {writable && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
-              <Button label={t("fleet.moveEarlier")} variant="ghost" disabled={write.busy || i === 0} onPress={() => move(i, -1)} />
-              <Button label={t("fleet.moveLater")} variant="ghost" disabled={write.busy || i === media.length - 1} onPress={() => move(i, 1)} />
-              <Button label={t("common.remove")} variant="ghost" disabled={write.busy} onPress={() => { setNotice(null); setRemove(row); }} />
+              <IconAction icon={ChevronUp} label={t("fleet.moveEarlier")} disabled={write.busy || i === 0} onPress={() => move(i, -1)} />
+              <IconAction icon={ChevronDown} label={t("fleet.moveLater")} disabled={write.busy || i === media.length - 1} onPress={() => move(i, 1)} />
+              <IconAction icon={Trash2} label={t("common.remove")} disabled={write.busy} onPress={() => { setNotice(null); setRemove(row); }} />
             </View>}
           </Fields>
         </Card>;
@@ -99,8 +100,7 @@ export function PhotosTab({ id, basePath, canWrite }: { id: string; basePath?: s
         onClose={() => setRemove(null)} onConfirm={() => {
           if (remove) run(async () => { await api(`${base}/${remove.id}`, { method: "DELETE" }); setRemove(null); });
         }} />
-    </Fields>
-  </Card>;
+  </Fields>;
 }
 
 function MediaThumb({ path, canPreview, id }: { path: string; canPreview: boolean; id: string }) {
@@ -110,10 +110,13 @@ function MediaThumb({ path, canPreview, id }: { path: string; canPreview: boolea
   const result = useMerchantQuery<{ downloadUrl: string }>(path);
   const url = result.data?.downloadUrl;
   return <>
-    {canPreview && isDownloadable(url) && url !== failedUrl
-      ? <Image source={{ uri: url, cacheKey: id }} recyclingKey={id} cachePolicy="memory-disk" transition={150} contentFit="cover" accessible={false}
+    {result.isPending ? <LoadingRows rows={1} height={88} label={t("common.loading")} />
+      : canPreview && isDownloadable(url) && url !== failedUrl ? <Image source={{ uri: url, cacheKey: id }} recyclingKey={id} cachePolicy="memory-disk" transition={150} contentFit="cover" accessible={false}
         onError={() => setFailedUrl(url)} style={{ height: 170, borderRadius: radius.panel, backgroundColor: colors.surface3 }} />
-      : <ImageIcon color={colors.ink3} size={28} accessible={false} />}
+      : <View style={{ ...counterStyles.row, borderRadius: radius.panel, backgroundColor: colors.surface2, padding: space[3] }}>
+        <ImageIcon color={colors.ink2} size={22} accessible={false} />
+        <Text size="sm" color="ink2" style={{ flex: 1 }}>{t(canPreview ? "fleet.previewUnavailable" : "fleet.video")}</Text>
+      </View>}
     {isDownloadable(url) && <Button label={t("common.view")} variant="ghost" onPress={() => { void openFile(url).catch(() => setError(true)); }} />}
     {error && <ErrorNote text={t("common.couldntLoad")} />}
   </>;

@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { CalendarDays, IndianRupee } from "lucide-react-native";
 import { Button, Card, DateField, EmptyState, ErrorNote, Text, api, dateLabel, istDay, rupees, useT, useToast, ApiError, type Row } from "@retromobi/mobile-shared";
+import { counterStyles } from "../../../ui/Counter";
 import { useMerchantQuery } from "../../../state/query";
 import { useMerchantShop } from "../../../state/shop";
 import { useCounterWrite } from "../../bookings/common";
@@ -32,13 +34,13 @@ function BaseRates({ id, pricing }: { id: string; pricing: Row }) {
   const depositTooHigh = paise(deposit) > 1_000_000;
   const valid = editable && !!deposit.trim() && !depositTooHigh && [paise(amount), paise(weekend || amount)].every((n) => Number.isSafeInteger(n) && n > 0)
     && [paise(deposit), paise(lateFee)].every((n) => Number.isSafeInteger(n) && n >= 0);
-  return <Card title={t("fleet.priceTitle")}>
+  return <Card icon={IndianRupee} style={counterStyles.panel} title={t("fleet.priceTitle")}>
     <Fields>
       <Text color="ink2">{t("fleet.priceHint")}</Text>
-      <LabelInput label={t("fleet.fPerDay")} value={amount} keyboardType="decimal-pad" onChangeText={setAmount} editable={editable && !write.busy} />
-      <LabelInput label={t("fleet.fWeekend")} hint={t("fleet.weekendHint")} value={weekend} keyboardType="decimal-pad" onChangeText={setWeekend} editable={editable && !write.busy} />
-      <LabelInput label={t("fleet.fDeposit")} value={deposit} keyboardType="decimal-pad" onChangeText={setDeposit} editable={editable && !write.busy} error={depositTooHigh ? t("fleet.depositMax") : undefined} />
-      <LabelInput label={t("fleet.fLateFee")} value={lateFee} keyboardType="decimal-pad" onChangeText={setLateFee} editable={editable && !write.busy} />
+      <LabelInput label={t("fleet.fPerDay")} value={amount} prefix="₹" keyboardType="decimal-pad" onChangeText={setAmount} editable={editable && !write.busy} />
+      <LabelInput label={t("fleet.fWeekend")} hint={t("fleet.weekendHint")} value={weekend} prefix="₹" keyboardType="decimal-pad" onChangeText={setWeekend} editable={editable && !write.busy} />
+      <LabelInput label={t("fleet.fDeposit")} value={deposit} prefix="₹" keyboardType="decimal-pad" onChangeText={setDeposit} editable={editable && !write.busy} error={depositTooHigh ? t("fleet.depositMax") : undefined} />
+      <LabelInput label={t("fleet.fLateFee")} value={lateFee} prefix="₹" keyboardType="decimal-pad" onChangeText={setLateFee} editable={editable && !write.busy} />
       {editable && <FormButtons busy={write.busy} error={write.error} valid={valid} save={() => {
         if (!valid) return;
         void write.run(async () => {
@@ -66,7 +68,7 @@ function Specials({ id }: { id: string }) {
   const [until, setUntil] = useState("");
   const today = istDay(new Date());
   const valid = !!name.trim() && from >= today && until >= from && [paise(amount), paise(weekend || amount)].every((n) => Number.isSafeInteger(n) && n > 0);
-  return <Card title={t("fleet.specialsTitle")}>
+  return <Card icon={CalendarDays} style={counterStyles.panel} title={t("fleet.specialsTitle")}>
     <Fields>
       {!q.isSuccess ? <Pending error={q.error} retry={q.refetch} /> : <>
         {!q.data.specials.length && <EmptyState text={t("fleet.specialsEmpty")} />}
@@ -79,10 +81,10 @@ function Specials({ id }: { id: string }) {
         {can("pricing:write") && (!form ? <Button label={t("fleet.specialsAdd")} onPress={() => { setName(""); setAmount(""); setWeekend(""); setFrom(""); setUntil(""); setForm(true); }} />
           : <>
             <LabelInput label={t("fleet.specialName")} value={name} onChangeText={setName} />
-            <LabelInput label={t("fleet.fPerDay")} value={amount} keyboardType="decimal-pad" onChangeText={setAmount} />
-            <LabelInput label={t("fleet.fWeekend")} hint={t("fleet.weekendHint")} value={weekend} keyboardType="decimal-pad" onChangeText={setWeekend} />
-            <DateField label={t("common.from")} value={from} min={today} onChange={setFrom} yearStepper={false} />
-            <DateField label={t("fleet.untilIncl")} value={until} min={from || today} onChange={setUntil} yearStepper={false} />
+            <LabelInput label={t("fleet.fPerDay")} value={amount} prefix="₹" keyboardType="decimal-pad" onChangeText={setAmount} />
+            <LabelInput label={t("fleet.fWeekend")} hint={t("fleet.weekendHint")} value={weekend} prefix="₹" keyboardType="decimal-pad" onChangeText={setWeekend} />
+            <DateField inline label={t("common.from")} value={from} min={today} onChange={setFrom} yearStepper={false} />
+            <DateField inline label={t("fleet.untilIncl")} value={until} min={from || today} onChange={setUntil} yearStepper={false} />
             {!!until && until < from && <Text color="danger">{t("fleet.badRange")}</Text>}
             <FormButtons valid={valid} busy={write.busy} error={write.error} close={() => setForm(false)} save={() => {
               if (valid) void write.run(async () => {

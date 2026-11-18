@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Package, Plus, Trash2 } from "lucide-react-native";
 import { View } from "react-native";
-import { Button, Card, Chip, ConfirmSheet, EmptyState, ErrorNote, Switch, Text, api, space, useT, type Row } from "@retromobi/mobile-shared";
+import { Button, Card, ConfirmSheet, EmptyState, ErrorNote, Line, Switch, Text, api, space, useT, type Row } from "@retromobi/mobile-shared";
+import { IconAction, StatusBadge, counterStyles } from "../../../ui/Counter";
 import { useMerchantQuery } from "../../../state/query";
 import { useMerchantShop } from "../../../state/shop";
 import { useCounterWrite } from "../../bookings/common";
@@ -24,16 +26,21 @@ export function AccessoriesTab({ id }: { id: string }) {
   const qty = Number(quantity);
   const valid = !!type.trim() && !duplicate && Number.isSafeInteger(qty) && qty > 0;
   const start = () => { setType(""); setQuantity("1"); setAvailable(true); setForm(true); };
-  return <Card title={t("fleet.accTitle")}>
+  return <Card icon={Package} title={t("fleet.accTitle")} style={counterStyles.panel}>
     <Fields>
       <Text color="ink2">{t("fleet.accHint")}</Text>
       {!list.length && <EmptyState text={t("fleet.accEmpty")} />}
-      {list.map((a) => <View key={String(a.id)} style={{ gap: space[2] }}>
-        <Text weight="medium">{String(a.type)} × {String(a.quantity)}</Text>
-        <Chip tone={a.status === "AVAILABLE" ? "good" : "muted"} label={t(a.status === "AVAILABLE" ? "fleet.accAvailable" : "fleet.accUnavailable")} />
-        {can("fleet:write") && <Button label={t("common.remove")} variant="ghost" onPress={() => setRemove(a)} />}
+      {list.map((a) => <View key={String(a.id)}>
+        <Line />
+        <View style={{ ...counterStyles.row, paddingVertical: space[2] }}>
+          <View style={{ flex: 1, gap: space[1] }}>
+            <Text weight="medium">{String(a.type)} × {String(a.quantity)}</Text>
+            <StatusBadge tone={a.status === "AVAILABLE" ? "good" : "muted"} label={t(a.status === "AVAILABLE" ? "fleet.accAvailable" : "fleet.accUnavailable")} />
+          </View>
+          {can("fleet:write") && <IconAction icon={Trash2} label={`${t("common.remove")} ${a.type}`} onPress={() => setRemove(a)} />}
+        </View>
       </View>)}
-      {can("fleet:write") && (!form ? <Button label={t("fleet.accAdd")} onPress={start} /> : <Fields>
+      {can("fleet:write") && (!form ? <Button icon={Plus} label={t("fleet.accAdd")} onPress={start} /> : <Fields>
         <LabelInput label={t("fleet.accName")} value={type} onChangeText={setType} error={duplicate ? t("fleet.accDuplicate") : undefined} />
         <LabelInput label={t("fleet.accQty")} value={quantity} keyboardType="number-pad" onChangeText={setQuantity} />
         <View style={{ flexDirection: "row", minHeight: 48, alignItems: "center", gap: space[2] }}>

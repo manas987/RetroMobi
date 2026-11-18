@@ -59,6 +59,12 @@
 
 ## Shared work
 
+Merchant UI redesign phases 0–5 — **simulator** (Claude, Android emulator, 2026-11-17). Floating pill tab bar, 16pt text, navy hero cards, stat tiles, icon status badges, vehicle photos with illustration fallback, a photo-led fleet, a booking itinerary with pinned actions, and onboarding/sign-in art. Shared `Text` no longer clips Hindi labels. Sign-in and intro art were only bundle-checked, not seen. See decisions.md for details.
+
+Rider UI redesign "Trail" phases 0–5 — **simulator** (Claude, Android emulator, 2026-11-17). Forest + amber, floating forest tab bar, editorial headlines, photo-first cards, transparent-header photo heroes with rising sheets, boarding-pass tickets, sticky money footers, trip stats. Seen on device: Explore, Browse, Vehicle, Shop, Cart, Checkout (rider pick), Trips, Booking detail, Help + chat, Profile, Riders. All screens seen on device except the post-payment "You’re booked!" screen (needs a real payment). See decisions.md.
+
+Beta licence self-declaration — **simulator** (Claude, Android emulator, 2026-11-18). Online DL check off (`ONLINE_LICENCE_CHECK`). Riders tick two statements at checkout on app and web, and the shop checks the original at pickup through the existing approve/refuse sheet. Needs migration 0023 applied. Checkout ticks, riders list, rider card and profile seen on device; a real hold is not yet created (waits on 0023). See decisions.md.
+
 Rider phase U10 — **written**, 2026-11-16. Added unsaved-changes protection, attachment recovery, safer pickup upload cancellation, rate-limit messaging, location permission recovery, and payment haptics. Individual TypeScript and lint checks passed; 89 shared and 3 rider tests passed. Android and iOS JavaScript exports passed for both apps. Merchant Expo Doctor passed 20/20; rider 19/20 (Cashfree SDK is marked untested with the New Architecture). No native build, simulator, phone or live provider test was run.
 
 Rider phases U7–U9 — **written**, 2026-11-15. TypeScript, lint, tests and Android exports passed; the rider Expo Doctor check remains at 19/20 because of the Cashfree compatibility warning.

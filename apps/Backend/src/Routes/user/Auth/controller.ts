@@ -108,6 +108,16 @@ export async function logout(req: Request, res: Response) {
   res.status(204).send();
 }
 
+export async function profile(req: Request, res: Response) {
+  const profile = await authService.getProfile(pool, req.userId!);
+  res.set("Cache-Control", "private, no-store");
+  if (!profile) {
+    res.status(401).json({ error: "unauthenticated" });
+    return;
+  }
+  res.json(profile);
+}
+
 export async function listSessions(req: Request, res: Response) {
   const sessions = await authService.listSessions(pool, req.userId!, req.sessionId ?? null);
   const current = sessionDetails(req);

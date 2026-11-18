@@ -7,6 +7,7 @@ import { useMerchantQuery } from "../../state/query";
 import { useMerchantShop } from "../../state/shop";
 import { CounterRow } from "../overview/CounterRow";
 import type { BookingActions } from "./BookingCalendar";
+import { art } from "../../ui/art";
 
 type FilterTab = bookingFilters.Tab;
 const labels: Record<FilterTab, TKey> = {
@@ -50,14 +51,14 @@ export function BookingList({ shopId, filters, tab, setTab, header, actions, cle
     refreshing={active.isRefetching || finished.isRefetching} onRefresh={retry}
     ListHeaderComponent={<View style={{ gap: space[3] }}>
       {header}
-      <Tabs value={tab} onChange={setTab} options={bookingFilters.TAB_KEYS.map((value) => ({
+      <Tabs pill wrap value={tab} onChange={setTab} options={bookingFilters.TAB_KEYS.map((value) => ({
         value, label: t(labels[value]), count: active.isSuccess && (value !== "finished" && value !== "all" || finished.isSuccess)
           ? bookingFilters.rowsForTab(bookings, value, now).length : undefined,
       }))} />
     </View>}
     ListEmptyComponent={error ? <ErrorNote text={errorText(lang, error)} retryLabel={t("common.retry")} onRetry={retry} />
       : pending ? <LoadingRows label={t("common.loading")} />
-      : <EmptyState text={t(filtered ? "bookings.emptyFiltered" : empty[tab])} action={emptyAction} />}
+      : <EmptyState image={filtered ? undefined : art.emptyBookings} text={t(filtered ? "bookings.emptyFiltered" : empty[tab])} action={emptyAction} />}
     ListFooterComponent={withPast && finished.isSuccess ? <Button variant="ghost" label={t("common.showOlder")} onPress={() => setSteps((n) => n + 1)} /> : undefined}
     renderItem={({ item }) => <View style={{ gap: space[2] }}>
       {item.heading && <Text size="sm" weight="bold" accessibilityRole="header">{dateLabel(item.heading, lang)}</Text>}

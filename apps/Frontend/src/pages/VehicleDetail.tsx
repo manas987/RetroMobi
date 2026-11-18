@@ -271,7 +271,6 @@ export function VehicleDetail() {
                 <div className="rounded-panel border border-line divide-y divide-line">
                   <Row label="Name" value={v.shopName} />
                   <Row label="Address" value={v.shopAddress} />
-                  {v.shopPhone && <Row label="Phone" value={<a href={`tel:${v.shopPhone}`} className="underline underline-offset-2">{v.shopPhone}</a>} />}
                 </div>
                 <div className="mt-3 flex justify-end">
                   <Link

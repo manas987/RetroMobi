@@ -3,12 +3,13 @@ import { Stack } from "expo-router";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { Bike, IndianRupee, Rocket } from "lucide-react-native";
 import {
-  AppProviders, IntroGate, colors, configureApi, font, fontAssets, useAppReady, useLang, useSession, type IntroSlide,
+  AppProviders, IntroGate, colors, configureApi, setTextScale, font, fontAssets, useAppReady, useLang, useSession, type IntroSlide,
 } from "@retromobi/mobile-shared";
 
 configureApi({ portal: "merchant", baseUrl: process.env.EXPO_PUBLIC_API_URL });
+// Counters are read at arm's length: body text 16 instead of the website's 15.
+setTextScale(16);
 
 // Hold the splash until fonts, the saved session, the language and the intro flag are read.
 void SplashScreen.preventAutoHideAsync();
@@ -18,23 +19,28 @@ void SplashScreen.preventAutoHideAsync();
  * here in both languages rather than in the shared i18n files, which mirror
  * the website word for word.
  */
+const ART = [
+  require("../../assets/images/ui/onboard-1.jpg"),
+  require("../../assets/images/ui/onboard-2.jpg"),
+  require("../../assets/images/ui/onboard-3.jpg"),
+];
 const INTRO = {
   en: {
     subtitle: "for shops",
     labels: { next: "Next", skip: "Skip", start: "Get started" },
     slides: [
-      { icon: Bike, title: "Run your counter", body: "Hand over, take back and record walk-in rentals in a few taps. Every booking in one place." },
-      { icon: Rocket, title: "Get listed when you're ready", body: "Add your licence, papers and vehicles step by step. Nothing shows to customers until you switch it on." },
-      { icon: IndianRupee, title: "See what you earned", body: "Online payouts and walk-in cash, day by day, for every shop you run." },
+      { image: ART[0], title: "Run your counter", body: "Hand over, take back and record walk-in rentals in a few taps. Every booking in one place." },
+      { image: ART[1], title: "Get listed when you're ready", body: "Add your licence, papers and vehicles step by step. Nothing shows to customers until you switch it on." },
+      { image: ART[2], title: "See what you earned", body: "Online payouts and walk-in cash, day by day, for every shop you run." },
     ] satisfies IntroSlide[],
   },
   hi: {
     subtitle: "दुकानों के लिए",
     labels: { next: "आगे", skip: "छोड़ें", start: "शुरू करें" },
     slides: [
-      { icon: Bike, title: "काउंटर का काम आसान", body: "गाड़ी देना, वापस लेना और वॉक-इन किराया कुछ ही टैप में दर्ज करें। हर बुकिंग एक जगह।" },
-      { icon: Rocket, title: "जब तैयार हों, लिस्ट करें", body: "लाइसेंस, काग़ज़ और गाड़ियाँ एक-एक करके जोड़ें। जब तक आप चालू न करें, ग्राहकों को कुछ नहीं दिखता।" },
-      { icon: IndianRupee, title: "कमाई देखें", body: "ऑनलाइन भुगतान और वॉक-इन नकद, दिन-ब-दिन, आपकी हर दुकान के लिए।" },
+      { image: ART[0], title: "काउंटर का काम आसान", body: "गाड़ी देना, वापस लेना और वॉक-इन किराया कुछ ही टैप में दर्ज करें। हर बुकिंग एक जगह।" },
+      { image: ART[1], title: "जब तैयार हों, लिस्ट करें", body: "लाइसेंस, काग़ज़ और गाड़ियाँ एक-एक करके जोड़ें। जब तक आप चालू न करें, ग्राहकों को कुछ नहीं दिखता।" },
+      { image: ART[2], title: "कमाई देखें", body: "ऑनलाइन भुगतान और वॉक-इन नकद, दिन-ब-दिन, आपकी हर दुकान के लिए।" },
     ] satisfies IntroSlide[],
   },
 } as const;
@@ -58,7 +64,7 @@ export default function RootLayout() {
   return (
     <AppProviders>
       <StatusBar style="dark" />
-      <IntroGate slides={intro.slides} labels={intro.labels} subtitle={intro.subtitle} onReady={() => setIntroRead(true)}>
+      <IntroGate quick slides={intro.slides} labels={intro.labels} subtitle={intro.subtitle} onReady={() => setIntroRead(true)}>
         <Stack
           screenOptions={{
             headerTintColor: colors.ink,

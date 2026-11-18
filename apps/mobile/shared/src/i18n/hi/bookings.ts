@@ -9,6 +9,7 @@ export default {
   searchPlaceholder: "नाम, फ़ोन या नंबर प्लेट",
   allVehicles: "सारी गाड़ियाँ",
   allSources: "सारी बुकिंग",
+  filters: "फ़िल्टर",
   filterSource: "ऑनलाइन या वॉक-इन",
   filterVehicle: "गाड़ी",
   tabToday: "आज",

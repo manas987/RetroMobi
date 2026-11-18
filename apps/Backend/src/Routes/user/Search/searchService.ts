@@ -229,20 +229,21 @@ export async function searchVehicles(
     if (params.maxEngineCc != null && (row.engine_cc == null || row.engine_cc > params.maxEngineCc)) continue;
     if (params.seatingCapacity != null && row.seating_capacity !== params.seatingCapacity) continue;
 
-    priceHistogram.push(days[0]!.amount);
+    const pricePerDay = days[0]!.amount;
+    priceHistogram.push(pricePerDay);
 
-    if (params.minPrice != null && rentalAmount < params.minPrice) continue;
-    if (params.maxPrice != null && rentalAmount > params.maxPrice) continue;
+    if (params.minPrice != null && pricePerDay < params.minPrice) continue;
+    if (params.maxPrice != null && pricePerDay > params.maxPrice) continue;
 
     candidates.push({
       vehicleId: row.vehicle_id,
       shopId: row.shop_id,
       shopName: row.shop_name,
-      shopPhone: row.shop_phone,
+      shopPhone: null,
       shopAddress: `${row.address_line1}, ${row.shop_city}`,
       shopLatitude: row.latitude,
       shopLongitude: row.longitude,
-      pricePerDay: days[0]!.amount,
+      pricePerDay,
       totalAmount: rentalAmount,
       securityDeposit: Number(row.security_deposit_amount),
       rating: row.rating != null ? Number(row.rating) : null,
@@ -403,7 +404,7 @@ export async function getVehicleDetail(pool: Pool, vehicleId: string, window?: {
     seatingCapacity: row.seating_capacity,
     shopId: row.shop_id,
     shopName: row.shop_name,
-    shopPhone: row.shop_phone,
+    shopPhone: null,
     shopAddress: `${row.address_line1}, ${row.shop_city}`,
     shopLatitude: row.latitude,
     shopLongitude: row.longitude,

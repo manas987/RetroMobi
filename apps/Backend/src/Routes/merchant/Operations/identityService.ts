@@ -30,7 +30,7 @@ export async function getIdentityForPickup(
   bookingId: string,
 ) {
   const { rows } = await pool.query(
-    `select b.id as booking_id, b.rider_id, b.pickup_verification_session_id,
+    `select b.id as booking_id, b.rider_id, b.pickup_licence_ack_at,
             r.name as rider_name,
             to_char(r.dob, 'YYYY-MM-DD') as rider_dob,
             dlv.licence_number as licence_number_masked,
@@ -79,7 +79,7 @@ export async function getIdentityForPickup(
     // internet.
     photoUrl: row.photo_key ? await presignDownload(row.photo_key, 300) : null,
     alreadyChecked: row.existing_check_id !== null,
-    pickupLicenceRequired: !!row.pickup_verification_session_id,
+    pickupLicenceRequired: !!row.pickup_licence_ack_at,
   };
 }
 
@@ -93,7 +93,7 @@ async function assertHandoverAllowed(
   args: { bookingId: string; requireIdentityCheck: boolean },
 ) {
   const { rows } = await client.query(
-    `select b.id, b.rider_id, b.vehicle_id, b.status, b.pickup_verification_session_id,
+    `select b.id, b.rider_id, b.vehicle_id, b.status, b.pickup_licence_ack_at,
             to_char(b.scheduled_pickup_at, 'YYYY-MM-DD') as start_date,
             to_char(b.scheduled_return_at, 'YYYY-MM-DD') as end_date,
             b.scheduled_return_at > now() as before_return,
@@ -119,7 +119,7 @@ async function assertHandoverAllowed(
   // "fix" this by requiring a rider.
   if (!booking.rider_id) return;
 
-  if (booking.pickup_verification_session_id) {
+  if (booking.pickup_licence_ack_at) {
     if (booking.status !== "CONFIRMED" || !booking.before_return) {
       throw new VerificationRequiredError("This booking is outside the licence handover window.");
     }
@@ -284,7 +284,7 @@ export async function approvePickupLicence(pool: Pool, merchantUserId: string, s
       `select b.rider_id from bookings b join vehicles v on v.id = b.vehicle_id
         where b.id = $1 and v.shop_id = $2 and b.deleted_at is null
           and b.status = 'CONFIRMED' and b.actual_pickup_at is null and b.scheduled_return_at > now()
-          and b.pickup_verification_session_id is not null
+          and b.pickup_licence_ack_at is not null
           and exists (select 1 from shop_members sm where sm.shop_id = v.shop_id and sm.merchant_user_id = $3
                        and sm.status = 'ACTIVE' and sm.deleted_at is null)
         for update of b`,

@@ -1,39 +1,28 @@
 import { useEffect, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Ellipsis, Laptop, MapPin, Plus, ShieldCheck, Smartphone, UserRound } from "lucide-react";
+import { Ellipsis, IdCard, Laptop, MapPin, Plus, Smartphone, UserRound } from "lucide-react";
 import { useLocation } from "wouter";
 import { Header } from "../../components/Header";
 import { Footer } from "../../components/Footer";
 import { Modal } from "../../components/Modal";
 import { usePortalSession, usePortalQuery, portalFetch, type Row } from "../../lib/portal";
 import { DateField } from "../../components/DateTimeField";
-import { StatusPill } from "../../components/DataTable";
 import { ErrorBox, TextField } from "../../components/AuthFormBits";
 import { EmptyState, feedbackActionClass, LoadingSkeleton, SkeletonBlock, SkeletonRows } from "../../components/ContentFeedback";
 import { SearchFailure } from "../../components/SearchFeedback";
 import { dateLabel } from "../../lib/format";
-import { RiderVerification } from "../../components/RiderVerification";
 
 const primaryButton = "inline-flex min-h-10 items-center justify-center gap-2 rounded-row bg-amber px-4 text-sm font-semibold text-on-amber hover:brightness-95 disabled:opacity-50";
 const secondaryButton = "inline-flex min-h-10 items-center justify-center rounded-row border border-line-strong px-4 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50";
 const dangerButton = "inline-flex min-h-10 items-center justify-center rounded-row bg-danger px-4 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50";
-const indiaDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
 const sessionDate = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
-
-function licenceStatus(rider: Row, today: string) {
-  if (rider.licence_status === "VERIFIED" && typeof rider.licence_expires_on === "string" && rider.licence_expires_on < today) return "EXPIRED";
-  return String(rider.licence_status ?? "UNVERIFIED");
-}
 
 function ProfileBody({ token, onSignOut }: { token: string; onSignOut: () => void }) {
   const [revision, setRevision] = useState(0);
   const { data, error } = usePortalQuery<{ riders: Row[] }>("user", `/riders?r=${revision}`, token);
   const [adding, setAdding] = useState(false);
   const reload = () => setRevision((value) => value + 1);
-  const today = indiaDay.format(new Date());
-  const riders = (data?.riders ?? []).map((rider) => ({ rider, status: licenceStatus(rider, today) }));
-  const needsAttention = riders.filter(({ status }) => status !== "VERIFIED");
-  const verified = riders.filter(({ status }) => status === "VERIFIED");
+  const riders = data?.riders ?? [];
 
   return (
     <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-8 sm:px-6 sm:py-10">
@@ -67,23 +56,23 @@ function ProfileBody({ token, onSignOut }: { token: string; onSignOut: () => voi
             </LoadingSkeleton>
           )}
           {data && !riders.length && (
-            <EmptyState title="No riders added yet" description="Add a rider to verify their driving licence.">
+            <EmptyState title="No riders added yet" description="Add the people who’ll ride. Each one shows their original driving licence at pickup.">
               <button type="button" className={feedbackActionClass} onClick={() => setAdding(true)}>Add a rider</button>
             </EmptyState>
           )}
-          {[
-            { title: "Needs attention", entries: needsAttention, attention: true },
-            { title: "Verified riders", entries: verified, attention: false },
-          ].filter(({ entries }) => entries.length).map(({ title, entries, attention }) => (
-            <section key={title} aria-label={title}>
-              <h2 className="mb-3 text-lg font-semibold text-ink">{title}</h2>
-              <div className={`grid gap-3 ${attention ? "" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
-                {entries.map(({ rider, status }) => (
-                  <RiderCard key={String(rider.id)} rider={rider} status={status} token={token} onChanged={reload} />
-                ))}
+          {riders.length > 0 && (
+            <section aria-label="Your riders">
+              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-lg font-semibold text-ink">Your riders</h2>
+                <p className="flex items-center gap-1.5 text-sm text-ink-2">
+                  <IdCard size={15} aria-hidden="true" /> Licences are checked by the shop at pickup
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {riders.map((rider) => <RiderCard key={String(rider.id)} rider={rider} token={token} onChanged={reload} />)}
               </div>
             </section>
-          ))}
+          )}
         </section>
 
         <SignedInDevices token={token} onSignOut={onSignOut} />
@@ -94,13 +83,12 @@ function ProfileBody({ token, onSignOut }: { token: string; onSignOut: () => voi
   );
 }
 
-function RiderCard({ rider, status, token, onChanged }: { rider: Row; status: string; token: string; onChanged: () => void }) {
-  const [action, setAction] = useState<"edit" | "remove" | "verify" | null>(null);
+function RiderCard({ rider, token, onChanged }: { rider: Row; token: string; onChanged: () => void }) {
+  const [action, setAction] = useState<"edit" | "remove" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const name = String(rider.name ?? "");
   const initials = name.trim().split(/\s+/).slice(0, 2).map((part) => Array.from(part)[0] ?? "").join("").toLocaleUpperCase();
-  const verified = status === "VERIFIED";
   const menuItem = "flex cursor-pointer items-center rounded-row px-3 py-2 text-sm font-medium outline-none data-[highlighted]:bg-surface-2";
 
   async function remove() {
@@ -118,9 +106,9 @@ function RiderCard({ rider, status, token, onChanged }: { rider: Row; status: st
   }
 
   return (
-    <article className={`min-w-0 rounded-panel border p-4 ${verified ? "border-line bg-surface" : "border-warning/20 bg-warning-soft/40"}`}>
+    <article className="min-w-0 rounded-panel border border-line bg-surface p-4">
       <div className="flex items-start gap-3">
-        <span aria-hidden="true" className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold ${verified ? "bg-verified-soft text-verified" : "bg-warning-soft text-warning"}`}>
+        <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-amber-soft text-sm font-semibold text-on-amber">
           {initials || <UserRound size={17} />}
         </span>
         <div className="min-w-0 flex-1">
@@ -142,27 +130,7 @@ function RiderCard({ rider, status, token, onChanged }: { rider: Row; status: st
         </DropdownMenu.Root>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line pt-3">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <StatusPill value={status} />
-          {rider.licence_expires_on && (verified || status === "EXPIRED") ? (
-            <span className="text-xs text-ink-2">{verified ? "Valid until " : ""}{dateLabel(rider.licence_expires_on)}</span>
-          ) : null}
-        </div>
-        {!verified && (
-          <button type="button" onClick={() => setAction("verify")} className="inline-flex min-h-9 items-center gap-1.5 rounded-row border border-line-strong bg-surface px-3 text-sm font-medium text-ink hover:bg-surface-3">
-            <ShieldCheck size={15} aria-hidden="true" /> {status === "EXPIRED" ? "Verify renewed licence" : "Verify licence"}
-          </button>
-        )}
-      </div>
-
       {action === "edit" && <RiderForm rider={rider} token={token} onClose={() => setAction(null)} onSaved={() => { setAction(null); onChanged(); }} />}
-      {action === "verify" && (
-        <Modal open title="Verify driving licence" onClose={() => setAction(null)}>
-          <RiderVerification riderId={String(rider.id)} riderName={name} token={token}
-            onDone={() => { setAction(null); onChanged(); }} onCancel={() => setAction(null)} />
-        </Modal>
-      )}
       {action === "remove" && (
         <Modal open title="Remove this rider?" onClose={() => { if (!busy) setAction(null); }}>
           <p className="text-sm text-ink-2"><strong className="text-ink">{name}</strong> will be removed from your rider list and won’t be available for future bookings.</p>

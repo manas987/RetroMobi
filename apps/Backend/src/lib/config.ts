@@ -74,13 +74,8 @@ const REQUIRED_IN_PRODUCTION: Requirement[] = [
   // licence was approved without being checked and a scooter went out to
   // whoever asked. It now reports SANDBOX_UNAVAILABLE instead, but in
   // production an unverifiable licence is a dead feature, so refuse to boot.
-  { key: "CASHFREE_CLIENT_ID", why: "no driving licence can be verified at all without it" },
-  { key: "CASHFREE_CLIENT_SECRET", why: "no driving licence can be verified at all without it" },
-  // An unpeppered sha256 of a driving licence number is reversible: the format
-  // carries very little entropy, so a lookup table of every plausible Indian
-  // DL number is a weekend's work. The hash is all we keep of the number
-  // (lib/verificationHash.ts), so if it is guessable we have stored the number.
-  { key: "DL_HASH_PEPPER", why: "without it the stored licence hashes are reversible by anyone" },
+  { key: "CASHFREE_CLIENT_ID", why: "no payment can be taken (and no driving licence verified) without it" },
+  { key: "CASHFREE_CLIENT_SECRET", why: "no payment can be taken (and no driving licence verified) without it" },
   // Cashfree's return_url and notify_url are built from this. Without it the
   // customer pays and is then left on Cashfree's page with no way back, and no
   // webhook is registered on the order -- so the booking is confirmed only by
@@ -90,6 +85,16 @@ const REQUIRED_IN_PRODUCTION: Requirement[] = [
     why: "a paying customer is never returned to the app and no webhook is registered on the order",
     validate: (v) => (v.startsWith("https://") ? null : "must be an https:// origin in production"),
   },
+];
+
+// Only while the online licence check is on (ONLINE_LICENCE_CHECK, lib/pickupLicence.ts):
+// the beta stores no licence numbers, so there is nothing to pepper.
+const REQUIRED_FOR_ONLINE_LICENCE: Requirement[] = [
+  // An unpeppered sha256 of a driving licence number is reversible: the format
+  // carries very little entropy, so a lookup table of every plausible Indian
+  // DL number is a weekend's work. The hash is all we keep of the number
+  // (lib/verificationHash.ts), so if it is guessable we have stored the number.
+  { key: "DL_HASH_PEPPER", why: "without it the stored licence hashes are reversible by anyone" },
 ];
 
 // Set in production = a silently wrong decision, so these are refused outright.
@@ -130,7 +135,8 @@ export function assertConfig(env: NodeJS.ProcessEnv = process.env): string[] {
   const problems: string[] = [];
   const warnings: string[] = [];
 
-  const required = env.NODE_ENV === "production" ? [...REQUIRED, ...REQUIRED_IN_PRODUCTION] : REQUIRED;
+  const required = env.NODE_ENV !== "production" ? REQUIRED
+    : [...REQUIRED, ...REQUIRED_IN_PRODUCTION, ...(env.ONLINE_LICENCE_CHECK === "true" ? REQUIRED_FOR_ONLINE_LICENCE : [])];
 
   for (const { key, why, validate } of required) {
     const value = env[key]?.trim();

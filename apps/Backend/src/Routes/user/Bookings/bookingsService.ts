@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { composeTotal, priceRental, refundForCancellation } from "../../../lib/pricing.ts";
-import { isPickupLicenceOutage, PICKUP_LICENCE_ACK, pickupLicenceRejections } from "../../../lib/pickupLicence.ts";
+import { isPickupLicenceOutage, LICENCE_DECLARATION, onlineLicenceCheck, PICKUP_LICENCE_ACK, pickupLicenceRejections } from "../../../lib/pickupLicence.ts";
 import { writeAudit } from "../../../lib/audit.ts";
 import { notify } from "../../../lib/notify.ts";
 import { extensionWindowAvailable, notBlocked, PUBLIC_LISTING_ELIGIBLE, VEHICLE_LICENCE_JOIN } from "../../../lib/vehicleBookingRules.ts";
@@ -97,6 +97,7 @@ export async function createHold(
     pickupAt: Date;
     returnAt: Date;
     couponCode?: string;
+    licenceDeclaration?: { validLicence: true; cancelIfMissing: true };
   },
 ): Promise<{
   groupId: string;
@@ -112,6 +113,10 @@ export async function createHold(
   };
 }> {
   const { userId, items, pickupAt, returnAt, couponCode } = input;
+  const declared = !onlineLicenceCheck();
+  if (declared && !input.licenceDeclaration) {
+    throw new LicenceInvalidError("Confirm both licence statements to book.");
+  }
 
   if (items.length > 5) throw new TooManyVehiclesError("at most 5 vehicles per checkout");
   if (returnAt.getTime() <= pickupAt.getTime()) throw new InvalidDurationError("return must be after pickup");
@@ -143,7 +148,16 @@ export async function createHold(
     // lib/licenceGate.ts is shared with the handover gate so the two cannot
     // drift apart.
     const pickupSessions = new Map<string, string>();
-    for (const item of items) {
+    // Beta: no online check. The rider only has to be this account's; the
+    // licence itself is checked by the shop at pickup (identityService).
+    if (declared) {
+      const { rows: owned } = await client.query(
+        `select id from riders where id = any($1::uuid[]) and user_id = $2 and deleted_at is null`,
+        [items.map((i) => i.riderId), userId],
+      );
+      if (owned.length !== items.length) throw new LicenceInvalidError("Choose a rider from your account for each vehicle.");
+    }
+    for (const item of declared ? [] : items) {
       const gate = await evaluateRiderForVehicle(client, {
         userId,
         riderId: item.riderId,
@@ -251,7 +265,7 @@ export async function createHold(
              (group_id, rider_id, vehicle_id, source, scheduled_pickup_at, scheduled_return_at,
               status, rental_amount, security_deposit_amount, platform_fee, tax_amount,
               discount_amount, total_amount, pickup_verification_session_id, pickup_licence_ack_at)
-           values ($1, $2, $3, 'ONLINE', $4, $5, 'HOLD', $6, $7, $8, $9, $10, $11, $12, case when $12::uuid is not null then now() end)
+           values ($1, $2, $3, 'ONLINE', $4, $5, 'HOLD', $6, $7, $8, $9, $10, $11, $12, case when $12::uuid is not null or $13 then now() end)
            returning id`,
           [
             groupId,
@@ -266,10 +280,17 @@ export async function createHold(
             totals.discountAmount,
             totals.totalAmount,
             pickupSessions.get(item.riderId) ?? null,
+            declared,
           ],
         );
         const bookingId = insertResult.rows[0].id;
         bookings.push({ id: bookingId, vehicleId: item.vehicleId });
+        if (declared) {
+          await writeAudit(client, {
+            actorType: "CUSTOMER", actorId: input.userId, action: "booking.licence_declared",
+            entityType: "booking", entityId: bookingId, after: { riderId: item.riderId, terms: LICENCE_DECLARATION },
+          });
+        }
         if (pickupSessions.has(item.riderId)) {
           await writeAudit(client, {
             actorType: "CUSTOMER", actorId: input.userId, action: "booking.pickup_licence_acknowledged",
@@ -353,7 +374,7 @@ export async function cancelBooking(
     const { rows } = await client.query(
       `select b.id, b.group_id, b.status, b.actual_pickup_at, b.scheduled_pickup_at, b.scheduled_return_at,
               b.rental_amount, b.platform_fee, b.tax_amount, b.security_deposit_amount,
-              b.total_amount, b.deleted_at, b.pickup_verification_session_id, g.user_id
+              b.total_amount, b.deleted_at, b.pickup_licence_ack_at, g.user_id
          from bookings b
          join booking_groups g on g.id = b.group_id
          join vehicles v on v.id = b.vehicle_id
@@ -382,7 +403,7 @@ export async function cancelBooking(
     }
     if (refusal) {
       const checked = await client.query("select 1 from pickup_identity_checks where booking_id = $1", [input.bookingId]);
-      if (!booking.pickup_verification_session_id || checked.rowCount || booking.status !== "CONFIRMED") {
+      if (!booking.pickup_licence_ack_at || checked.rowCount || booking.status !== "CONFIRMED") {
         throw new BookingNotCancellableError("This booking is not awaiting an in-person licence check.");
       }
       if (now < booking.scheduled_pickup_at || now >= booking.scheduled_return_at) {
@@ -639,9 +660,12 @@ export async function requestExtension(
 export async function listMyBookings(pool: Pool, userId: string) {
   const { rows } = await pool.query(
     `select b.*, m.make, m.model, s.id as shop_id, s.name as shop_name,
-            s.address_line1 as shop_address, s.city as shop_city, s.phone as shop_phone, s.landmark as shop_landmark,
+            s.address_line1 as shop_address, s.city as shop_city,
+            case when b.status = 'CONFIRMED' and b.deleted_at is null and b.actual_return_at is null
+              and (b.actual_pickup_at is not null or b.scheduled_return_at > now())
+              then s.phone else null end as shop_phone, s.landmark as shop_landmark,
             r.name as rider_name,
-            b.pickup_verification_session_id is not null and exists (
+            b.pickup_licence_ack_at is not null and exists (
               select 1 from pickup_identity_checks pic where pic.booking_id = b.id
             ) as pickup_licence_checked,
             exists(select 1 from reviews review where review.booking_id = b.id and review.deleted_at is null) as has_review,

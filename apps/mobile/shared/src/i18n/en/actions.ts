@@ -27,6 +27,7 @@ export default {
   idFailedTitle: "Don't hand over the vehicle",
   idFailedBody: "The ID didn't match. This has been recorded. Ask the customer to contact RetroMobi support.",
   idDone: "ID confirmed. The customer now records a short video of the vehicle in their app, and then the ride starts.",
+  pickupVideoPending: "Pickup video pending",
   waitingVideo: "Waiting for customer's video",
   waitingVideoTitle: "Waiting for the customer's video",
   waitingVideoBody: "ID is checked. Ask them to open RetroMobi → My bookings and record a short video of the vehicle. The ride starts after that.",

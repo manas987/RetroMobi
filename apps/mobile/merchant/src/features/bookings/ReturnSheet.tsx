@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { CheckCircle2, ThumbsUp, TriangleAlert } from "lucide-react-native";
-import { Button, Card, ErrorNote, Field, Input, Sheet, Text, api, colors, rupees, space, useT, type Row } from "@retromobi/mobile-shared";
+import { Button, Card, ErrorNote, Sheet, Text, api, colors, radius, rupees, space, useT, type Row } from "@retromobi/mobile-shared";
+import { LabelInput } from "../fleet/tabs/Fields";
 import { BookingSummary, useCounterWrite } from "./common";
 
 export function ReturnSheet({ booking, onClose }: { booking: Row | null; onClose: () => void }) {
@@ -36,7 +37,7 @@ function ReturnFlow({ booking, onClose }: { booking: Row; onClose: () => void })
       <Button variant="ghost" label={t("common.back")} disabled={busy} onPress={() => setClaiming(false)} />
     </View>
     : <View style={{ gap: space[2] }}>
-      <Button variant="primary" icon={ThumbsUp} label={t(walkin ? "actions.returnFineWalkin" : "actions.returnFine")} busy={busy} onPress={() => send(false)} />
+      <Button variant="primary" size="lg" full icon={ThumbsUp} label={t(walkin ? "actions.returnFineWalkin" : "actions.returnFine")} busy={busy} onPress={() => send(false)} />
       {!walkin && <Button icon={TriangleAlert} label={t("actions.returnDamage")} disabled={busy || deposit <= 0} onPress={() => setClaiming(true)} />}
     </View>;
   return <Sheet open title={t("actions.returnTitle")} onClose={onClose} dismissible={!receipt} closeLabel={t("common.close")} busy={busy} footer={footer}>
@@ -50,16 +51,17 @@ function ReturnFlow({ booking, onClose }: { booking: Row; onClose: () => void })
     </Card> : <View style={{ gap: space[3] }}>
       <BookingSummary booking={booking} />
       {claiming ? <>
-        <Field label={t("actions.claimReason")}>
-          <Input multiline value={reason} onChangeText={setReason} accessibilityLabel={t("actions.claimReason")} placeholder={t("actions.claimReasonHint")} />
-        </Field>
-        <Field label={t("actions.claimAmount")} hint={t("actions.claimMax", { amount: rupees(deposit) })} error={tooMuch ? t("actions.claimTooMuch") : undefined}>
-          <Input keyboardType="number-pad" value={amount} accessibilityLabel={t("actions.claimAmount")} onChangeText={(v) => setAmount(v.replace(/\D/g, ""))} />
-        </Field>
+        <LabelInput multiline label={t("actions.claimReason")} value={reason} onChangeText={setReason}
+          placeholder={t("actions.claimReasonHint")} />
+        <LabelInput prefix="₹" label={t("actions.claimAmount")} hint={t("actions.claimMax", { amount: rupees(deposit) })}
+          error={tooMuch ? t("actions.claimTooMuch") : undefined} keyboardType="number-pad"
+          value={amount} onChangeText={(v) => setAmount(v.replace(/\D/g, ""))} />
         <Text color="info">{t("actions.claimNext")}</Text>
       </> : <>
         <Text weight="medium">{t("actions.returnQuestion")}</Text>
-        {!walkin && deposit > 0 && <Text color="ink2">{t("actions.deposit")}: {rupees(deposit)}</Text>}
+        {!walkin && deposit > 0 && <View style={{ flexDirection: "row", justifyContent: "space-between", padding: space[3], borderRadius: radius.panel, backgroundColor: colors.surface2 }}>
+          <Text color="ink2">{t("actions.deposit")}</Text><Text weight="bold" size="lg" tnum>{rupees(deposit)}</Text>
+        </View>}
         <Text size="sm" color="ink2">{t("actions.returnFinalNote")}</Text>
       </>}
       {error && <ErrorNote text={error} />}

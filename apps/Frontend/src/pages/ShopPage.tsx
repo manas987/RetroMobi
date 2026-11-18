@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams, useSearch as useLocationSearch } from "wouter";
-import { Phone, MapPin, ShieldCheck, Star, Clock, ArrowLeft, Camera, ChevronLeft, ChevronRight } from "lucide-react";
+import { MapPin, ShieldCheck, Star, Clock, ArrowLeft, Camera, ChevronLeft, ChevronRight } from "lucide-react";
 import { Modal } from "../components/Modal";
 import { Header } from "../components/Header";
 import { Footer } from "../components/Footer";
@@ -245,14 +245,6 @@ function ShopHeader({ shop }: { shop: ShopProfile }) {
             {shop.addressLine1}, {shop.city}, {shop.state} {shop.pincode}
             {shop.landmark && <span className="mt-0.5 block text-ink-3">{shop.landmark}</span>}
           </InfoRow>
-
-          {shop.phone && (
-            <InfoRow icon={<Phone className="h-4 w-4" />} label="Phone">
-              <a href={`tel:${shop.phone}`} className="hover:underline">
-                {shop.phone}
-              </a>
-            </InfoRow>
-          )}
 
           {shop.ownerName && (
             <InfoRow icon={<ShieldCheck className="h-4 w-4" />} label="Licence holder">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Landmark } from "lucide-react-native";
-import { Button, Card, Chip, Sheet, Text, api, useT, type Row } from "@retromobi/mobile-shared";
+import { Button, Card, Sheet, Text, api, useT, type Row } from "@retromobi/mobile-shared";
+import { StatusBadge, counterStyles } from "../../ui/Counter";
 import { useMerchantQuery } from "../../state/query";
 import { useMerchantShop } from "../../state/shop";
 import { useCounterWrite } from "../bookings/common";
@@ -15,14 +16,15 @@ export function PayoutAccount({ onChanged }: { onChanged?: () => void }) {
   if (!q.isSuccess) return <Pending error={q.error} retry={q.refetch} />;
   const account = q.data;
   const status = account?.status === "VERIFIED" ? "good" : account?.status === "PENDING" ? "info" : "bad";
-  return <Card title={t("money.bankTitle")} icon={Landmark}>
+  return <Card style={counterStyles.panel} title={t("money.bankTitle")} icon={Landmark}
+    action={can("payouts:write") && !!account && <Button label={t("common.change")} variant="ghost" onPress={() => setEditing(true)} />}>
     <Fields>
       {account ? <>
         <Text weight="bold">{account.account_last4 ? `•••• ${account.account_last4} · ${String(account.ifsc ?? "")}` : "—"}</Text>
-        <Chip tone={status} label={t(status === "good" ? "money.bankVerified" : status === "info" ? "money.bankPending" : "money.bankRejected")} />
+        <StatusBadge tone={status} label={t(status === "good" ? "money.bankVerified" : status === "info" ? "money.bankPending" : "money.bankRejected")} />
         {status !== "good" && <Text color="ink2">{t(status === "info" ? "money.bankPendingNote" : "money.bankRejectedNote")}</Text>}
       </> : <Text color="ink2">{t("money.bankNone")}</Text>}
-      {can("payouts:write") && <Button label={t(account ? "common.change" : "money.addAccount")} onPress={() => setEditing(true)} />}
+      {can("payouts:write") && !account && <Button label={t("money.addAccount")} onPress={() => setEditing(true)} />}
       {editing && <BankForm replace={!!account} onClose={() => setEditing(false)} onDone={() => { setEditing(false); onChanged?.(); }} />}
     </Fields>
   </Card>;

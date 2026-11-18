@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { Pressable, View } from "react-native";
+import { Image } from "expo-image";
 import { ChevronLeft } from "lucide-react-native";
 import {
-  Button, DEFAULT_COUNTRY, ErrorNote, Field, Input, Logo, OtpField, PhoneField, Screen, Text,
-  api, colors, errorMessage, getDeviceId, setSession, space, useCountdown, type Country,
+  Button, DEFAULT_COUNTRY, ErrorNote, Logo, OtpField, PhoneField, Screen, Text,
+  api, colors, errorMessage, getDeviceId, radius, setSession, space, useCountdown, type Country,
 } from "@retromobi/mobile-shared";
+
+import { LabelInput } from "../features/fleet/tabs/Fields";
+import { PageTitle, counter, counterStyles } from "../ui/Counter";
 
 type Step = "phone" | "otp" | "signup";
 
@@ -81,32 +85,35 @@ export default function Login() {
   );
 
   return (
-    <Screen edges={["top", "bottom", "left", "right"]} contentStyle={{ paddingTop: space[10] }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], marginBottom: space[8] }}>
-        <Logo />
-        <Text size="lg" weight="bold">retromobi</Text>
-        <Text size="xs" color="ink3">for shops</Text>
+    <Screen background="canvas" edges={["top", "bottom", "left", "right"]} contentStyle={{ paddingTop: space[6], gap: space[5] }}>
+      <View style={{ borderRadius: radius.hero, overflow: "hidden", backgroundColor: counter.navy }}>
+        {step === "phone" && <Image source={require("../../assets/images/ui/login-hero.jpg")} contentFit="cover" accessible={false} style={{ height: 230 }} />}
+        <View style={{ ...counterStyles.row, padding: space[4] }}>
+          <Logo size={32} color={colors.amber} />
+          <View style={{ flex: 1 }}>
+            <Text size="xl" weight="bold" color="surface">RetroMobi</Text>
+            <Text size="sm" style={{ color: counter.muted }}>For rental shops</Text>
+          </View>
+        </View>
       </View>
 
       {step === "phone" && (
-        <View>
-          <Text size="xl" weight="bold" accessibilityRole="header">Merchant sign-in</Text>
-          <Text size="sm" color="ink3" style={{ marginTop: space[1], marginBottom: space[6] }}>Sign in or set up your shop with your phone number.</Text>
+        <View style={{ gap: space[3], padding: space[4], borderRadius: radius.card, backgroundColor: colors.surface }}>
+          <PageTitle title="Merchant sign-in" subtitle="Sign in or set up your shop with your phone number." />
           {error && <View style={{ marginBottom: space[4] }}><ErrorNote text={error} /></View>}
-          <PhoneField value={localPhone} onChange={setLocalPhone} country={country} onCountryChange={setCountry} autoFocus
+          <PhoneField value={localPhone} onChange={setLocalPhone} country={country} onCountryChange={setCountry}
             onSubmit={() => { if (localPhone.length >= 10) void sendOtp(); }} />
-          <Button label="Continue" variant="dark" size="lg" full busy={busy} disabled={localPhone.length < 10} onPress={() => void sendOtp()} style={{ marginTop: space[4] }} />
+          <Button label="Continue" variant="primary" size="lg" full busy={busy} disabled={localPhone.length < 10} onPress={() => void sendOtp()} style={{ marginTop: space[4] }} />
         </View>
       )}
 
       {step === "otp" && (
-        <View>
+        <View style={{ gap: space[3] }}>
           {back}
-          <Text size="xl" weight="bold" accessibilityRole="header" style={{ marginTop: space[2] }}>Verify your number</Text>
-          <Text size="sm" color="ink3" style={{ marginTop: space[1], marginBottom: space[6] }}>We sent a 6-digit code to {phone}.</Text>
+          <PageTitle title="Verify your number" subtitle={`We sent a 6-digit code to ${phone}.`} />
           {error && <View style={{ marginBottom: space[4] }}><ErrorNote text={error} /></View>}
           <OtpField value={code} onChange={setCode} onComplete={(entered) => void verifyOtp(entered)} />
-          <Button label="Verify" variant="dark" size="lg" full busy={busy} disabled={code.length < 6} onPress={() => void verifyOtp()} style={{ marginTop: space[4] }} />
+          <Button label="Verify" variant="primary" size="lg" full busy={busy} disabled={code.length < 6} onPress={() => void verifyOtp()} style={{ marginTop: space[4] }} />
           <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], marginTop: space[4], minHeight: 44 }}>
             <Text size="sm" color="ink3">{"Didn't get it?"}</Text>
             {resend.remaining > 0 ? (
@@ -121,16 +128,13 @@ export default function Login() {
       )}
 
       {step === "signup" && (
-        <View>
+        <View style={{ gap: space[3] }}>
           {back}
-          <Text size="xl" weight="bold" accessibilityRole="header" style={{ marginTop: space[2] }}>Almost there</Text>
-          <Text size="sm" color="ink3" style={{ marginTop: space[1], marginBottom: space[6] }}>New number — tell us your name to finish setting up.</Text>
+          <PageTitle title="Create your account" subtitle="Enter the name you use at your shop." />
           {error && <View style={{ marginBottom: space[4] }}><ErrorNote text={error} /></View>}
-          <Field label="Your name">
-            <Input value={name} onChangeText={setName} autoFocus autoComplete="name" textContentType="name" returnKeyType="done"
-              onSubmitEditing={() => { if (name.trim()) void completeSignup(); }} />
-          </Field>
-          <Button label="Create account" variant="dark" size="lg" full busy={busy} disabled={!name.trim()} onPress={() => void completeSignup()} />
+          <LabelInput label="Your name" value={name} onChangeText={setName} autoFocus autoComplete="name" textContentType="name" returnKeyType="done"
+            onSubmitEditing={() => { if (name.trim()) void completeSignup(); }} />
+          <Button label="Create account" variant="primary" size="lg" full busy={busy} disabled={!name.trim()} onPress={() => void completeSignup()} />
         </View>
       )}
     </Screen>

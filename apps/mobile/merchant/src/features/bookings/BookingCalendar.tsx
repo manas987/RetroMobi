@@ -5,9 +5,11 @@ import {
   Button, Card, Chip, EmptyState, ErrorNote, LoadingRows, MonthGrid, Text, bookingFilters, bookingStage,
   dateLabel, errorText, istBookingTime, istDay, monthDays, monthOf, space, tone, useT, type BookingStage, type Row, type Tone,
 } from "@retromobi/mobile-shared";
+import { IconAction, counterStyles } from "../../ui/Counter";
 import { useMerchantQuery } from "../../state/query";
 import { useMerchantShop } from "../../state/shop";
 import { CounterRow } from "../overview/CounterRow";
+import { art } from "../../ui/art";
 
 export type BookingActions = { onHandover: (b: Row) => void; onReturn: (b: Row) => void; onDetails: (b: Row) => void };
 
@@ -57,7 +59,7 @@ export function BookingCalendar({ shopId, filters, actions, header, onWalkin }: 
     refreshing={q.isRefetching} onRefresh={() => void q.refetch()} contentContainerStyle={{ gap: space[3], padding: space[4] }}
     ListHeaderComponent={<View style={{ gap: space[3] }}>
       {header}
-      <Card>
+      <Card style={{ ...counterStyles.panel, padding: space[3] }}>
         <MonthGrid month={month} selected={selected} lang={lang} onPress={setSelected} onMonthChange={(next) => {
           setMonth(next);
           const prefix = `${next.y}-${String(next.m).padStart(2, "0")}`;
@@ -75,11 +77,13 @@ export function BookingCalendar({ shopId, filters, actions, header, onWalkin }: 
           {legend.map(([key, label]) => <Chip key={key} tone={key} label={label} />)}
         </View>
       </Card>
-      <Text size="lg" weight="bold" accessibilityRole="header">{t("bookings.dayBookings", { date: date(`${selected}T12:00:00+05:30`, { weekday: "long", day: "numeric", month: "long" }) })}</Text>
-      {can("bookings:write") && selected >= today && <Button icon={Plus} variant="primary" label={t("bookings.newWalkinOn", { date: dateLabel(selected, lang) })} onPress={() => onWalkin(selected)} />}
+      <View style={counterStyles.row}>
+        <Text size="lg" weight="bold" accessibilityRole="header" style={{ flex: 1 }}>{t("bookings.dayBookings", { date: date(`${selected}T12:00:00+05:30`, { weekday: "long", day: "numeric", month: "long" }) })}</Text>
+        {can("bookings:write") && selected >= today && <IconAction icon={Plus} primary label={t("bookings.newWalkinOn", { date: dateLabel(selected, lang) })} onPress={() => onWalkin(selected)} />}
+      </View>
     </View>}
     ListEmptyComponent={q.isPending ? <LoadingRows label={t("common.loading")} />
       : q.isError ? <ErrorNote text={errorText(lang, q.error)} retryLabel={t("common.retry")} onRetry={() => void q.refetch()} />
-      : <EmptyState text={t(staged.length ? "bookings.noDay" : "bookings.noMonth")} />}
+      : <EmptyState image={art.emptyBookings} text={t(staged.length ? "bookings.noDay" : "bookings.noMonth")} />}
     renderItem={({ item }) => <CounterRow b={item.b} stage={item.stage} onHandover={actions.onHandover} onReturn={actions.onReturn} onDetails={() => actions.onDetails(item.b)} />} />;
 }

@@ -1,116 +1,105 @@
 import { useState } from "react";
-import { FlatList, Pressable, View } from "react-native";
-import { ChevronRight, UserRound } from "lucide-react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import {
-  Button, Chip, ConfirmSheet, ErrorNote, Line, LoadingRows, Screen, Text, api, colors, dateLabel, dateTimeLabel,
-  enumLabel, errorMessage, istDay, logout, radius, setSession, space, useSession, type Row,
-} from "@retromobi/mobile-shared";
-import { Card, EmptyState } from "../../features/RiderSurface";
-import { refreshRiderData, usePrivate, useWrite } from "../../state/private";
-import { licenceState } from "../../features/riders/rider";
-
-type Device = { id: string; is_current: boolean; device_name: string | null; browser_name: string | null; login_location: string | null; created_at: string; last_used_at: string };
-type Item = { row: Row; heading: string | null };
+import { ArrowUpRight, ChevronRight, CircleHelp, IdCard, LogOut, MessageCircle, ShieldCheck } from "lucide-react-native";
+import { Button, ConfirmSheet, Screen, Text, colors, logout, phoneLabel, radius, space, useSession, type Row } from "@retromobi/mobile-shared";
+import { EmptyState, Headline } from "../../features/RiderSurface";
+import { art } from "../../ui/art";
+import { trail } from "../../ui/trail";
+import { ProfileAvatar, ProfileGroup, ProfileRow, profileStyles, type Account } from "../../features/profile/ProfileSurface";
+import { usePrivate } from "../../state/private";
 
 export default function Profile() {
   const session = useSession();
   const router = useRouter();
-  if (!session) return <Screen><EmptyState title="Sign in" text="Manage your riders and signed-in devices."
+  const account = usePrivate<Account>("/auth/me");
+  const riders = usePrivate<{ riders: Row[] }>("/riders");
+  const trips = usePrivate<{ bookings: Row[] }>("/bookings");
+  const [confirm, setConfirm] = useState(false);
+  if (!session) return <Screen><EmptyState title="Sign in to your account" text="Manage your riders, bookings and signed-in devices."
     action={<Button label="Sign in" variant="primary" onPress={() => router.push("/login")} />} />
     <Button label="Help & policies" variant="ghost" onPress={() => router.push("/policies")} />
   </Screen>;
-  return <ProfileBody />;
-}
 
-function ProfileBody() {
-  const router = useRouter();
-  const q = usePrivate<{ riders: Row[] }>("/riders");
-  const devices = usePrivate<{ sessions: Device[] }>("/auth/sessions");
-  const today = istDay(new Date());
-  const riderRows = q.data?.riders ?? [];
-  const needs = riderRows.filter((row) => licenceState(row, today) !== "VERIFIED");
-  const verified = riderRows.filter((row) => licenceState(row, today) === "VERIFIED");
-  const data: Item[] = [
-    ...needs.map((row, i) => ({ row, heading: i === 0 ? "Needs attention" : null })),
-    ...verified.map((row, i) => ({ row, heading: i === 0 ? "Verified riders" : null })),
-  ];
-  const [rider, setRider] = useState<Row | null>(null);
-  const [device, setDevice] = useState<Device | null>(null);
-  const write = useWrite();
-  const refresh = () => { void Promise.all([q.refetch(), devices.refetch()]); };
+  const person = account.data;
+  const contact = person?.email || (person?.phone && phoneLabel(person.phone));
+  const rows = riders.data?.riders ?? [];
+  const done = (trips.data?.bookings ?? []).filter((b) => b.status === "COMPLETED" && !b.deleted_at);
+  const cities = new Set(done.map((b) => String(b.shop_city ?? "")).filter(Boolean)).size;
 
-  return <Screen scroll={false} padded={false} background="canvas">
-    <FlatList showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} data={data} keyExtractor={({ row }) => String(row.id)} refreshing={q.isRefetching || devices.isRefetching} onRefresh={refresh}
-      contentContainerStyle={{ flexGrow: 1, padding: space[4], gap: space[3] }}
-      ListHeaderComponent={<View style={{ gap: space[3] }}>
-        <Text size="xxl" weight="bold" accessibilityRole="header">Your profile</Text>
-        <Text color="ink2">Manage the riders you book for and the devices signed in to your account.</Text>
-        {!!data.length && <Button label="Add a rider" variant="primary" onPress={() => router.push({ pathname: "/rider/[riderId]", params: { riderId: "new" } })} />}
+  return <Screen onRefresh={() => void Promise.all([account.refetch(), riders.refetch(), trips.refetch()])}
+    refreshing={account.isRefetching || riders.isRefetching}>
+    <View style={profileStyles.page}>
+      <Headline title="Profile" />
+      <Pressable accessibilityRole="button" accessibilityLabel={person?.name ? `Personal information for ${person.name}` : "Personal information"}
+        onPress={() => router.push("/account/personal")}
+        style={({ pressed }) => [styles.coverCard, pressed && styles.pressed]}>
+        <Image source={art.login} style={styles.cover}
+          contentFit="cover" contentPosition="bottom" accessible={false} />
+        <View style={styles.coverDetails}>
+          <View style={styles.coverAvatar}><ProfileAvatar name={person?.name} compact /></View>
+          <View style={styles.identity}>
+            <Text size="xxl" weight="bold" color="white" style={profileStyles.title}>{person?.name?.trim() || "Your account"}</Text>
+            <Text size="sm" style={styles.coverSecondary}>{contact || "Personal information"}</Text>
+          </View>
+          <View style={styles.coverLink}><ArrowUpRight size={20} color={colors.white} /></View>
+        </View>
+      </Pressable>
+
+      {trips.isSuccess && <View style={styles.stats}>
+        <Stat value={done.length} label={done.length === 1 ? "Ride done" : "Rides done"} lead />
+        <Stat value={cities} label={cities === 1 ? "City ridden" : "Cities ridden"} />
+        <Stat value={rows.length} label={rows.length === 1 ? "Rider saved" : "Riders saved"} />
       </View>}
-      ListEmptyComponent={q.isPending ? <LoadingRows label="Loading riders" /> : q.error ? <ErrorNote text={errorMessage(q.error, "Couldn't load your riders.")} onRetry={() => void q.refetch()} />
-        : <EmptyState title="No riders yet" text="Add yourself or someone you’ll book for."
-          action={<Button label="Add a rider" variant="primary" onPress={() => router.push({ pathname: "/rider/[riderId]", params: { riderId: "new" } })} />} />}
-      renderItem={({ item: { row, heading } }) => {
-        const status = licenceState(row, today);
-        return <View style={{ gap: space[2] }}>
-          {heading && <Text size="lg" weight="bold" accessibilityRole="header">{heading}</Text>}
-          <Card>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Edit ${row.name}`}
-              onPress={() => router.push({ pathname: "/rider/[riderId]", params: { riderId: String(row.id) } })}
-              style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: 48 }}>
-              <View style={{ padding: space[2], backgroundColor: colors.surface3, borderRadius: radius.full }}><UserRound size={20} color={colors.ink} /></View>
-              <View style={{ flex: 1, gap: space[1] }}>
-                <Text weight="bold">{String(row.name ?? "")}</Text>
-                <Text color="ink2" size="sm">{row.dob ? `Born ${dateLabel(row.dob)}` : "Date of birth missing"}</Text>
-              </View>
-              <ChevronRight size={18} color={colors.ink2} />
-            </Pressable>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }}>
-              <Chip tone={status === "VERIFIED" ? "good" : status === "EXPIRED" ? "bad" : "attention"} label={enumLabel(status)} />
-              {!!row.licence_expires_on && <Text size="sm" color="ink2">{status === "VERIFIED" ? "Valid until " : ""}{dateLabel(row.licence_expires_on)}</Text>}
-            </View>
-            <Line />
-            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
-              {status !== "VERIFIED" && <Button label={status === "REVIEW_PENDING" || status === "CHECK_AT_PICKUP" ? "Licence status" : "Verify licence"}
-                variant="ghost" onPress={() => router.push({ pathname: "/rider/[riderId]/verify", params: { riderId: String(row.id) } })} />}
-              <Button label="Remove rider" variant="ghost" onPress={() => setRider(row)} />
-            </View>
-          </Card>
-        </View>;
-      }}
-      ListFooterComponent={<View style={{ gap: space[3] }}>
-        <Button label="Help & policies" onPress={() => router.push("/policies")} />
-        <Text size="lg" weight="bold" accessibilityRole="header">Signed-in devices</Text>
-        {devices.isPending ? <LoadingRows label="Loading signed-in devices" /> : devices.error
-          ? <ErrorNote text={errorMessage(devices.error, "Couldn’t load your devices")} onRetry={() => void devices.refetch()} />
-          : !devices.data.sessions.length ? <EmptyState inline title="No active sessions" />
-          : devices.data.sessions.map((item) => <Card key={item.id} title={item.device_name ?? (item.is_current ? "Current device" : "Unidentified device")}>
-            <View style={{ gap: space[2] }}>
-              {item.is_current && <Chip tone="good" label="This device" />}
-              {item.browser_name && <Text color="ink2" size="sm">{item.browser_name}</Text>}
-              <Text color="ink2" size="sm">Last sign-in · {dateTimeLabel(item.created_at)}</Text>
-              <Text color="ink2" size="sm">Last active · {dateTimeLabel(item.last_used_at)}</Text>
-              <Text color="ink2" size="sm">{item.login_location ? `${item.login_location} (approx.)` : "Sign-in location unavailable"}</Text>
-              <Button label={item.is_current ? "Sign out here" : "Sign out"} onPress={() => setDevice(item)} />
-            </View>
-          </Card>)}
-        <Button label="Sign out" variant="ghost" onPress={() => void logout()} />
-      </View>} />
-    <ConfirmSheet open={!!rider} title="Remove this rider?" body={`${rider?.name ?? ""} will be removed from your rider list and won’t be available for future bookings.`}
-      confirmLabel="Remove rider" cancelLabel="Keep rider" danger busy={write.busy} error={write.error} onClose={() => setRider(null)}
-      onConfirm={() => {
-        if (rider) void write.run(async () => { await api(`/riders/${rider.id}`, { method: "DELETE" }); await refreshRiderData("/riders"); setRider(null); });
-      }} />
-    <ConfirmSheet open={!!device} title={device?.is_current ? "Sign out here?" : "Sign out this device?"}
-      body={device?.is_current ? "You’ll need to sign in again to manage your account." : `All sign-ins for ${device?.device_name ?? "this device"} will be revoked.`}
-      confirmLabel="Sign out" danger busy={write.busy} error={write.error} onClose={() => setDevice(null)} onConfirm={() => {
-        if (device) void write.run(async () => {
-          await api(`/auth/sessions/${device.id}`, { method: "DELETE" });
-          if (device.is_current) setSession(null);
-          else await refreshRiderData("/auth/sessions");
-          setDevice(null);
-        });
-      }} />
+
+      <View style={styles.riderPanel}>
+        <Pressable accessibilityRole="button" onPress={() => router.push("/account/riders")}
+          style={({ pressed }) => [styles.riderRow, pressed && styles.pressed]}>
+          <View style={styles.riderIcon}><IdCard size={24} color={colors.verified} /></View>
+          <View style={styles.identity}>
+            <Text size="lg" weight="bold">Riders</Text>
+            {riders.isSuccess && <Text size="sm" color="ink2">{rows.length === 0 ? "Add a rider to get started" : `${rows.length} saved · licence checked at pickup`}</Text>}
+          </View>
+          <ChevronRight size={20} color={colors.ink2} />
+        </Pressable>
+      </View>
+
+      <ProfileGroup>
+        <ProfileRow icon={ShieldCheck} label="Signed-in devices" onPress={() => router.push("/account/devices")} />
+        <ProfileRow icon={MessageCircle} label="Contact support" separated onPress={() => router.navigate("/support")} />
+        <ProfileRow icon={CircleHelp} label="Help & policies" separated onPress={() => router.push("/policies")} />
+      </ProfileGroup>
+      <Pressable accessibilityRole="button" onPress={() => setConfirm(true)}
+        style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}>
+        <LogOut size={17} color={colors.danger} /><Text size="sm" weight="medium" color="danger">Sign out</Text>
+      </Pressable>
+    </View>
+    <ConfirmSheet open={confirm} title="Sign out?" body="You can sign back in with your phone number."
+      danger confirmLabel="Sign out" onClose={() => setConfirm(false)} onConfirm={() => { setConfirm(false); void logout(); }} />
   </Screen>;
 }
+
+function Stat({ value, label, lead }: { value: number; label: string; lead?: boolean }) {
+  return <View style={[styles.stat, lead && { backgroundColor: colors.amber }]} accessible accessibilityLabel={`${value} ${label}`}>
+    <Text weight="bold" tnum style={{ fontSize: 30, lineHeight: 34, letterSpacing: -1 }}>{value}</Text>
+    <Text size="sm" color={lead ? "onAmber" : "ink2"}>{label}</Text>
+  </View>;
+}
+
+const styles = StyleSheet.create({
+  stats: { flexDirection: "row", gap: space[2] },
+  stat: { flex: 1, minHeight: 104, justifyContent: "space-between", borderRadius: 24, padding: space[3], backgroundColor: colors.surface3 },
+  coverCard: { borderRadius: 30, overflow: "hidden", backgroundColor: trail.forest },
+  cover: { width: "100%", height: 126 },
+  coverDetails: { flexDirection: "row", alignItems: "flex-end", padding: space[4], paddingTop: space[8], gap: space[2] },
+  coverAvatar: { position: "absolute", top: -25, left: space[4], borderWidth: 3, borderColor: trail.forest, borderRadius: radius.full },
+  coverSecondary: { color: trail.mist },
+  coverLink: { width: 40, height: 40, borderRadius: radius.full, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.13)" },
+  identity: { flex: 1, gap: 2 },
+  riderPanel: { backgroundColor: colors.verifiedSoft, borderRadius: 24, paddingHorizontal: space[4] },
+  riderRow: { minHeight: 80, flexDirection: "row", alignItems: "center", paddingVertical: space[3], gap: space[3] },
+  riderIcon: { width: 43, height: 43, borderRadius: radius.panel, backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },
+  signOut: { minHeight: 48, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", paddingHorizontal: space[3], gap: space[2] },
+  pressed: { opacity: 0.72 },
+});

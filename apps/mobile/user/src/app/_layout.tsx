@@ -1,10 +1,13 @@
 import { CartProvider, useCartReady } from "../state/cart";
 import { useEffect, useState } from "react";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
+import { ArrowLeft } from "lucide-react-native";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { AppProviders, IntroGate, colors, configureApi, font, fontAssets, useAppReady, type IntroSlide } from "@retromobi/mobile-shared";
+import { IconAction } from "../features/RiderSurface";
+import { art } from "../ui/art";
 
 configureApi({ portal: "user", baseUrl: process.env.EXPO_PUBLIC_API_URL });
 
@@ -13,21 +16,26 @@ void SplashScreen.preventAutoHideAsync();
 
 const SLIDES: IntroSlide[] = [
   {
-    title: "Find your ride",
-    body: "Pick your city and dates. Explore scooters near you, with no sign-up until you book.",
-    image: require("../../assets/images/hero-himalaya.jpg"),
+    title: "Ride the\nmountains.",
+    body: "Scooters and bikes from local shops in Rishikesh, Dehradun and Haridwar. No sign-up until you book.",
+    image: art.intro[0],
   },
   {
-    title: "Bring your licence",
-    body: "Choose a rider and bring their original driving licence to pickup.",
-    image: require("../../assets/images/how-search.jpg"),
+    title: "Licence?\nJust bring it.",
+    body: "No uploads, no waiting. Show your original driving licence at pickup and ride.",
+    image: art.intro[1],
   },
   {
-    title: "Record. Ride. Return.",
-    body: "Record a pickup video to document your scooter's condition. Ride with confidence, then return it with a clear record.",
-    image: require("../../assets/images/how-ride.jpg"),
+    title: "Record.\nRide. Return.",
+    body: "A quick pickup video keeps a clear record of the vehicle.",
+    image: art.intro[2],
   },
 ];
+
+function BackButton() {
+  const router = useRouter();
+  return <IconAction icon={ArrowLeft} tone="soft" label="Back" onPress={() => router.back()} style={{ marginRight: 8 }} />;
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
@@ -47,13 +55,14 @@ export default function RootLayout() {
     <AppProviders>
       <CartProvider>
       <StatusBar style="dark" />
-      <IntroGate quick slides={SLIDES} labels={{ next: "Next", skip: "Skip", start: "Start exploring" }} onReady={() => setIntroRead(true)}>
+      <IntroGate quick poster slides={SLIDES} labels={{ next: "Next", skip: "Skip", start: "Let’s ride" }} onReady={() => setIntroRead(true)}>
         <Stack
           screenOptions={{
             headerTintColor: colors.ink,
             headerTitleStyle: { fontFamily: font.bold },
             headerShadowVisible: false,
             headerBackButtonDisplayMode: "minimal",
+            headerLeft: ({ canGoBack }) => canGoBack ? <BackButton /> : undefined,
             contentStyle: { backgroundColor: colors.surface },
           }}
         >

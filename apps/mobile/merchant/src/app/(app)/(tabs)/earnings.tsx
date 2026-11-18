@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { FlatList, View } from "react-native";
+import { FlatList, Pressable, View } from "react-native";
+import { ArrowDownLeft, Banknote, ChevronRight, Clock3, IndianRupee } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { Button, Card, Chip, EmptyState, ErrorNote, Screen, Tabs, Text, errorText, ranges, rupees, space, useT, type Row } from "@retromobi/mobile-shared";
+import { Card, colors, radius, EmptyState, ErrorNote, Screen, Tabs, Text, errorText, ranges, rupees, space, useT, type Row } from "@retromobi/mobile-shared";
+import { HeroCard, PageTitle, StatusBadge, counterStyles } from "../../../ui/Counter";
 import { useMerchantShop } from "../../../state/shop";
 import { useMerchantQuery } from "../../../state/query";
 import { Fields, Pending } from "../../../features/fleet/tabs/Fields";
@@ -30,36 +32,49 @@ export default function Earnings() {
     {!allowed ? <EmptyState text={t("money.ownerOnly")} /> : <FlatList showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} data={payouts.data?.payouts ?? []} keyExtractor={(row) => String(row.id)}
       contentContainerStyle={{ padding: space[4], gap: space[3] }} refreshing={q.isRefetching || payouts.isRefetching} onRefresh={refresh}
       ListHeaderComponent={<Fields>
-        <Text size="xl" weight="bold" accessibilityRole="header">{t("money.earningsTitle")}</Text>
-        <Text color="ink2">{t("money.earningsSubtitle")}</Text>
-        <Tabs value={range} onChange={setRange} options={RANGES.map((value) => ({ value, label: t(labels[value]) }))} />
+        <PageTitle title={t("money.earningsTitle")} subtitle={t("money.earningsSubtitle")} />
+        <Tabs pill wrap value={range} onChange={setRange} options={RANGES.map((value) => ({ value, label: t(labels[value]) }))} />
         {!q.isSuccess ? <Pending error={q.error} retry={q.refetch} /> : m && <>
-          <Card title={t("money.paid")}><Text size="xl" weight="bold">{rupees(m.paid)}</Text></Card>
-          <Card title={t("money.pending")}><Text size="xl" weight="bold">{rupees(m.pending)}</Text><Text color="ink2">{t("money.pendingCaption")}</Text></Card>
-          <Card title={t("money.walkinCash")}><Text size="xl" weight="bold">{rupees(m.walkinCash)}</Text><Text color="ink2">{t("money.walkinCashCaption")}</Text></Card>
+          <HeroCard label={t("money.paid")} value={rupees(m.paid)} icon={IndianRupee} />
+          <View style={{ flexDirection: "row", gap: space[2] }}>
+            <Card style={{ ...counterStyles.panel, flex: 1, padding: space[3] }}>
+              <Clock3 size={19} color={colors.info} /><Text size="sm" weight="medium">{t("money.pending")}</Text>
+              <Text size="lg" weight="bold" tnum>{rupees(m.pending)}</Text><Text size="xs" color="ink2">{t("money.pendingCaption")}</Text>
+            </Card>
+            <Card style={{ ...counterStyles.panel, flex: 1, padding: space[3] }}>
+              <Banknote size={19} color={colors.verified} /><Text size="sm" weight="medium">{t("money.walkinCash")}</Text>
+              <Text size="lg" weight="bold" tnum>{rupees(m.walkinCash)}</Text><Text size="xs" color="ink2">{t("money.walkinCashCaption")}</Text>
+            </Card>
+          </View>
         </>}
         <PayoutAccount />
         <Text size="lg" weight="bold" accessibilityRole="header">{t("money.payoutsTitle")}</Text>
-        <Tabs value={status} onChange={setStatus} options={STATUS.map((value) => ({ value, label: value === "all" ? t("common.all") : t(`money.tab${value}`) }))} />
+        <Tabs pill wrap value={status} onChange={setStatus} options={STATUS.map((value) => ({ value, label: value === "all" ? t("common.all") : t(`money.tab${value}`) }))} />
       </Fields>}
       ListEmptyComponent={!payouts.isSuccess ? <Pending error={payouts.error} retry={payouts.refetch} /> : <EmptyState text={t("money.payoutsEmpty")} />}
       ListFooterComponent={payouts.error && payouts.data ? <ErrorNote text={errorText(lang, payouts.error)} retryLabel={t("common.retry")} onRetry={() => void payouts.refetch()} /> : undefined}
       renderItem={({ item }) => {
         const failed = item.status === "FAILED";
         const paid = item.status === "PAID";
-        return <Card title={tMaybe(`money.stage${item.stage}`) ?? t("money.payoutsTitle")}>
-          <Fields>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }}>
-              <Text size="lg" weight="bold">{rupees(Number(item.amount))}</Text>
-              <Chip tone={paid ? "good" : failed ? "bad" : "info"} label={paid ? item.paid_at ? t("money.paidOn", { date: date(item.paid_at) }) : t("money.tabPAID")
-                : t(failed ? "money.problem" : "money.onTheWay")} />
+        const open = item.booking_id ? () => router.push({ pathname: "/booking/[id]", params: { id: String(item.booking_id), shopId: shopId! } }) : undefined;
+        return <Pressable disabled={!open} onPress={open} accessibilityRole={open ? "button" : undefined}
+          style={({ pressed }) => [{ ...counterStyles.group, padding: space[3], gap: space[2] }, pressed && { opacity: 0.75 }]}>
+          <View style={counterStyles.row}>
+            <View style={{ width: 44, height: 44, borderRadius: radius.full, alignItems: "center", justifyContent: "center",
+              backgroundColor: paid ? colors.verifiedSoft : failed ? colors.dangerSoft : colors.infoSoft }}>
+              <ArrowDownLeft size={20} color={paid ? colors.verified : failed ? colors.danger : colors.info} />
             </View>
-            <Text size="sm" color="ink2">{date(item.created_at)}</Text>
-            {!!item.booking_id && <Button variant="ghost" label={t("bookings.code", { code: String(item.booking_id).slice(0, 8).toUpperCase() })}
-              onPress={() => router.push({ pathname: "/booking/[id]", params: { id: String(item.booking_id), shopId: shopId! } })} />}
-            {failed && <Text color="danger">{t(/beneficiar|account/i.test(String(item.last_error ?? "")) ? "money.failedBank" : "money.failedRetry")}</Text>}
-          </Fields>
-        </Card>;
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Text weight="bold">{tMaybe(`money.stage${item.stage}`) ?? t("money.payoutsTitle")}</Text>
+              <Text size="sm" color="ink2" tnum>{date(item.created_at)}{item.booking_id ? ` · ${t("bookings.code", { code: String(item.booking_id).slice(0, 8).toUpperCase() })}` : ""}</Text>
+            </View>
+            <Text size="lg" weight="bold" tnum>{rupees(Number(item.amount))}</Text>
+            {open && <ChevronRight size={18} color={colors.ink2} />}
+          </View>
+          <StatusBadge tone={paid ? "good" : failed ? "bad" : "info"} label={paid ? item.paid_at ? t("money.paidOn", { date: date(item.paid_at) }) : t("money.tabPAID")
+            : t(failed ? "money.problem" : "money.onTheWay")} />
+          {failed && <Text color="danger">{t(/beneficiar|account/i.test(String(item.last_error ?? "")) ? "money.failedBank" : "money.failedRetry")}</Text>}
+        </Pressable>;
       }} />}
   </Screen>;
 }
